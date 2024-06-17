@@ -1,0 +1,4 @@
+multimodal_files
+httpx
+singleton_decorator==1.0.0
+tqdm
