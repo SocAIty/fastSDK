@@ -2,14 +2,15 @@ import random
 import time
 from typing import List, Union
 
-from socaity.socaity_client import ImageFile, UploadFile, AudioFile
-from socaity.socaity_client.jobs.threaded.internal_job import InternalJob
-from socaity.socaity_client.service_client_api import ServiceClientAPI
-from tests.fries_maker.service_fries_maker import srvc_fries_maker
+from socaity_client import ImageFile, UploadFile, AudioFile
+from socaity_client.jobs.threaded.internal_job import InternalJob
+from socaity_client.service_client_api import ServiceClientAPI
+
 import cv2
 import librosa
 import numpy as np
 
+from .service_fries_maker import srvc_fries_maker
 
 fries_maker_client_api = ServiceClientAPI(srvc_fries_maker)
 

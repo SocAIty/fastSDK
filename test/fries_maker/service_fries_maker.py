@@ -1,7 +1,7 @@
-from socaity.socaity_client.definitions.ai_model import AIModelDescription
-from socaity.socaity_client.definitions.enums import ModelDomainTag, ModelTag
-from socaity.socaity_client.web.service_client import ServiceClient
-from socaity.socaity_client import UploadFile, ImageFile, AudioFile, VideoFile
+from socaity_client.definitions.ai_model import AIModelDescription
+from socaity_client.definitions.enums import ModelDomainTag, ModelTag
+from socaity_client.web.service_client import ServiceClient
+from socaity_client import UploadFile, ImageFile, AudioFile, VideoFile
 
 
 srvc_fries_maker = ServiceClient(
