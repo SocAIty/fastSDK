@@ -21,7 +21,7 @@ class _InternalJobManager:
 
     def process_job(self, job: InternalJob):
         job._run()
-        # store result in results. Necessary in threading because thread itself cannot easily return values
+        # store server_response in results. Necessary in threading because thread itself cannot easily return values
         self.results.append(job)
 
     def process_jobs_in_background(self):

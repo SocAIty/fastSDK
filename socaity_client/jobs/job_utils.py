@@ -8,7 +8,11 @@ from socaity_client.jobs.threaded.job_status import JOB_STATUS
 from socaity_client.utils import flatten_list
 
 
-def gather_generator(jobs: Union[List[InternalJob], List[InternalJob], InternalJob, list]):
+def gather_generator(jobs: Union[List[InternalJob], List[List[InternalJob]], InternalJob, list]):
+    """
+    Generator that yields the results of the jobs once they are completed. Runs until all jobs are completed.
+    :param jobs: List of jobs or a single job
+    """
     if not isinstance(jobs, list):
         jobs = [jobs]
 
@@ -35,5 +39,15 @@ def gather_generator(jobs: Union[List[InternalJob], List[InternalJob], InternalJ
     pbar_total.close()
 
 
-def gather_results(jobs: Union[List[InternalJob], List[InternalJob], InternalJob, list]):
+def gather_results(jobs: Union[List[InternalJob], List[InternalJob], InternalJob, list]) -> List[InternalJob]:
+    """
+    Waits until all jobs are finished and returns a list of the completed jobs.
+    """
     return list(gather_generator(jobs))
+
+
+def get_job_result(job: InternalJob, print_progress: bool = False, throw_error: bool = True):
+    """
+    Waits until the job is finished and returns it server_response.
+    """
+    return job.get_result(print_progress=print_progress, throw_error=throw_error)

@@ -2,7 +2,7 @@ import random
 import time
 from typing import List, Union
 
-from socaity_client import ImageFile, UploadFile, AudioFile
+from socaity_client import ImageFile, MultiModalFile, AudioFile
 from socaity_client.jobs.threaded.internal_job import InternalJob
 from socaity_client.service_client_api import ServiceClientAPI
 
@@ -24,13 +24,13 @@ class FriesMaker:
         # emulating workload
         time.sleep(random.randint(0, 3))
 
-        # get result
+        # get server_response
         endpoint_request.wait_until_finished()
 
         if endpoint_request.error is not None:
             raise Exception(f"Error in making fries: {endpoint_request.error}")
 
-        return endpoint_request.result
+        return endpoint_request.server_response
 
     @fries_maker_client_api.job()
     def _make_file_fries(self, job: InternalJob, potato_one: bytes, potato_two: bytes, potato_three: bytes):
@@ -41,7 +41,7 @@ class FriesMaker:
         if endpoint_request.error is not None:
             raise Exception(f"Error in making fries: {endpoint_request.error}")
 
-        return endpoint_request.result
+        return endpoint_request.server_response
 
     @fries_maker_client_api.job()
     def _make_image_fries(self, job: InternalJob, potato_one: bytes):
@@ -51,7 +51,7 @@ class FriesMaker:
         if endpoint_request.error is not None:
             raise Exception(f"Error in making fries: {endpoint_request.error}")
 
-        return endpoint_request.result
+        return endpoint_request.server_response
 
     @fries_maker_client_api.job()
     def _make_audio_fries(self, job: InternalJob, potato_one: bytes, potato_two: AudioFile):
@@ -62,7 +62,7 @@ class FriesMaker:
         if endpoint_request.error is not None:
             raise Exception(f"Error in making fries: {endpoint_request.error}")
 
-        return endpoint_request.result
+        return endpoint_request.server_response
 
     @fries_maker_client_api.job()
     def _make_video_fries(self, job: InternalJob, potato_one: bytes, potato_two: bytes):
@@ -73,7 +73,7 @@ class FriesMaker:
         if endpoint_request.error is not None:
             raise Exception(f"Error in making fries: {endpoint_request.error}")
 
-        return endpoint_request.result
+        return endpoint_request.server_response
 
     def make_fries(self, fries_name: str, amount: int) -> InternalJob:
         return self._make_fries(fries_name, amount)
@@ -86,7 +86,7 @@ class FriesMaker:
         potato_two = cv2.imread(potato_two)
         return self._make_file_fries(potato_one, potato_two, potato_three)
 
-    def make_image_fries(self, potato_one: Union[str, bytes, np.array, ImageFile, UploadFile]) -> InternalJob:
+    def make_image_fries(self, potato_one: Union[str, bytes, np.array, ImageFile, MultiModalFile]) -> InternalJob:
         """
         Tests upload of standard file types.
         """

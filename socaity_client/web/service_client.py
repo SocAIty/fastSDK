@@ -72,7 +72,7 @@ class ServiceClient:
             It submits a request to the given endpoint and receives an AsyncJob from the request handler.
             It determines what kind of response is coming back and if it was a socaity service.
             If it was a socaity service, it returns a SocaityRequest object.
-            The socaity request object, refreshes itself until the final result is retrieved.
+            The socaity request object, refreshes itself until the final server_response is retrieved.
             :param args:
             :param kwargs:
             :return:
@@ -113,7 +113,7 @@ class ServiceClient:
     def _add_endpoint(self, endpoint: EndPoint) -> Tuple[callable, callable]:
         """
         Adds and endpoint and convenience functions to an service
-        You can call the ServiceClient.endpoint_function_name to send a request to the endpoint and wait for the result.
+        You can call the ServiceClient.endpoint_function_name to send a request to the endpoint and wait for the server_response.
         Use the ServiceClient.endpoint_function_name_async to send a request and get an asyncio_task object.
         --> this is in particular useful to get fine graded updates of the server.
         :param endpoint: an instance of an EndPoint object.
@@ -157,7 +157,7 @@ class ServiceClient:
         :param endpoint_route: the name of the function
         :param args: the arguments to pass to the function
         :param kwargs: the keyword arguments to pass to the function
-        :return: the result of the function
+        :return: the server_response of the function
         """
         if call_async:
             endpoint_route = f"{endpoint_route}_async" if not endpoint_route.endswith("_async") else endpoint_route

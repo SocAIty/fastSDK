@@ -25,7 +25,7 @@ class AsyncJob:
     @property
     def result(self):
         """
-        :return: The result of the coroutine if it is done. Or None if it is not done.
+        :return: The server_response of the coroutine if it is done. Or None if it is not done.
         """
         if self._future is None:
             return None

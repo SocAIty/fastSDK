@@ -1,4 +1,4 @@
-from socaity_client import UploadFile, ImageFile
+from socaity_client import MultiModalFile, ImageFile
 from socaity_client.jobs.job_utils import gather_generator
 from tests.fries_maker.fries_maker_client_api import FriesMaker
 
@@ -45,7 +45,7 @@ def test_image_upload():
     potato_cv2 = cv2.imread(img_potato_one)
     job_cv2 = fries_maker.make_image_fries(potato_cv2)
     # as file instance
-    upload_file_instance = UploadFile()
+    upload_file_instance = MultiModalFile()
     upload_file_instance.from_file(img_potato_two)
     job_upload_file_instance = fries_maker.make_image_fries(upload_file_instance)
     # as image file instance
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     def stress_test(func, num_iters=10):
         jobs = [func() for i in range(num_iters)]
         for finished_job in gather_generator(jobs):
-            print(finished_job.result)
+            print(finished_job.server_response)
 
 
     #stress_test(test_simple_rpc, 10)

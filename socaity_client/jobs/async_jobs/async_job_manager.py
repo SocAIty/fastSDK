@@ -51,7 +51,7 @@ class AsyncJobManager:
             delay: The delay in seconds before the coroutine is executed.
 
         Returns:
-            A Future object representing the result of the coroutine.
+            A Future object representing the server_response of the coroutine.
         """
         self._ensure_event_loop_running()
         future = concurrent.futures.Future()

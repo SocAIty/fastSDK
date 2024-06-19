@@ -1,5 +1,9 @@
+from typing import Union, Any
+
 from httpx import HTTPStatusError
 
+from multimodal_files import MultiModalFile
+from multimodal_files.file_conversion import from_file_result
 from socaity_client.jobs.async_jobs.async_job import AsyncJob
 from socaity_client.web.definitions.endpoint import EndPoint
 from socaity_client.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
@@ -9,10 +13,10 @@ import time
 
 class EndPointRequest:
     """
-    Some endpoints are async_jobs and return a job id. Others are sync and return the result directly.
+    Some endpoints are async_jobs and return a job id. Others are sync and return the server_response directly.
     Based on the first request response, the class decides with what kind of endpoint it is interacting with.
 
-    In case of a sync job endpoint, the result is returned directly.
+    In case of a sync job endpoint, the server_response is returned directly.
     In case of an async_jobs job endpoint like the ones that implement the socaity protocol:
         1. The class automatically refreshes the job until it's finished.
         -  The class sends req to the refresh status url until the job is finished.
@@ -35,10 +39,10 @@ class EndPointRequest:
         # the AsyncJob that is currently executed in the AsyncJobManager as coroutine task
         self._ongoing_async_request = None
 
-        # public attributes to get the result
-        self.result = None
+        # public attributes to get the server_response
+        self.server_response = None
         self.error = None
-        self.in_between_result = None
+        self.in_between_server_response = None
 
         # statistics
         self.first_request_send_at = None
@@ -59,7 +63,7 @@ class EndPointRequest:
     def request(self, *args, **kwargs):
         """
         Sends a request with the *args, **kwargs to the endpoint with the request handler.
-        That submits a coroutine which result is retrieved with a callback self._response_callback.
+        That submits a coroutine which server_response is retrieved with a callback self._response_callback.
             - In the callback it is checked for errors, response types and if the request is refreshed.
         """
         self._ongoing_async_request = self._request_handler.request_endpoint_async(
@@ -70,15 +74,35 @@ class EndPointRequest:
         )
         self.first_request_send_at = self._ongoing_async_request.coroutine_executed_at
 
+    def get_result(self) -> Union[MultiModalFile, Any, None]:
+        """
+        Waits until the final server_response is available.
+        It only returns the result of the socaity server_response not the meta information.
+        If the result is of type FileResult it will be converted into a multimodal file.
+        """
+        self.wait_until_finished()
+        if self.server_response is None:
+            return None
+
+        result = self.server_response.result
+        if isinstance(result, SocaityServerResponse):
+            result = result.result
+
+        if isinstance(result, dict) and "file_name" in result and "content" in result:
+            return from_file_result(result)
+
+        return result
+
+
     def is_finished(self):
         """
         Returns True if the job is finished.
         """
-        return self.result is not None or self.error is not None
+        return self.server_response is not None or self.error is not None
 
     def wait_until_finished(self):
         """
-        This function waits until the job is finished and returns the result.
+        This function waits until the job is finished and returns the server_response.
         :return:
         """
         while not self.is_finished():
@@ -87,8 +111,8 @@ class EndPointRequest:
 
     def _parse_result_and_refresh_if_necessary(self, async_job_result):
         """
-        If job result is not of type socaity: it is returned directly.
-        If job result is of type socaity:
+        If job server_response is not of type socaity: it is returned directly.
+        If job server_response is of type socaity:
             - It will call the socaity server with the refresh_status function in the return until the job is finished.
             - It checks for socaity request errors.
 
@@ -98,7 +122,7 @@ class EndPointRequest:
         if async_job_result is None:
             return self
 
-        # if previously we finished the callback -> it's not the newest result
+        # if previously we finished the callback -> it's not the newest server_response
         if self.is_finished():
             return self
 
@@ -108,29 +132,30 @@ class EndPointRequest:
             self.error = request_status_error
             return self
 
-        # Parse the result and convert it to SocaityServerResponse if is that response type.
-        job_result = parse_response(async_job_result)
-        # if not is a socaity job, we can return the result
-        if not isinstance(job_result, SocaityServerResponse):
-            self.result = job_result
+        # Parse the server_response and convert it to SocaityServerResponse if is that response type.
+        server_response = parse_response(async_job_result)
+        # if not is a socaity job, we can return the server_response
+        if not isinstance(server_response, SocaityServerResponse):
+            self.server_response = server_response
             return self
+
         # check if socaity job is finished
-        if job_result.status == SocaityServerJobStatus.FINISHED:
-            self.in_between_result = None
-            self.result = job_result
+        if server_response.status == SocaityServerJobStatus.FINISHED:
+            self.in_between_server_response = None
+            self.server_response = server_response
             return self
-        elif job_result.status == SocaityServerJobStatus.FAILED:
-            self.error = job_result.message
-            if job_result.message is None:
+        elif server_response.status == SocaityServerJobStatus.FAILED:
+            self.error = server_response.message
+            if server_response.message is None:
                 self.error = "Job failed without error message."
 
             return self
 
         # In this case it was a refresh call
-        self.in_between_result = job_result
+        self.in_between_server_response = server_response
         # if not finished, we need to refresh the job
         # by calling this recursively we can refresh the job until it's finished
-        refresh_url = self._request_handler.service_url + job_result.refresh_job_url
+        refresh_url = self._request_handler.service_url + server_response.refresh_job_url
         self._ongoing_async_request = self._request_handler.request_url_async(
             refresh_url,
             callback=self._response_callback,
@@ -158,13 +183,13 @@ class EndPointRequest:
     def _response_callback(self, async_job: AsyncJob):
         """
         This function is called when the first async_jobs job is finished.
-        It checks if the result is a socaity job result and sets the status accordingly.
+        It checks if the server_response is a socaity job server_response and sets the status accordingly.
         :param future: the future object of the async_jobs job
         :return:
         """
 
         # in this case it was the first request response
-        if self.result is None and self.in_between_result is None:
+        if self.server_response is None and self.in_between_server_response is None:
             self.first_response_received_at = async_job.future_result_received_at
             # If there was an error on the first request stop
             if async_job.error:
@@ -180,11 +205,11 @@ class EndPointRequest:
         if retry:
             # TODO: implement retry logic for other endpoint types than socaity
             # for socaity
-            if self.in_between_result is not None and isinstance(self.in_between_result, SocaityServerResponse):
+            if self.in_between_server_response is not None and isinstance(self.in_between_server_response, SocaityServerResponse):
                 self._current_retry_counter += 1
                 if self._current_retry_counter < self._retries_on_error:
-                    # use previous job result to retry
-                    return self._parse_result_and_refresh_if_necessary(self.in_between_result)
+                    # use previous job server_response to retry
+                    return self._parse_result_and_refresh_if_necessary(self.in_between_server_response)
                 else:
                     self.error = async_job.error
                     return self

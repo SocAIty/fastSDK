@@ -4,6 +4,7 @@ import traceback
 from datetime import datetime
 from typing import Union
 from uuid import uuid4
+from tqdm import tqdm
 
 from socaity_client.jobs.threaded.internal_job_manager import InternalJobManager
 from socaity_client.jobs.threaded.job_status import JOB_STATUS
@@ -21,7 +22,7 @@ class InternalJob:
         """
         Functionality threaded job_function with status tracking.
         An internal job stores a reference to a job_function and its parameters.
-        With run() the job_function is threaded. The internal job keeps track of its status, progress and result.
+        With run() the job_function is threaded. The internal job keeps track of its status, progress and server_response.
 
         Functionality to send requests:
         The job can be used to send requests. The job is passed to a wrapped function that uses job as parameter
@@ -62,6 +63,29 @@ class InternalJob:
         endpoint_request.wait_until_finished()
         return endpoint_request
 
+    def get_result(self, print_progress: bool = True, throw_error: bool = True):
+        """
+        Waits until the job is finished and returns the result of underlying threaded function.
+        :param print_progress: If true, the progress is printed.
+        :param throw_error: If true, the error is raised if the job failed.
+        """
+
+        if print_progress:
+            pbar = tqdm(total=100)
+
+        while not self.finished():
+            if print_progress:
+                percent, message = self.progress
+                pbar.update(percent * 100)
+                if message:
+                    pbar.set_description(message)
+            time.sleep(0.1)
+
+        if self.status == JOB_STATUS.FAILED and throw_error:
+            raise self.error
+
+        return self.result
+
     def finished(self):
         """
         Returns true if job has ended. Either completed or by error.
@@ -71,10 +95,13 @@ class InternalJob:
     def has_started(self):
         return self.status in [JOB_STATUS.QUEUED, JOB_STATUS.PROCESSING]
 
-    def wait_for_finished(self, wait_for_request_result: bool = False):
+    def wait_for_finished(
+            self,
+            wait_for_request_result: bool = False
+    ):
         """
-        This waits until the underlying _job function returns a result.
-        :param wait_for_request_result: If there was a request send with the request function, this waits also until the result is finished.
+        This waits until the underlying _job function returns a server_response.
+        :param wait_for_request_result: If there was a request send with the request function, this waits also until the server_response is finished.
         """
         if not self.has_started() and not self.finished():
             self.run()
@@ -96,7 +123,7 @@ class InternalJob:
         return self._ongoing_async_request.wait_until_finished()
 
     @property
-    def progress(self):
+    def progress(self) -> tuple[float, str]:
         return self.job_progress.get_progress()
 
     def set_progress(self, progress: float, message: str = None):

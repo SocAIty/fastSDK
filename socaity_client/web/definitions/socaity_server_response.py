@@ -1,12 +1,12 @@
 """
 This is a copy of the socaity_router job_result file and JOB_STATUS file.
-It mirrors the data structure of the job result object of socaity_router.
-If the result of an endpoint is this structure, the client_api assumes it is interacting with an socaity endpoint.
-On that way, we can queue, wait and get the result of the job.
+It mirrors the data structure of the job server_response object of socaity_router.
+If the server_response of an endpoint is this structure, the client_api assumes it is interacting with an socaity endpoint.
+On that way, we can queue, wait and get the server_response of the job.
 """
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any, Union
 
 
 class SocaityServerJobStatus(Enum):
@@ -21,6 +21,11 @@ class SocaityServerJobStatus(Enum):
     TIMEOUT = "Timeout"
 
 
+class FileResult:
+    file_name: str
+    content_type: str
+    content: str  # base64 encoded
+
 
 @dataclass
 class SocaityServerResponse:
@@ -32,7 +37,7 @@ class SocaityServerResponse:
     status: SocaityServerJobStatus
     progress: Optional[float] = 0.0
     message: Optional[str] = None
-    result: Optional[object] = None
+    result: Union[FileResult, Any, None] = None
 
     created_at: Optional[str] = None
     queued_at: Optional[str] = None

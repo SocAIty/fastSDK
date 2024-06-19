@@ -10,7 +10,7 @@ class ServiceClientAPI:
     The ServiceClient API uses the service client to perform various tasks.
     1. It uses the service client to make req to the service.
         - It understands the types of the response like socaity job results.
-        - In case of a socaity job subsequent req are made to the service until the final result is retrieved.
+        - In case of a socaity job subsequent req are made to the service until the final server_response is retrieved.
     2. It can batch req.
     3. It makes writing api classes easier.
     """

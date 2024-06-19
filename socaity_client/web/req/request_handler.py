@@ -2,7 +2,7 @@ from io import BufferedReader, BytesIO
 
 import httpx
 
-from multimodal_files import UploadFile
+from multimodal_files import MultiModalFile
 from socaity_client.utils import is_valid_file_path
 from socaity_client.web.definitions.endpoint import EndPoint
 from socaity_client.jobs.async_jobs.async_job import AsyncJob
@@ -80,11 +80,11 @@ class RequestHandler:
         :return: The send able file.
         """
         # it is already converted
-        if isinstance(file, UploadFile):
+        if isinstance(file, MultiModalFile):
             return file
 
-        target_class = UploadFile
-        if target_type is not None and issubclass(target_type, UploadFile):
+        target_class = MultiModalFile
+        if target_type is not None and issubclass(target_type, MultiModalFile):
             target_class = target_type
 
         upload_file_instance = target_class()
