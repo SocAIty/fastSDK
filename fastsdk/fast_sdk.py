@@ -1,13 +1,13 @@
 import functools
 
-from socaity_client.jobs.threaded.internal_job import InternalJob
-from socaity_client.utils import get_function_parameters_as_dict
-from socaity_client.web.service_client import ServiceClient
+from fastsdk.jobs.threaded.internal_job import InternalJob
+from fastsdk.utils import get_function_parameters_as_dict
+from fastsdk.web.service_client import ServiceClient
 
 
-class ServiceClientAPI:
+class FastSDK:
     """
-    The ServiceClient API uses the service client to perform various tasks.
+    The FastSDK uses the service client to perform various tasks.
     1. It uses the service client to make req to the service.
         - It understands the types of the response like socaity job results.
         - In case of a socaity job subsequent req are made to the service until the final server_response is retrieved.
@@ -20,7 +20,7 @@ class ServiceClientAPI:
         self.debug_mode = False  # can be overwritten by using the client_api decorator
         self.start_jobs_immediately = True  # can be overwritten by using the client_api decorator
 
-    def client_api(self):
+    def sdk(self):
         """
         The wrapped class gets attributes:
         - start_jobs_immediately: if True, all job will start immediately

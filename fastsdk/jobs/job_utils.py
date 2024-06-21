@@ -3,9 +3,9 @@ from typing import Union, List
 
 from tqdm import tqdm
 
-from socaity_client.jobs.threaded.internal_job import InternalJob
-from socaity_client.jobs.threaded.job_status import JOB_STATUS
-from socaity_client.utils import flatten_list
+from fastsdk.jobs.threaded.internal_job import InternalJob
+from fastsdk.jobs.threaded.job_status import JOB_STATUS
+from fastsdk.utils import flatten_list
 
 
 def gather_generator(jobs: Union[List[InternalJob], List[List[InternalJob]], InternalJob, list]):

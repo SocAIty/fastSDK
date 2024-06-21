@@ -3,10 +3,10 @@ from io import BufferedReader, BytesIO
 import httpx
 
 from multimodal_files import MultiModalFile
-from socaity_client.utils import is_valid_file_path
-from socaity_client.web.definitions.endpoint import EndPoint
-from socaity_client.jobs.async_jobs.async_job import AsyncJob
-from socaity_client.jobs.async_jobs.async_job_manager import AsyncJobManager
+from fastsdk.utils import is_valid_file_path
+from fastsdk.web.definitions.endpoint import EndPoint
+from fastsdk.jobs.async_jobs.async_job import AsyncJob
+from fastsdk.jobs.async_jobs.async_job_manager import AsyncJobManager
 
 
 class RequestHandler:

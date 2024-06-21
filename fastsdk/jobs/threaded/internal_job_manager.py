@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from socaity_client.jobs.threaded.internal_job import InternalJob
+    from fastsdk.jobs.threaded.internal_job import InternalJob
 
-from socaity_client.jobs.threaded.job_status import JOB_STATUS
+from fastsdk.jobs.threaded.job_status import JOB_STATUS
 import threading
 import time
 from typing import Union

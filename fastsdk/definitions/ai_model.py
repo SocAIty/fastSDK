@@ -1,6 +1,6 @@
 from typing import Union
 
-from socaity_client.definitions.enums import ModelDomainTag, ModelTag
+from fastsdk.definitions.enums import ModelDomainTag, ModelTag
 
 
 class AIModelDescription:

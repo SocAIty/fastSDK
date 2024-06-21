@@ -3,12 +3,12 @@ import inspect
 import types
 from typing import Union, Tuple
 
-from socaity_client.web.definitions.endpoint import EndPoint
-from socaity_client.definitions.enums import EndpointSpecification
-from socaity_client.definitions.ai_model import AIModelDescription
-from socaity_client.web.req.endpoint_request import EndPointRequest
+from fastsdk.web.definitions.endpoint import EndPoint
+from fastsdk.definitions.enums import EndpointSpecification
+from fastsdk.definitions.ai_model import AIModelDescription
+from fastsdk.web.req.endpoint_request import EndPointRequest
 
-from socaity_client.web.req.request_handler import RequestHandler
+from fastsdk.web.req.request_handler import RequestHandler
 
 
 class ServiceClient:

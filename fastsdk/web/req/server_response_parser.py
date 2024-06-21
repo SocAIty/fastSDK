@@ -1,7 +1,7 @@
 from typing import Union
 import httpx
 
-from socaity_client.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
+from fastsdk.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
 
 
 def is_socaity_server_response(json: dict) -> bool:

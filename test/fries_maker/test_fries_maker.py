@@ -1,5 +1,5 @@
-from socaity_client import MultiModalFile, ImageFile
-from socaity_client.jobs.job_utils import gather_generator
+from fastsdk import MultiModalFile, ImageFile
+from fastsdk.jobs.job_utils import gather_generator
 from tests.fries_maker.fries_maker_client_api import FriesMaker
 
 import cv2

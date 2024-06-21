@@ -6,10 +6,10 @@ from typing import Union
 from uuid import uuid4
 from tqdm import tqdm
 
-from socaity_client.jobs.threaded.internal_job_manager import InternalJobManager
-from socaity_client.jobs.threaded.job_status import JOB_STATUS
-from socaity_client.jobs.threaded.job_progress import JobProgress
-from socaity_client.web.req.endpoint_request import EndPointRequest
+from fastsdk.jobs.threaded.internal_job_manager import InternalJobManager
+from fastsdk.jobs.threaded.job_status import JOB_STATUS
+from fastsdk.jobs.threaded.job_progress import JobProgress
+from fastsdk.web.req.endpoint_request import EndPointRequest
 
 
 class InternalJob:

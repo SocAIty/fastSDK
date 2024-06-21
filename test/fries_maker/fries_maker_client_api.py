@@ -2,9 +2,9 @@ import random
 import time
 from typing import List, Union
 
-from socaity_client import ImageFile, MultiModalFile, AudioFile
-from socaity_client.jobs.threaded.internal_job import InternalJob
-from socaity_client.service_client_api import ServiceClientAPI
+from fastsdk import ImageFile, MultiModalFile, AudioFile
+from fastsdk.jobs.threaded.internal_job import InternalJob
+from fastsdk.fast_sdk import FastSDK
 
 import cv2
 import librosa
@@ -12,9 +12,9 @@ import numpy as np
 
 from .service_fries_maker import srvc_fries_maker
 
-fries_maker_client_api = ServiceClientAPI(srvc_fries_maker)
+fries_maker_client_api = FastSDK(srvc_fries_maker)
 
-@fries_maker_client_api.client_api()
+@fries_maker_client_api.sdk()
 class FriesMaker:
 
     @fries_maker_client_api.job()

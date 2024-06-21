@@ -4,11 +4,11 @@ from httpx import HTTPStatusError
 
 from multimodal_files import MultiModalFile
 from multimodal_files.file_conversion import from_file_result
-from socaity_client.jobs.async_jobs.async_job import AsyncJob
-from socaity_client.web.definitions.endpoint import EndPoint
-from socaity_client.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
-from socaity_client.web.req.request_handler import RequestHandler
-from socaity_client.web.req.server_response_parser import parse_response, has_request_status_code_error
+from fastsdk.jobs.async_jobs.async_job import AsyncJob
+from fastsdk.web.definitions.endpoint import EndPoint
+from fastsdk.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
+from fastsdk.web.req.request_handler import RequestHandler
+from fastsdk.web.req.server_response_parser import parse_response, has_request_status_code_error
 import time
 
 class EndPointRequest:

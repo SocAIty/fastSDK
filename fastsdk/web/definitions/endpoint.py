@@ -1,6 +1,6 @@
 from typing import Union
 
-from socaity_client.definitions.enums import EndpointSpecification
+from fastsdk.definitions.enums import EndpointSpecification
 
 
 class EndPoint:

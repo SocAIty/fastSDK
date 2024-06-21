@@ -1,7 +1,7 @@
-from socaity_client.definitions.ai_model import AIModelDescription
-from socaity_client.definitions.enums import ModelDomainTag, ModelTag
-from socaity_client.web.service_client import ServiceClient
-from socaity_client import MultiModalFile, ImageFile, AudioFile, VideoFile
+from fastsdk.definitions.ai_model import AIModelDescription
+from fastsdk.definitions.enums import ModelDomainTag, ModelTag
+from fastsdk.web.service_client import ServiceClient
+from fastsdk import MultiModalFile, ImageFile, AudioFile, VideoFile
 
 
 srvc_fries_maker = ServiceClient(
