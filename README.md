@@ -8,7 +8,7 @@ Ever wanted to use web APIs as if they are any other python function?
 It was never easier to build an SDK for your hosted services, than it is with socaity-client.
 
 Out of the box works with following services:
-- Socaity services created with [socaity-router](https://github.com/SocAIty/socaity-router) 
+- Services created with [FastTaskAPI](https://github.com/SocAIty/socaity-router) which return a job object.
 - OpenAPI 3.0 / RestAPIs
   - [fastAPI](https://github.com/tiangolo/fastapi)
   - [Flask](https://flask.palletsprojects.com/en/2.0.x/)
