@@ -76,9 +76,12 @@ class InternalJob:
         while not self.finished():
             if print_progress:
                 percent, message = self.progress
-                pbar.update(percent * 100)
-                if message:
+                if percent is not None and type(percent) in [int, float]:
+                    pbar.n = percent*100
+
+                if message is not None and isinstance(message, str):
                     pbar.set_description(message)
+
             time.sleep(0.1)
 
         if self.status == JOB_STATUS.FAILED and throw_error:

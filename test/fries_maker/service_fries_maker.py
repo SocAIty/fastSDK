@@ -1,7 +1,7 @@
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.definitions.enums import ModelDomainTag, ModelTag
 from fastsdk.web.service_client import ServiceClient
-from fastsdk import MultiModalFile, ImageFile, AudioFile, VideoFile
+from fastsdk import MediaFile, ImageFile, AudioFile, VideoFile
 
 
 srvc_fries_maker = ServiceClient(
@@ -16,7 +16,7 @@ srvc_fries_maker = ServiceClient(
 srvc_fries_maker.add_endpoint(endpoint_route="make_fries", post_params={"fries_name": str, "amount": int})
 srvc_fries_maker.add_endpoint(
     endpoint_route="make_file_fries",
-    file_params={"potato_one": MultiModalFile, "potato_two": MultiModalFile, "potato_three": MultiModalFile}
+    file_params={"potato_one": MediaFile, "potato_two": MediaFile, "potato_three": MediaFile}
 )
 srvc_fries_maker.add_endpoint(endpoint_route="make_image_fries", file_params={"potato_one": ImageFile})
 srvc_fries_maker.add_endpoint(endpoint_route="make_audio_fries", file_params={"potato_one": AudioFile, "potato_two": AudioFile})

@@ -1,4 +1,4 @@
-from fastsdk import MultiModalFile, ImageFile
+from fastsdk import MediaFile, ImageFile
 from fastsdk.jobs.job_utils import gather_generator
 from tests.fries_maker.fries_maker_client_api import FriesMaker
 
@@ -45,7 +45,7 @@ def test_image_upload():
     potato_cv2 = cv2.imread(img_potato_one)
     job_cv2 = fries_maker.make_image_fries(potato_cv2)
     # as file instance
-    upload_file_instance = MultiModalFile()
+    upload_file_instance = MediaFile()
     upload_file_instance.from_file(img_potato_two)
     job_upload_file_instance = fries_maker.make_image_fries(upload_file_instance)
     # as image file instance

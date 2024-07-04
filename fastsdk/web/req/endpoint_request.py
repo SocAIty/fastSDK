@@ -2,14 +2,15 @@ from typing import Union, Any
 
 from httpx import HTTPStatusError
 
-from multimodal_files import MultiModalFile
-from multimodal_files.file_conversion import from_file_result
+from media_toolkit import MediaFile
+from media_toolkit.file_conversion import from_file_result
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
 from fastsdk.web.req.request_handler import RequestHandler
 from fastsdk.web.req.server_response_parser import parse_response, has_request_status_code_error
 import time
+
 
 class EndPointRequest:
     """
@@ -26,13 +27,12 @@ class EndPointRequest:
             self,
             endpoint: EndPoint,
             request_handler: RequestHandler,
-            refresh_interval: float = 0.5,
             retries_on_error: int = 3
     ):
         self._endpoint = endpoint
         self._request_handler = request_handler
 
-        self._refresh_interval = refresh_interval
+        self._refresh_interval = endpoint.refresh_interval
         self._retries_on_error = retries_on_error
         self._current_retry_counter = 0
 
@@ -68,17 +68,18 @@ class EndPointRequest:
         """
         self._ongoing_async_request = self._request_handler.request_endpoint_async(
             self._endpoint,
-            callback=self._response_callback,
+            self._response_callback,
             *args,
             **kwargs
         )
-        self.first_request_send_at = self._ongoing_async_request.coroutine_executed_at
+        if self.first_request_send_at is None:
+            self.first_request_send_at = self._ongoing_async_request.coroutine_executed_at
 
-    def get_result(self) -> Union[MultiModalFile, Any, None]:
+    def get_result(self) -> Union[MediaFile, Any, None]:
         """
         Waits until the final server_response is available.
         It only returns the result of the socaity server_response not the meta information.
-        If the result is of type FileResult it will be converted into a multimodal file.
+        If the result is of type FileResult it will be converted into a media-toolkit MediaFile.
         """
         self.wait_until_finished()
         if self.server_response is None:
@@ -93,6 +94,33 @@ class EndPointRequest:
 
         return result
 
+    @property
+    def progress(self) -> (float, str):
+        """
+        Returns the progress of the job.
+        """
+        # Status for non socaity jobs
+        if (
+                not isinstance(self.server_response, SocaityServerResponse)
+                and not isinstance(self.in_between_server_response, SocaityServerResponse)
+        ):
+            if self.first_request_send_at is not None:
+                return 1, 'Request send'
+            elif self.first_response_received_at is not None:
+                return 100, 'Request finished'
+            else:
+                return 0, "Job not a started"
+
+        # Status for socaity jobs
+        if self.server_response is not None and hasattr(self.server_response, "progress"):
+            return self.server_response.progress, self.server_response.message
+
+        if self.in_between_server_response is not None and hasattr(self.in_between_server_response, "progress"):
+            return self.in_between_server_response.progress, self.in_between_server_response.message
+
+        if self.first_request_send_at is not None:
+            return 1, 'Request send'
+        return 0, "Job not started"
 
     def is_finished(self):
         """
@@ -115,8 +143,6 @@ class EndPointRequest:
         If job server_response is of type socaity:
             - It will call the socaity server with the refresh_status function in the return until the job is finished.
             - It checks for socaity request errors.
-
-        If the request was successfull it re
         """
 
         if async_job_result is None:

@@ -2,7 +2,7 @@ import random
 import time
 from typing import List, Union
 
-from fastsdk import ImageFile, MultiModalFile, AudioFile
+from fastsdk import ImageFile, MediaFile, AudioFile
 from fastsdk.jobs.threaded.internal_job import InternalJob
 from fastsdk.fast_sdk import FastSDK
 
@@ -86,7 +86,7 @@ class FriesMaker:
         potato_two = cv2.imread(potato_two)
         return self._make_file_fries(potato_one, potato_two, potato_three)
 
-    def make_image_fries(self, potato_one: Union[str, bytes, np.array, ImageFile, MultiModalFile]) -> InternalJob:
+    def make_image_fries(self, potato_one: Union[str, bytes, np.array, ImageFile, MediaFile]) -> InternalJob:
         """
         Tests upload of standard file types.
         """

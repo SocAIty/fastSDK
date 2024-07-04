@@ -2,7 +2,7 @@ from io import BufferedReader, BytesIO
 
 import httpx
 
-from multimodal_files import MultiModalFile
+from media_toolkit import MediaFile
 from fastsdk.utils import is_valid_file_path
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
@@ -79,27 +79,19 @@ class RequestHandler:
         :param target_type: The target type to convert to. If not specified will be converted to bytes.
         :return: The send able file.
         """
+        if file is None:
+            raise ValueError("No (None) data to convert to file.")
+
         # it is already converted
-        if isinstance(file, MultiModalFile):
+        if isinstance(file, MediaFile):
             return file
 
-        target_class = MultiModalFile
-        if target_type is not None and issubclass(target_type, MultiModalFile):
+        target_class = MediaFile
+        if target_type is not None and issubclass(target_type, MediaFile):
             target_class = target_type
 
         upload_file_instance = target_class()
-        # load from file cases
-        if type(file) in [BufferedReader, BytesIO]:
-            upload_file_instance.from_file(file)
-        elif isinstance(file, str):
-            if is_valid_file_path(file):
-                upload_file_instance.from_file(open(file, 'rb'))
-            else:
-                upload_file_instance.from_base64(file)
-        elif type(file).__name__ == 'ndarray':
-            upload_file_instance.from_np_array(file)
-        elif isinstance(file, bytes):
-            upload_file_instance.from_bytes(file)
+        upload_file_instance.from_any(file)
 
         # convert the file
         return upload_file_instance
@@ -107,7 +99,9 @@ class RequestHandler:
     @staticmethod
     def _prepare_endpoint_params_for_request(endpoint: EndPoint, *args, **kwargs):
         # make dict from args and kwargs
-        _named_args = {k: v for k, v in locals().items() if k in endpoint.params()}
+        # get named args of endpoint and fill with args
+        _named_args = {k: v for k, v in zip(endpoint.params(), args)}
+        # update with kwargs
         _named_args.update(kwargs)
 
         # sort the parameters by paramater typ

@@ -55,15 +55,12 @@ class ServiceClient:
             self,
             endpoint: EndPoint,
             is_async: bool = False,
-            refresh_interval: float = 1.0,
             retries_on_error: int = 3
     ):
         """
         Creates a new function to call an endpoint and adds it to the class.
         :param endpoint: the definition of the endpoint
         :param is_async: if the endpoint is called async_jobs or sync
-        :param refresh_interval: if the service returns an async_jobs job (with job_id),
-                the refresh interval is used to check for updates
         :return: the wrapped function
         """
         def endpoint_job_wrapper(*args, **kwargs) -> EndPointRequest:
@@ -80,7 +77,6 @@ class ServiceClient:
             endpoint_request = EndPointRequest(
                 endpoint=endpoint,
                 request_handler=self._request_handler,
-                refresh_interval=refresh_interval,
                 retries_on_error=retries_on_error
             )
             endpoint_request.request(*args, **kwargs)
@@ -91,24 +87,32 @@ class ServiceClient:
 
         # create method parameters
         ep_args = endpoint.params()
-        ep_args.update(endpoint.post_params)
-        ep_args.update(endpoint.file_params)
-
-        # Create a partial function with default values as None
         func_name = f"{endpoint.endpoint_route}" if not is_async else f"{endpoint.endpoint_route}_async"
-        partial_func = functools.partial(endpoint_job_wrapper, **{name: None for name in ep_args.keys()})
-        # Set the function name
-        partial_func.__name__ = func_name
-        sig_params = [inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=ptype) for name, ptype
-                      in ep_args.items()]
-        partial_func.__signature__ = inspect.Signature(parameters=sig_params)
+        endpoint_job_wrapper.__name__ = func_name
+        sig_params = [
+            inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=ptype)
+            for name, ptype in ep_args.items()
+        ]
+        endpoint_job_wrapper.__signature__ = inspect.Signature(parameters=sig_params)
+        self.__setattr__(func_name, endpoint_job_wrapper)
+        self.endpoint_request_funcs[func_name] = endpoint_job_wrapper
 
-        # add method to class
-        bound_method = types.MethodType(partial_func, self)
-        self.__setattr__(partial_func.__name__, bound_method)
-        self.endpoint_request_funcs[partial_func.__name__] = partial_func
+        return endpoint_job_wrapper
+        # Create a partial function with default values as None
+        #func_name = f"{endpoint.endpoint_route}" if not is_async else f"{endpoint.endpoint_route}_async"
+        #partial_func = functools.partial(endpoint_job_wrapper, **{name: t for name, t in ep_args.items()})
+        ## Set the function name
+        #partial_func.__name__ = func_name
+        #sig_params = [inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=ptype) for name, ptype
+        #              in ep_args.items()]
+        #partial_func.__signature__ = inspect.Signature(parameters=sig_params)
+#
+        ## add method to class
+        #bound_method = types.MethodType(partial_func, self)
+        #self.__setattr__(partial_func.__name__, bound_method)
+        #self.endpoint_request_funcs[partial_func.__name__] = partial_func
 
-        return partial_func
+        #return partial_func
 
     def _add_endpoint(self, endpoint: EndPoint) -> Tuple[callable, callable]:
         """
@@ -133,13 +137,17 @@ class ServiceClient:
             get_params: dict = None,
             post_params: dict = None,
             file_params: dict = None,
-            timeout: int = 3600):
+            timeout: int = 3600,
+            refresh_interval: float = 0.5
+    ):
         ep = EndPoint(
             endpoint_route=endpoint_route,
             get_params=get_params,
             post_params=post_params,
             file_params=file_params,
-            timeout=timeout)
+            timeout=timeout,
+            refresh_interval=refresh_interval
+        )
         self._add_endpoint(ep)
 
     def list_endpoints(self) -> dict:

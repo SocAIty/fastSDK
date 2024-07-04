@@ -11,7 +11,8 @@ class EndPoint:
             post_params: dict = None,
             file_params: dict = None,
             header_params: dict = None,
-            timeout: float = 3600
+            timeout: float = 3600,
+            refresh_interval: float = 0.5
     ):
         """
         :param endpoint_route: for example api/img2img/stable_diffusion
@@ -26,6 +27,7 @@ class EndPoint:
         # remove slash at beginning
         self.endpoint_route = endpoint_route if endpoint_route[0] != "/" else endpoint_route[1:]
         self.timeout = timeout
+        self.refresh_interval = refresh_interval
         self.get_params = get_params if get_params is not None else {}
         self.post_params = post_params if post_params is not None else {}
         self.file_params = file_params if file_params is not None else {}
