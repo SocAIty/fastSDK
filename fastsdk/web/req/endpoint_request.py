@@ -107,9 +107,9 @@ class EndPointRequest:
             if self.first_request_send_at is not None:
                 return 1, 'Request send'
             elif self.first_response_received_at is not None:
-                return 100, 'Request finished'
+                return 100, 'First response received'
             else:
-                return 0, "Job not a started"
+                return 0, "Starting job. Waiting for endpoint."
 
         # Status for socaity jobs
         if self.server_response is not None and hasattr(self.server_response, "progress"):
@@ -120,7 +120,7 @@ class EndPointRequest:
 
         if self.first_request_send_at is not None:
             return 1, 'Request send'
-        return 0, "Job not started"
+        return 0, "Starting job. Waiting for endpoint."
 
     def is_finished(self):
         """
