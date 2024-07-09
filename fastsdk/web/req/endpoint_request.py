@@ -137,6 +137,19 @@ class EndPointRequest:
             time.sleep(0.1)
         return self
 
+    @property
+    def job_id(self) -> Union[str, None]:
+        """
+        Returns the job id of the server if it is a socaity job. Otherwise None.
+        """
+        if self.server_response is not None and hasattr(self.server_response, "id"):
+            return self.server_response.id
+
+        if self.in_between_server_response is not None and hasattr(self.in_between_server_response, "id"):
+            return self.in_between_server_response.id
+
+        return None
+
     def _parse_result_and_refresh_if_necessary(self, async_job_result):
         """
         If job server_response is not of type socaity: it is returned directly.

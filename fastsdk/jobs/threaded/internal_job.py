@@ -71,16 +71,24 @@ class InternalJob:
         """
 
         if print_progress:
-            pbar = tqdm(total=100)
+            desc = f"{self._job_function.__name__}, progress: "
+            pbar = tqdm(total=100, desc=desc)
 
         while not self.finished():
             if print_progress:
+                desc = f"{self._job_function.__name__} "
+                if self._ongoing_async_request is not None and self._ongoing_async_request.job_id is not None:
+                    desc += f"job_id: {self._ongoing_async_request.job_id} "
+
                 percent, message = self.progress
                 if percent is not None and type(percent) in [int, float]:
                     pbar.n = percent*100
 
                 if message is not None and isinstance(message, str):
-                    pbar.set_description(message)
+                    desc += message
+
+                desc += "progress: "
+                pbar.set_description(desc)
 
             time.sleep(0.1)
 
