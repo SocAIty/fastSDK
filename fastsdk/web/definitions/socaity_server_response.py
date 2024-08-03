@@ -48,3 +48,4 @@ class SocaityServerResponse:
     endpoint_protocol: Optional[str] = "socaity"
     # this field is an url where the client can get job status updates
     refresh_job_url: Optional[str] = None
+

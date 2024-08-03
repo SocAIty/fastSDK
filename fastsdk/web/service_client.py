@@ -1,14 +1,17 @@
-import functools
 import inspect
-import types
 from typing import Union, Tuple
+from urllib.parse import urlparse
+import httpx
 
-from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.definitions.enums import EndpointSpecification
+from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.web.req.endpoint_request import EndPointRequest
 
+from fastsdk.registry import Registry
 from fastsdk.web.req.request_handler import RequestHandler
+from fastsdk.web.req.request_handler_runpod import RequestHandlerRunpod
+from fastsdk.web.req.s3_bucket import S3Bucket
 
 
 class ServiceClient:
@@ -17,39 +20,68 @@ class ServiceClient:
     A service usually has multiple endpoints with different routes.
     The ServiceClient makes it easy to add and call these endpoints.
     """
-
     def __init__(
             self,
             # required information for execution
-            service_url: str = None,
-            service_specification: Union[EndpointSpecification, str] = EndpointSpecification.SOCAITY,
+            service_urls: Union[dict, str, list],
+            default_service: str = "localhost",
             # optional information for documentation and services
+            service_name: str = None,
+            service_description: str = None,
             model_description: AIModelDescription = None,
+            # optional args for s3 upload and co.
+            s3_bucket: S3Bucket = None,
             *args,
             **kwargs
     ):
         """
         Initialize the ServiceClient with the required information.
-        :param service_url: the url of the service api
-        :param service_specification: based on the service specs, the ServiceClient behaves differently.
-            In case of socaity it will for example add the status endpoint. This one can be used to check server health.
-        :param model_name: used for documentation
-        :param model_domain_tags: find the model easier in the registry
-        :param model_tags: find the model easier in the registry
+        :param service_urls: urls to possible hosts of the service api
+        :param default_service: which of the services to use
+        :param service_name: the name of the service. Used to find the service in the registry.
+        :param service_description: a description of the service.
+        :param model_description: a description of the model used in the service. Used for documentation.
+        :param s3_bucket: if specified, files will be uploaded to s3 bucket.
+             Then a file_url is sent to the endpoint instead of the file as bytes.
         """
         # definitions and registry
+        self.service_description = service_description
         self.model = model_description
-        self.endpoint_specification = service_specification  # the default value - used in the endpoint_decorator
+        self.s3_bucket = s3_bucket
+        # create the service urls
+        self.service_urls = self._create_service_urls(service_urls)
+        self._default_service = default_service
 
-        # service_url add http:// if not present and remove trailing slash
-        service_url = service_url if service_url[-1] != "/" else service_url[:-1]
-        if not service_url.startswith("http") or not service_url.startswith("https"):
-            service_url = f"http://{service_url}"
+        # init request handler
+        self._request_handler = None
+        self.service_url = None
+        self.set_service(default_service)
 
-        self._request_handler = RequestHandler(service_url=service_url)
+        # add the service client to the registry. This makes it easier to find them later on.
+        self.service_name = service_name if service_name is not None else self.service_url
+        Registry().add_service(service_name, self)
 
         self.endpoint_request_funcs = {}  # { endpoint_name: function, endpoint_name_async: function }
         self.endpoints = {}  # { endpoint_name: endpoint }
+
+    def set_service(self, service_name: str = None):
+        """
+        Set the service to send requests to. Instantiates the request handler.
+        :param service_name: the url of the service
+        """
+        if service_name is None and self._default_service in self.service_urls:
+            service_name = self._default_service
+
+        if service_name not in self.service_urls:
+            print(f"Service {service_name} not found in the service urls {self.service_urls}."
+                  f"Using {list(self.service_urls.keys())[0]} instead.")
+            service_name = list(self.service_urls.keys())[0]
+
+        self.service_url = self.service_urls[service_name]
+        # create new request handler if necessary; or use the existing one
+        if self._request_handler is None or self._request_handler.service_url != self.service_url:
+            self._request_handler = create_request_handler(service_url=self.service_url, s3_bucket=self.s3_bucket)
+        return self
 
     def _create_endpoint_func(
             self,
@@ -159,6 +191,28 @@ class ServiceClient:
             print(f"{name}: {func.__signature__}")
         return self.endpoint_request_funcs
 
+    @staticmethod
+    def _create_service_urls(service_urls: Union[dict, str, list]):
+        # set service urls and fix them if necessary
+        if isinstance(service_urls, str):
+            service_urls = {"0": service_urls}
+        elif isinstance(service_urls, list):
+            service_urls = {str(i): url for i, url in enumerate(service_urls)}
+
+        # fix problems with "handwritten" urls
+        service_urls = {k: ServiceClient._url_sanitize(url) for k, url in service_urls.items()}
+        return service_urls
+
+    @staticmethod
+    def _url_sanitize(url: str):
+        """
+        Add http: // if not present and remove trailing slash
+        """
+        url = url if url[-1] != "/" else url[:-1]
+        if not url.startswith("http") or not url.startswith("https"):
+            url = f"http://{url}"
+        return url
+
     def __call__(self, endpoint_route: str, call_async: bool = False, *args, **kwargs) -> EndPointRequest:
         """
         Call a function synchronously by name.
@@ -175,5 +229,47 @@ class ServiceClient:
 
         return self.endpoint_request_funcs[endpoint_route](*args, **kwargs)
 
+    def __del__(self):
+        """
+        Remove the service from the registry when the object is deleted.
+        """
+        Registry().remove_service(self.service_name)
 
 
+def create_request_handler(service_url: str, s3_bucket: S3Bucket = None) -> RequestHandler:
+    st = determine_service_type(service_url)
+    ep_req = {
+        EndpointSpecification.FASTTASKAPI: RequestHandler,
+        EndpointSpecification.RUNPOD: RequestHandlerRunpod,
+        EndpointSpecification.OTHER: RequestHandler
+    }
+    if st not in map:
+        st = EndpointSpecification.OTHER
+
+    return ep_req[st](service_url=service_url, s3_bucket=s3_bucket)
+
+
+def determine_service_type(service_url: str) -> EndpointSpecification:
+    """
+    Determines the type of service based on the service url.
+    """
+    # case hosted on runpod
+    if "api.runpod.ai" in service_url:
+        return EndpointSpecification.RUNPOD
+    # try to get openapi.json to determine the service type
+    try:
+        parsed = urlparse(service_url)
+        openapi_json = httpx.Client().get(f"{parsed.scheme}://{parsed.netloc}/openapi.json").json()
+    except Exception as e:
+        # must be a normal non-openapi service
+        return EndpointSpecification.OTHER
+    detail = openapi_json.get('detail', None)
+    if detail is not None and 'not found' in detail:
+        # Any other non-openapi service
+        return EndpointSpecification.OTHER
+    info = openapi_json.get("info", "")
+    if "fast-task-api" in info and "runpod" in info:
+        # socaity service
+        return EndpointSpecification.RUNPOD
+    # default else
+    return EndpointSpecification.FASTTASKAPI

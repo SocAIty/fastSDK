@@ -48,7 +48,7 @@ class face2face:
     # this decorator gives your SDK method a job object to work with. 
     # and the method is threaded when called.
     @face2face_sdk.job() 
-    def add_reference_face(self, job, face_name: str, source_img: bytes, save: bool = True):
+    def add_face(self, job, face_name: str, source_img: bytes, save: bool = True):
         # send the request to the service endpoint
         endpoint_request = job.request("add_reference_face", face_name, source_img, save)
         # wait until server finished the job

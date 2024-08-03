@@ -1,7 +1,3 @@
-from typing import Union
-
-from fastsdk.definitions.enums import EndpointSpecification
-
 
 class EndPoint:
     def __init__(
@@ -23,7 +19,6 @@ class EndPoint:
         :param file_params:
         :param timeout: time until the request fails.
         """
-
         # remove slash at beginning
         self.endpoint_route = endpoint_route if endpoint_route[0] != "/" else endpoint_route[1:]
         self.timeout = timeout

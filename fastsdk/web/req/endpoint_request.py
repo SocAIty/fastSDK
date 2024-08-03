@@ -2,12 +2,13 @@ from typing import Union, Any
 
 from httpx import HTTPStatusError
 
+from fastsdk.web.req.request_handler import RequestHandler
 from media_toolkit import MediaFile
-from media_toolkit.file_conversion import from_file_result
+from media_toolkit.utils.file_conversion import media_from_file_result
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
-from fastsdk.web.req.request_handler import RequestHandler
+
 from fastsdk.web.req.server_response_parser import parse_response, has_request_status_code_error
 import time
 
@@ -90,7 +91,7 @@ class EndPointRequest:
             result = result.result
 
         if isinstance(result, dict) and "file_name" in result and "content" in result:
-            return from_file_result(result)
+            return media_from_file_result(result)
 
         return result
 

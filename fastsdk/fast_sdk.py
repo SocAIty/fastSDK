@@ -1,5 +1,6 @@
 import functools
 
+from fastsdk.definitions.enums import EndpointSpecification
 from fastsdk.jobs.threaded.internal_job import InternalJob
 from fastsdk.utils import get_function_parameters_as_dict
 from fastsdk.web.service_client import ServiceClient
@@ -15,7 +16,11 @@ class FastSDK:
     3. It makes writing api classes easier.
     """
 
-    def __init__(self, service_client: ServiceClient):
+    def __init__(
+            self,
+            service_client: ServiceClient,
+            *args, **kwargs
+    ):
         self.service_client = service_client  # #registry.get_service(service_name_or_service_client)
         self.debug_mode = False  # can be overwritten by using the client_api decorator
         self.start_jobs_immediately = True  # can be overwritten by using the client_api decorator
