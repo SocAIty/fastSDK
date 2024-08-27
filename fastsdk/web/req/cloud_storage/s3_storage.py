@@ -5,14 +5,23 @@ import time
 from typing import Optional, Union
 from urllib.parse import urlparse
 
-import boto3
-from boto3 import session
-from boto3.s3.transfer import TransferConfig
-from botocore.config import Config
+# from media_toolkit.utils.dependency_requirements import requires
+
+try:
+    import boto3
+    from boto3 import session
+    from boto3.s3.transfer import TransferConfig
+    from botocore.config import Config
+except ImportError:
+    pass
+
 from tqdm import tqdm
 
+from fastsdk.web.req.cloud_storage.cloud_handler import CloudHandler
 
-class S3Bucket:
+
+class S3Bucket(CloudHandler):
+    #@requires("boto3")
     def __init__(
             self,
             endpoint_url: str = None,
@@ -82,7 +91,9 @@ class S3Bucket:
         if not bucket_name:
             bucket_name = time.strftime('%m-%y')
 
-        if not isinstance(file_data, io.BytesIO):
+        if isinstance(file_data, io.BytesIO):
+            file_data.seek(0)
+        else:
             file_data = io.BytesIO(file_data)
 
         file_size = file_data.getbuffer().nbytes
@@ -124,3 +135,10 @@ class S3Bucket:
             return endpoint_url.split('.')[1].split('.digitaloceanspaces.com')[0]
 
         return None
+
+    def download_file(self, url: str, save_path: str = None) -> str:
+        boto_client = self.get_boto_client()
+        # consider to use in memory download
+        # boto_client.download_fileobj(url,)
+        boto_client.download_file(url=url, destfile=save_path)
+        return save_path
