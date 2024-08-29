@@ -1,10 +1,13 @@
 from typing import Union
 import httpx
 
-from fastsdk.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
+from fastsdk.web.definitions.socaity_server_response import ServerJobStatus, ServerJobResponse
 
 
 def is_socaity_server_response(json: dict) -> bool:
+    if json is None:
+        return False
+
     if not "endpoint_protocol" in json or json["endpoint_protocol"] != "socaity":
         return False
 
@@ -12,7 +15,32 @@ def is_socaity_server_response(json: dict) -> bool:
     return all(field in json for field in required_fields)
 
 
-def parse_response(response: httpx.Response) -> Union[SocaityServerResponse, bytes, dict, object]:
+def is_runpod_server_response(json: dict) -> bool:
+    if "id" in json and "status" in json:
+        if json["status"] in ["IN_QUEUE", "IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"]:
+            return True
+    return False
+
+
+def runpod_status_to_socaity_status(status: str) -> ServerJobStatus:
+    if status is None:
+        return ServerJobStatus.QUEUED
+
+    runpod_status_map = {
+        "IN_QUEUE": ServerJobStatus.QUEUED,
+        "IN_PROGRESS": ServerJobStatus.PROCESSING,
+        "COMPLETED": ServerJobStatus.FINISHED,
+        "FAILED": ServerJobStatus.FAILED,
+        "CANCELLED": ServerJobStatus.CANCELLED,
+        "TIMED_OUT": ServerJobStatus.TIMEOUT
+    }
+    st = status.upper()
+    if st in runpod_status_map:
+        return runpod_status_map[st]
+    return ServerJobStatus.QUEUED
+
+
+def parse_response(response: httpx.Response) -> Union[ServerJobResponse, bytes, dict, object]:
     """
     Parses the response of a request.
     :param response: The response of the request either formatted as json or the raw _content_buffer
@@ -21,16 +49,29 @@ def parse_response(response: httpx.Response) -> Union[SocaityServerResponse, byt
     if response is None:
         return None
 
-    if response.headers.get("Content-Type") == "application/json":
-        result = response.json()
-        #message = parse_status_code(response)
+    if "application/json" in response.headers.get("Content-Type"):
+        rjson = response.json()
 
-        if is_socaity_server_response(result):
-            result['status'] = SocaityServerJobStatus(result['status'])
-            result = SocaityServerResponse(**result)
+        if is_socaity_server_response(rjson):
+            return ServerJobResponse.from_dict(rjson)
 
-        return result
+        # any other json response from the server
+        if not is_runpod_server_response(rjson):
+            return rjson
+
+        # parse runpod response
+        # if implemented with fast-task-api the output will have socaity like structure
+        parsed_result = ServerJobResponse.from_dict(rjson)
+        runpod_output = rjson.get("output", None)
+        if is_socaity_server_response(runpod_output):
+            parsed_socaity_result = ServerJobResponse.from_dict(runpod_output)
+            parsed_result.update(parsed_socaity_result)
+        else:
+            parsed_result.result = runpod_output
+
+        return parsed_result
     else:
+        # whatever the endpoint returns
         return response.content
 
 

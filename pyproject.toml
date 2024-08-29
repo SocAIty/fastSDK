@@ -19,6 +19,18 @@ dependencies = [
     "singleton_decorator==1.0.0"
 ]
 
+[project.optional-dependencies]
+Azure = [
+    "azure-storage-blob"
+]
+S3 =[
+    "boto3"
+]
+Full = [
+    "azure-storage-blob",
+    "boto3"
+]
+
+
 [project.urls]
 Repository = "https://github.com/SocAIty/fastSDK"
-

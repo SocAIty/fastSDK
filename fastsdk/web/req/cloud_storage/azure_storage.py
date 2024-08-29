@@ -3,20 +3,18 @@ from typing import Union, Optional
 import io
 from urllib.parse import urlparse
 
-from azure.core.credentials import AzureSasCredential
-
 try:
     from azure.core.exceptions import ResourceNotFoundError
     from azure.storage.blob import BlobServiceClient
 except ImportError:
     pass
 
-from fastsdk.web.req.cloud_storage.cloud_handler import CloudHandler
+from fastsdk.web.req.cloud_storage.i_cloud_storage import CloudStorage
 from media_toolkit import MediaFile
 from media_toolkit.utils.dependency_requirements import requires
 
 
-class AzureBlobHandler(CloudHandler):
+class AzureBlobStorage(CloudStorage):
     @requires("azure.storage.blob")
     def __init__(self, sas_access_token: str = None, connection_string: str = None):
         if sas_access_token:

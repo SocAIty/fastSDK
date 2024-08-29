@@ -1,3 +1,4 @@
+import traceback
 from typing import Union, Any
 
 from httpx import HTTPStatusError
@@ -7,7 +8,7 @@ from media_toolkit import MediaFile
 from media_toolkit.utils.file_conversion import media_from_file_result
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
 from fastsdk.web.definitions.endpoint import EndPoint
-from fastsdk.web.definitions.socaity_server_response import SocaityServerResponse, SocaityServerJobStatus
+from fastsdk.web.definitions.socaity_server_response import ServerJobStatus, ServerJobResponse
 
 from fastsdk.web.req.server_response_parser import parse_response, has_request_status_code_error
 import time
@@ -86,8 +87,11 @@ class EndPointRequest:
         if self.server_response is None:
             return None
 
-        result = self.server_response.result
-        if isinstance(result, SocaityServerResponse):
+        result = self.server_response
+        if hasattr(self.server_response, "result"):
+            result = self.server_response.result
+
+        if isinstance(result, ServerJobResponse):
             result = result.result
 
         if isinstance(result, dict) and "file_name" in result and "content" in result:
@@ -102,8 +106,8 @@ class EndPointRequest:
         """
         # Status for non socaity jobs
         if (
-                not isinstance(self.server_response, SocaityServerResponse)
-                and not isinstance(self.in_between_server_response, SocaityServerResponse)
+                not isinstance(self.server_response, ServerJobResponse)
+                and not isinstance(self.in_between_server_response, ServerJobResponse)
         ):
             if self.first_request_send_at is not None:
                 return 1, 'Request send'
@@ -174,17 +178,18 @@ class EndPointRequest:
 
         # Parse the server_response and convert it to SocaityServerResponse if is that response type.
         server_response = parse_response(async_job_result)
-        # if not is a socaity job, we can return the server_response
-        if not isinstance(server_response, SocaityServerResponse):
+
+        # if not is a socaity job / runpod job, we can return the server_response
+        if not isinstance(server_response, ServerJobResponse):
             self.server_response = server_response
             return self
 
-        # check if socaity job is finished
-        if server_response.status == SocaityServerJobStatus.FINISHED:
+        # check if socaity job / runpod job is finished
+        if server_response.status == ServerJobStatus.FINISHED:
             self.in_between_server_response = None
             self.server_response = server_response
             return self
-        elif server_response.status == SocaityServerJobStatus.FAILED:
+        elif server_response.status == ServerJobStatus.FAILED:
             self.error = server_response.message
             if server_response.message is None:
                 self.error = "Job failed without error message."
@@ -195,6 +200,7 @@ class EndPointRequest:
         self.in_between_server_response = server_response
         # if not finished, we need to refresh the job
         # by calling this recursively we can refresh the job until it's finished
+
         refresh_url = self._request_handler.service_url + server_response.refresh_job_url
         self._ongoing_async_request = self._request_handler.request_url_async(
             refresh_url,
@@ -214,6 +220,7 @@ class EndPointRequest:
         # if there's a HTTPStatusError it means, that the server responded with an error 4.xx or 5.xx
         # in this case we need to decide further.
         if async_job.error is not HTTPStatusError:
+            traceback.print_exception(type(async_job.error), async_job.error, async_job.error.__traceback__)
             self.error = async_job.error
             # TODO: check error details and decide if we retry
             return False
@@ -245,7 +252,7 @@ class EndPointRequest:
         if retry:
             # TODO: implement retry logic for other endpoint types than socaity
             # for socaity
-            if self.in_between_server_response is not None and isinstance(self.in_between_server_response, SocaityServerResponse):
+            if self.in_between_server_response is not None and isinstance(self.in_between_server_response, ServerJobResponse):
                 self._current_retry_counter += 1
                 if self._current_retry_counter < self._retries_on_error:
                     # use previous job server_response to retry

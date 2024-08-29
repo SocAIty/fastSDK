@@ -4,7 +4,8 @@ from typing import Union, Optional
 from media_toolkit import MediaFile
 
 
-class CloudHandler:
+# This is the interface for cloud storage services. Implement this interface to add a new cloud storage provider.
+class CloudStorage:
 
     def upload(
             self,
@@ -36,3 +37,5 @@ class CloudHandler:
         :return: True if the file was deleted successfully
         """
         raise NotImplementedError("Implement in subclass")
+
+

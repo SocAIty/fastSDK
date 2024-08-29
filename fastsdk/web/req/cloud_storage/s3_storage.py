@@ -5,7 +5,7 @@ import time
 from typing import Optional, Union
 from urllib.parse import urlparse
 
-# from media_toolkit.utils.dependency_requirements import requires
+from media_toolkit.utils.dependency_requirements import requires
 
 try:
     import boto3
@@ -17,11 +17,11 @@ except ImportError:
 
 from tqdm import tqdm
 
-from fastsdk.web.req.cloud_storage.cloud_handler import CloudHandler
+from fastsdk.web.req.cloud_storage.i_cloud_storage import CloudStorage
 
 
-class S3Bucket(CloudHandler):
-    #@requires("boto3")
+class S3Storage(CloudStorage):
+    @requires("boto3")
     def __init__(
             self,
             endpoint_url: str = None,

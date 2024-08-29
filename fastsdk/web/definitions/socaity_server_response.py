@@ -9,16 +9,41 @@ from enum import Enum
 from typing import Optional, Any, Union
 
 
-class SocaityServerJobStatus(Enum):
+class ServerJobStatus(Enum):
     """
     These status are delivered by the server to indicate the current state of a submitted job to it
-    If a job was send to a socaity server, with the job endpoint and the jobid, the server will return the status
+    Works with socaity endpoints and runpod endpoints
     """
-    QUEUED = "Queued"  # job was recieved by the server and is waiting there to be processed
-    PROCESSING = "Processing"
-    FINISHED = "Finished"
-    FAILED = "Failed"
-    TIMEOUT = "Timeout"
+    QUEUED: str = "QUEUED"  # job was recieved by the server and is waiting there to be processed
+    PROCESSING: str = "PROCESSING"
+    FINISHED: str = "FINISHED"
+    FAILED: str = "FAILED"
+    TIMEOUT: str = "TIMEOUT"
+    CANCELLED: str = "CANCELLED"
+    UNKNOWN: str = "UNKNOWN"  # If the server returns a status which is not in the list
+
+    @staticmethod
+    def from_str(status: str):
+        if str is None:
+            return ServerJobStatus.UNKNOWN
+
+        status = status.upper()
+
+        # runpod reparse
+        runpod_status_map = {
+            "IN_QUEUE": ServerJobStatus.QUEUED,
+            "IN_PROGRESS": ServerJobStatus.PROCESSING,
+            "COMPLETED": ServerJobStatus.FINISHED,
+            "TIMED_OUT": ServerJobStatus.TIMEOUT,
+        }
+        if status in runpod_status_map:
+            return runpod_status_map[status]
+
+        # else it should be an ordinary status
+        try:
+            return ServerJobStatus(status)
+        except Exception as e:
+            return ServerJobStatus.UNKNOWN
 
 
 class FileResult:
@@ -28,24 +53,52 @@ class FileResult:
 
 
 @dataclass
-class SocaityServerResponse:
-    """
-    When the user (client) sends a request to a socaity Endpoint, a Job is created on the server.
-    The Server returns a json with the following information about the job status on the server.
-    """
+class ServerJobResponse:
+    # Main fields
     id: str
-    status: SocaityServerJobStatus
-    progress: Optional[float] = 0.0
-    message: Optional[str] = None
-    result: Union[FileResult, Any, None] = None
-
-    created_at: Optional[str] = None
-    queued_at: Optional[str] = None
-    execution_started_at: Optional[str] = None
-    execution_finished_at: Optional[str] = None
+    status: ServerJobStatus
+    message: Optional[str] = None  # message deals as error message if ServerJobStatus.FAILED
+    result: Union[FileResult, Any, None] = None  # result of the job
+    refresh_job_url: Optional[str] = None  # this field is an url where the client can get job status updates
 
     # this field is used to signal the client that the job is a socaity job / he's interacting with a socaity server
     endpoint_protocol: Optional[str] = "socaity"
-    # this field is an url where the client can get job status updates
-    refresh_job_url: Optional[str] = None
+
+    # timestamps socaity
+    created_at: Optional[str] = None  # timestamp when the job was created on the server
+    execution_started_at: Optional[str] = None  # timestamp when worker started execution
+    execution_finished_at: Optional[str] = None  # timestamp when worker finished execution
+
+    # timestamps runpod
+    delayTime: Optional[int] = None  # cold start time + queuetime before a worker picks it up.
+    execution_time: Optional[int] = None
+    retries: Optional[int] = None  # how often runpod tried to get the result of the serverless deployment
+
+    @staticmethod
+    def from_dict(data: dict):
+        # init basic server job response
+        status = ServerJobStatus.from_str(data.get("status", None))
+        sjr = ServerJobResponse(id=data.get('id'), status=status)
+
+        # fill in and reparse fields
+        sjr.message = data.get("message", None)
+        sjr.result = data.get("result", None)
+
+        sjr.endpoint_protocol = data.get("endpoint_protocol", "socaity")
+        sjr.created_at = data.get("created_at", None)
+        sjr.execution_started_at = data.get("execution_started_at", None)
+        sjr.execution_finished_at = data.get("execution_finished_at", None)
+
+        # runpod specifics
+        sjr.refresh_job_url = data.get("refresh_job_url", f'/status/{sjr.id}')
+        runpod_error = data.get("error", None)
+        if runpod_error is not None:
+            sjr.message = runpod_error
+        sjr.delayTime = data.get("delayTime", None)
+        sjr.execution_time = data.get("execution_time", None)
+        sjr.retries = data.get("retries", None)
+
+        return sjr
+
+
 

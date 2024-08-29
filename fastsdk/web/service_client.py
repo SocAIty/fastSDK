@@ -4,14 +4,15 @@ from urllib.parse import urlparse
 import httpx
 
 from fastsdk.definitions.enums import EndpointSpecification
+from fastsdk.settings import API_KEYS
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.web.req.endpoint_request import EndPointRequest
 
 from fastsdk.registry import Registry
 from fastsdk.web.req.request_handler import RequestHandler
+from fastsdk.web.req.cloud_storage.i_cloud_storage import CloudStorage
 from fastsdk.web.req.request_handler_runpod import RequestHandlerRunpod
-from fastsdk.web.req.s3_bucket import S3Bucket
 
 
 class ServiceClient:
@@ -30,31 +31,43 @@ class ServiceClient:
             service_description: str = None,
             model_description: AIModelDescription = None,
             # optional args for s3 upload and co.
-            s3_bucket: S3Bucket = None,
+            cloud_storage: CloudStorage = None,
+            upload_to_cloud_storage_threshold_mb: int = 10,
+            api_keys: dict = None,
             *args,
             **kwargs
     ):
         """
         Initialize the ServiceClient with the required information.
-        :param service_urls: urls to possible hosts of the service api
+        :param service_urls: urls to possible hosts of the service api. Structured as { service_url_nickname: url }
         :param default_service: which of the services to use
         :param service_name: the name of the service. Used to find the service in the registry.
         :param service_description: a description of the service.
         :param model_description: a description of the model used in the service. Used for documentation.
-        :param s3_bucket: if specified, files will be uploaded to s3 bucket.
+        :param cloud_storage: if specified, files will be uploaded to azure / s3 for file transfer instead of sending them as bytes directly.
              Then a file_url is sent to the endpoint instead of the file as bytes.
+             Property can be overwritten with the fast_sdk init of the service.
+        :param upload_to_cloud_storage_threshold_mb:  if the combined file size is greater than this limit, the file is uploaded to the cloud handler.
+        :param api_keys: dictionary structured as {service_url_nickname: api_key} to add api keys to the service.
         """
         # definitions and registry
         self.service_description = service_description
         self.model = model_description
-        self.s3_bucket = s3_bucket
         # create the service urls
         self.service_urls = self._create_service_urls(service_urls)
         self._default_service = default_service
 
+        # add api keys for authorization
+        # If nothing is specified we use the default api keys defined by environment variables
+        if api_keys is None:
+            self.api_keys = { name: val for name, val in API_KEYS.items() if val is not None }
+        self.api_keys = api_keys
+
         # init request handler
         self._request_handler = None
         self.service_url = None
+        self._cloud_handler = cloud_storage
+        self._upload_to_cloud_handler_limit_mb = upload_to_cloud_storage_threshold_mb
         self.set_service(default_service)
 
         # add the service client to the registry. This makes it easier to find them later on.
@@ -78,10 +91,38 @@ class ServiceClient:
             service_name = list(self.service_urls.keys())[0]
 
         self.service_url = self.service_urls[service_name]
+
         # create new request handler if necessary; or use the existing one
         if self._request_handler is None or self._request_handler.service_url != self.service_url:
-            self._request_handler = create_request_handler(service_url=self.service_url, s3_bucket=self.s3_bucket)
+            api_key = self.api_keys.get(service_name, None) if self.api_keys is not None else None
+
+            self._request_handler = create_request_handler(
+                service_url=self.service_url,
+                cloud_storage=self._cloud_handler,
+                upload_to_cloud_storage_threshold_mb=10,
+                api_key=api_key
+            )
         return self
+
+    def add_api_key(self, name: str, key: str):
+        if key is None or name is None or len(key) == 0:
+            return self.api_keys
+
+        if self.api_keys is None:
+            self.api_keys = {name: key}
+        else:
+            self.api_keys[name] = key
+        return self.api_keys
+
+    def set_cloud_storage(self, cloud_storage: CloudStorage, upload_to_cloud_threshold: int = 10):
+        """
+        Set the cloud handler for the service. Used to upload / download files to the cloud handler.
+        :param cloud_storage: the cloud storage to use.
+        """
+        self._cloud_handler = cloud_storage
+        self._upload_to_cloud_handler_limit_mb = upload_to_cloud_threshold
+        # update the request handler
+        self._request_handler.set_cloud_storage(cloud_storage, upload_to_cloud_threshold)
 
     def _create_endpoint_func(
             self,
@@ -236,17 +277,27 @@ class ServiceClient:
         Registry().remove_service(self.service_name)
 
 
-def create_request_handler(service_url: str, s3_bucket: S3Bucket = None) -> RequestHandler:
+def create_request_handler(
+        service_url: str,
+        api_key: dict = None,
+        cloud_storage: CloudStorage = None,
+        upload_to_cloud_storage_threshold_mb: int = 10
+) -> RequestHandler:
     st = determine_service_type(service_url)
     ep_req = {
         EndpointSpecification.FASTTASKAPI: RequestHandler,
         EndpointSpecification.RUNPOD: RequestHandlerRunpod,
         EndpointSpecification.OTHER: RequestHandler
     }
-    if st not in map:
+    if st not in ep_req:
         st = EndpointSpecification.OTHER
 
-    return ep_req[st](service_url=service_url, s3_bucket=s3_bucket)
+    return ep_req[st](
+        service_url=service_url,
+        cloud_handler=cloud_storage,
+        upload_to_cloud_storage_threshold_mb=upload_to_cloud_storage_threshold_mb,
+        api_key=api_key
+    )
 
 
 def determine_service_type(service_url: str) -> EndpointSpecification:

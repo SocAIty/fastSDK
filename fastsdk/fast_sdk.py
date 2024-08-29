@@ -2,6 +2,7 @@ import functools
 
 from fastsdk.jobs.threaded.internal_job import InternalJob
 from fastsdk.utils import get_function_parameters_as_dict
+from fastsdk.web.req.cloud_storage.i_cloud_storage import CloudStorage
 from fastsdk.web.service_client import ServiceClient
 
 
@@ -21,9 +22,18 @@ def fastSDK(
         original_init = cls.__init__
 
         @functools.wraps(cls)
-        def new_init(self, service: str = "localhost", *args, **kwargs):
+        def new_init(
+                self,
+                service: str = "localhost",
+                cloud_storage: CloudStorage = None,
+                upload_to_cloud_threshold: int = 10,
+                api_key:  str = None,
+                *args, **kwargs
+        ):
             self.service_client = service_client
+            self.service_client.add_api_key(name=service, key=api_key)
             self.service_client.set_service(service)
+            self.service_client.set_cloud_storage(cloud_storage, upload_to_cloud_threshold=upload_to_cloud_threshold)
             self.debug_mode = debug_mode
             self.start_jobs_immediately = start_jobs_immediately
             return original_init(self, *args, **kwargs)
