@@ -1,18 +1,19 @@
+import json
 from typing import Union
 import httpx
 
 from fastsdk.web.definitions.socaity_server_response import ServerJobStatus, ServerJobResponse
 
 
-def is_socaity_server_response(json: dict) -> bool:
-    if json is None:
+def is_socaity_server_response(resp_json: dict) -> bool:
+    if resp_json is None or not isinstance(resp_json, dict):
         return False
 
-    if not "endpoint_protocol" in json or json["endpoint_protocol"] != "socaity":
+    if "endpoint_protocol" not in resp_json or resp_json["endpoint_protocol"] != "socaity":
         return False
 
     required_fields = ["id", "status"]
-    return all(field in json for field in required_fields)
+    return all(field in resp_json for field in required_fields)
 
 
 def is_runpod_server_response(json: dict) -> bool:
@@ -43,19 +44,19 @@ def runpod_status_to_socaity_status(status: str) -> ServerJobStatus:
 def parse_response(response: httpx.Response) -> Union[ServerJobResponse, bytes, dict, object]:
     """
     Parses the response of a request.
-    :param response: The response of the request either formatted as json or the raw _content_buffer
+    :param response: The response of the request either formatted as resp_json or the raw _content_buffer
     :return: The parsed response as SocaityServerResponse or the raw _content_buffer.
     """
     if response is None:
         return None
 
-    if "application/json" in response.headers.get("Content-Type"):
+    if hasattr(response, 'headers') and "application/json" in response.headers.get("Content-Type", ""):
         rjson = response.json()
 
         if is_socaity_server_response(rjson):
             return ServerJobResponse.from_dict(rjson)
 
-        # any other json response from the server
+        # any other resp_json response from the server
         if not is_runpod_server_response(rjson):
             return rjson
 
@@ -63,6 +64,14 @@ def parse_response(response: httpx.Response) -> Union[ServerJobResponse, bytes, 
         # if implemented with fast-task-api the output will have socaity like structure
         parsed_result = ServerJobResponse.from_dict(rjson)
         runpod_output = rjson.get("output", None)
+        # if running in serverless mode, the output is a "string" that is formed as resp_json.
+        # or a gzip file with the required information
+        if isinstance(runpod_output, str):
+            try:
+                runpod_output = json.loads(runpod_output)
+            except ValueError as e:
+                pass
+
         if is_socaity_server_response(runpod_output):
             parsed_socaity_result = ServerJobResponse.from_dict(runpod_output)
             parsed_result.update(parsed_socaity_result)
@@ -83,6 +92,8 @@ def has_request_status_code_error(response: httpx.Response) -> Union[str, bool]:
     """
     if response.status_code == 200:
         return False
+    elif response.status_code == 401:
+        return f"Endpoint {response.url} error: Unauthorized. Did you forget to set the API key?"
     elif response.status_code == 404:
         return f"Endpoint {response.url} error: not found."
     elif 404 <= response.status_code < 500:

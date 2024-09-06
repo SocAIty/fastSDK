@@ -10,7 +10,7 @@ aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID", None)
 # here the url needs to be copied.
 
 def test_azure():
-    ch = AzureBlobStorage(sas_url_admin)
+    ch = AzureBlobStorage(azure_container_connection_string)
     fl = ch.upload(file="fries_maker/test_media/test_face_2.jpg")
     print(fl)
 

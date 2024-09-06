@@ -60,7 +60,7 @@ class ServiceClient:
         # add api keys for authorization
         # If nothing is specified we use the default api keys defined by environment variables
         if api_keys is None:
-            self.api_keys = { name: val for name, val in API_KEYS.items() if val is not None }
+            api_keys = { name: val for name, val in API_KEYS.items() if val is not None }
         self.api_keys = api_keys
 
         # init request handler
@@ -94,6 +94,7 @@ class ServiceClient:
 
         # create new request handler if necessary; or use the existing one
         if self._request_handler is None or self._request_handler.service_url != self.service_url:
+            # first check if api key is in our list of global api keys settings.API_KEYS
             api_key = self.api_keys.get(service_name, None) if self.api_keys is not None else None
 
             self._request_handler = create_request_handler(
@@ -102,6 +103,7 @@ class ServiceClient:
                 upload_to_cloud_storage_threshold_mb=10,
                 api_key=api_key
             )
+
         return self
 
     def add_api_key(self, name: str, key: str):
@@ -250,7 +252,7 @@ class ServiceClient:
         Add http: // if not present and remove trailing slash
         """
         url = url if url[-1] != "/" else url[:-1]
-        if not url.startswith("http") or not url.startswith("https"):
+        if not url.startswith("http") and not url.startswith("https"):
             url = f"http://{url}"
         return url
 

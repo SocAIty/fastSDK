@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsdk"
-version = "0.0.2"
+version = "0.0.3"
 description = "Conveniently build an SDK for web apis. Handle file uploads, downloads and streaming. Interact with job services. Natively work with FastTaskAPI."
 requires-python = ">=3.8"
 authors = [
@@ -15,18 +15,18 @@ readme = "README.md"
 dependencies = [
     "tqdm",
     "httpx",
-    "media-toolkit>=0.1.0",
+    "media-toolkit>=0.1.1",
     "singleton_decorator==1.0.0"
 ]
 
 [project.optional-dependencies]
-Azure = [
+azure = [
     "azure-storage-blob"
 ]
 S3 =[
     "boto3"
 ]
-Full = [
+full = [
     "azure-storage-blob",
     "boto3"
 ]

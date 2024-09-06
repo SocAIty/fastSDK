@@ -100,5 +100,16 @@ class ServerJobResponse:
 
         return sjr
 
+    def update(self, dc):
+        """
+        Like dict.__update__ but for the dataclass.
+        :param dc: The dataclass object to update the current object with.
+        """
 
+        if isinstance(dc, ServerJobResponse):
+            dc = dc.__dict__
+
+        for key, value in dc.items():
+            if hasattr(self, key) and value is not None:
+                setattr(self, key, value)
 

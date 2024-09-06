@@ -95,6 +95,13 @@ class InternalJob:
         if self.status == JOB_STATUS.FAILED and throw_error:
             raise self.error
 
+        # reset progress bar
+        desc = f"{self._job_function.__name__} "
+        if self._ongoing_async_request is not None and self._ongoing_async_request.job_id is not None:
+            desc += f"job_id: {self._ongoing_async_request.job_id} status: {self.status} "
+        pbar.n = 100
+        pbar.set_description(desc)
+
         return self.result
 
     def finished(self):
