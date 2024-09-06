@@ -175,6 +175,14 @@ f2f = face2face(service_name="runpod")
 API keys can be set in environment variables, when creating the Service Client or when initializing your SDK.
 In settings.py the default environment variables are set.
 
+# FastSDK :two_hearts: FastTaskAPI
+
+<img src="https://github.com/SocAIty/FastTaskAPI/blob/main/docs/fastsdk_to_fasttaskapi.png?raw=true" width="50%" />
+
+[FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) allows you to easily create and deploy services that can be used with fastSDK.
+They are two beating hearts :two_hearts: beating in harmony for client <--> service interaction.
+Create your service now.
+
 # Contribute
 
 We at socaity want to provide the best tools to bring generative AI to the cloud.
