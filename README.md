@@ -181,3 +181,5 @@ We at socaity want to provide the best tools to bring generative AI to the cloud
 Please report bugs, your ideas and feature requests in the issues section.
 fastSDK is licensed under the MIT license and free-to-use.
 
+## Note: THE PACKAGE IS STILL IN DEVELOPMENT!
+#### LEAVE A STAR TO SUPPORT US. ANY BUG REPORT OR CONTRIBUTION IS HIGHLY APPRECIATED.
