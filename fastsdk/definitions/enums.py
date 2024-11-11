@@ -24,8 +24,7 @@ class ModelTag(Enum):
 class EndpointSpecification(Enum):
     FASTTASKAPI = "fasttaskapi"  # all servers that support socaity protocol with job queues
     RUNPOD = "runpod"  # for example runpod servers
+    REPLICATE = "replicate"
     OPENAPI = "openapi"  # for example fastapi servers
     OTHER = "other"  # other servers
-
-
 

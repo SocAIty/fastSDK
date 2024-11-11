@@ -3,6 +3,7 @@ from typing import Union, Tuple
 from urllib.parse import urlparse
 import httpx
 
+from fastCloud import CloudStorage
 from fastsdk.definitions.enums import EndpointSpecification
 from fastsdk.settings import API_KEYS
 from fastsdk.web.definitions.endpoint import EndPoint
@@ -11,7 +12,6 @@ from fastsdk.web.req.endpoint_request import EndPointRequest
 
 from fastsdk.registry import Registry
 from fastsdk.web.req.request_handler import RequestHandler
-from fastsdk.web.req.cloud_storage.i_cloud_storage import CloudStorage
 from fastsdk.web.req.request_handler_runpod import RequestHandlerRunpod
 
 
@@ -80,6 +80,7 @@ class ServiceClient:
     def set_service(self, service_name: str = None):
         """
         Set the service to send requests to. Instantiates the request handler.
+        Caution: changing service while requests are ongoing might result in unexpected behaviour.
         :param service_name: the url of the service
         """
         if service_name is None and self._default_service in self.service_urls:
@@ -302,13 +303,23 @@ def create_request_handler(
     )
 
 
-def determine_service_type(service_url: str) -> EndpointSpecification:
+def determine_service_type(service_url: str, parse_open_api_definition: bool = True) -> EndpointSpecification:
     """
     Determines the type of service based on the service url.
+    :param service_url: The service type is guessed based on the service url
+    :param parse_open_api_definition:
+        If true and the type can't be determined from the url alone, the openapi.json is parsed to check for fasttaskapi
     """
     # case hosted on runpod
     if "api.runpod.ai" in service_url:
         return EndpointSpecification.RUNPOD
+
+    if "api.replicate.com" in service_url:
+        return EndpointSpecification.REPLICATE
+
+    if not parse_open_api_definition:
+        return EndpointSpecification.OTHER
+
     # try to get openapi.json to determine the service type
     try:
         parsed = urlparse(service_url)

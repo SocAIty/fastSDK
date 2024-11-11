@@ -1,6 +1,6 @@
 import httpx
 
-from fastsdk.web.req.cloud_storage.i_cloud_storage import CloudStorage
+from fastCloud import CloudStorage
 from media_toolkit import media_from_any
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
@@ -155,15 +155,20 @@ class RequestHandler:
 
         # deal with the files
         # determine combined file size
-        file_size = sum([v.file_size('mb') for v in files.values()])
-        if self.cloud_handler is not None and file_size > self.upload_to_cloud_handler_limit_mb:
-            uploaded_files = {
-                k: self.cloud_handler.upload(v.file_name, v.file_content, folder=None)
-                for k, v in files.items()
-            }
-            post_params.update(uploaded_files)
-        else:
-            files = {k: v.to_httpx_send_able_tuple() for k, v in files.items()}
+        if files is not None:
+            file_size = sum([v.file_size('mb') for v in files.values()])
+
+            # TODO: Add check if socaity endpoint.
+            # If it is a socaity endpoint, get the upload key from endpoint and create new cloud handler.
+            # With this workaround, we can make sure, that users upload files directly to the cloud.
+            if self.cloud_handler is not None and file_size > self.upload_to_cloud_handler_limit_mb:
+                uploaded_files = {
+                    k: self.cloud_handler.upload(v.file_name, v.file_content, folder=None)
+                    for k, v in files.items()
+                }
+                post_params.update(uploaded_files)
+            else:
+                files = {k: v.to_httpx_send_able_tuple() for k, v in files.items()}
 
         return self.httpx_client.post(url=url, params=post_params, files=files, headers=headers, timeout=timeout)
 

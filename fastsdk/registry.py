@@ -16,6 +16,9 @@ class Registry:
         self._services = {}
 
     def add_service(self, name: str, obj: ServiceClient):
+        if name is None or not isinstance(name, str):
+            raise ValueError("service_name must be given and be a string.")
+
         self._services[name] = obj
 
     def remove_service(self, name: str):

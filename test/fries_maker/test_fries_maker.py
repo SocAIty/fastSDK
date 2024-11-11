@@ -21,7 +21,6 @@ def test_simple_rpc():
     global count
     count += 1
     easy_job = fries_maker.make_fries(f"super_chilli_fries {count}", count)
-    easy_job.debug_mode = True
     return easy_job
 
 def test_upload_file():

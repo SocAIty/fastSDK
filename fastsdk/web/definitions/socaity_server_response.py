@@ -58,6 +58,7 @@ class ServerJobResponse:
     id: str
     status: ServerJobStatus
     message: Optional[str] = None  # message deals as error message if ServerJobStatus.FAILED
+    progress: Optional[float] = None  # progress of the job
     result: Union[FileResult, Any, None] = None  # result of the job
     refresh_job_url: Optional[str] = None  # this field is an url where the client can get job status updates
 
@@ -82,6 +83,7 @@ class ServerJobResponse:
 
         # fill in and reparse fields
         sjr.message = data.get("message", None)
+        sjr.progress = float(data.get("progress", 0.0))
         sjr.result = data.get("result", None)
 
         sjr.endpoint_protocol = data.get("endpoint_protocol", "socaity")

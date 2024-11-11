@@ -1,15 +1,14 @@
 import functools
 
+from fastCloud import CloudStorage
 from fastsdk.jobs.threaded.internal_job import InternalJob
 from fastsdk.utils import get_function_parameters_as_dict
-from fastsdk.web.req.cloud_storage.i_cloud_storage import CloudStorage
 from fastsdk.web.service_client import ServiceClient
 
 
 def fastSDK(
         service_client: ServiceClient,
-        start_jobs_immediately=True,
-        debug_mode=False
+        start_jobs_immediately=True
 ):
     """
     The FastSDK uses the service client to perform various tasks.
@@ -34,7 +33,6 @@ def fastSDK(
             self.service_client.add_api_key(name=service, key=api_key)
             self.service_client.set_service(service)
             self.service_client.set_cloud_storage(cloud_storage, upload_to_cloud_threshold=upload_to_cloud_threshold)
-            self.debug_mode = debug_mode
             self.start_jobs_immediately = start_jobs_immediately
             return original_init(self, *args, **kwargs)
 
@@ -80,13 +78,10 @@ def fastJob(func):
             request_function=instance.request
         )
         # Set the debug mode and start_jobs_immediately
-        debug_mode = instance.debug_mode
         start_jobs_immediately = instance.start_jobs_immediately
         # check if the first element of func_args is the class instance (self)
         if len(func_args) > 0 and hasattr(func_args[0], "start_jobs_immediately"):
-            debug_mode = func_args[0].debug_mode
             start_jobs_immediately = func_args[0].start_jobs_immediately
-        job.debug_mode = debug_mode
         if start_jobs_immediately:
             job.run()
         return job
