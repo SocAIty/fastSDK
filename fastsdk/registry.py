@@ -21,8 +21,8 @@ class Registry:
 
         self._services[name] = obj
 
-    def remove_service(self, name: str):
-        self._services.pop(name)
+    def remove_service(self, service: ServiceClient):
+        self._services.pop(service.service_name)
 
     def get_services(self) -> Dict[str, ServiceClient]:
         return self._services

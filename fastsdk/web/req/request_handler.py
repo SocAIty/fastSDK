@@ -41,9 +41,12 @@ class RequestHandler:
         self.cloud_handler = cloud_handler
         self.upload_to_cloud_handler_limit_mb = upload_to_cloud_storage_threshold_mb
 
-    def _add_authorization_to_headers(self, headers: dict):
+    def _add_authorization_to_headers(self, headers: dict = None):
+        headers = {} if headers is None else headers
         if self.api_key is not None:
             headers["Authorization"] = "Bearer " + self.api_key
+        if len(headers) == 0:
+            headers = None
         return headers
 
     def request_endpoint_async(self, endpoint: EndPoint, callback: callable = None, *args, **kwargs) -> AsyncJob:
@@ -56,7 +59,6 @@ class RequestHandler:
         :return: The response of the request.
         """
         get_p, post_p, file_p, header_p = self._prepare_endpoint_params_for_request(endpoint, *args, **kwargs)
-        header_p = self._add_authorization_to_headers(header_p)
 
         return self.request_url_async(
             url=f"{self.service_url}/{endpoint.endpoint_route}",
@@ -152,7 +154,6 @@ class RequestHandler:
         :return: The response of the request.
         """
         url = RequestHandler.add_get_params_to_url(url, get_params)
-
         # deal with the files
         # determine combined file size
         if files is not None:
@@ -170,11 +171,9 @@ class RequestHandler:
             else:
                 files = {k: v.to_httpx_send_able_tuple() for k, v in files.items()}
 
+        headers = self._add_authorization_to_headers(headers)
         return self.httpx_client.post(url=url, params=post_params, files=files, headers=headers, timeout=timeout)
 
-        # Todo: Find out why async httpx is so much slower than requests at the moment
-        #async with httpx.AsyncClient() as client:
-        #    return await client.post(url, params=post_params, files=read_files, headers=headers, timeout=timeout)
     def set_cloud_storage(self, cloud_storage: CloudStorage, upload_to_cloud_threshold: int = 10):
         self.cloud_handler = cloud_storage
         self.upload_to_cloud_handler_limit_mb = upload_to_cloud_threshold

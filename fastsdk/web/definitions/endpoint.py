@@ -29,7 +29,7 @@ class EndPoint:
         self.headers = header_params if header_params is not None else {}
 
     def params(self):
-        all_params = { k: v for k,v in self.get_params.items() }
+        all_params = {k: v for k,v in self.get_params.items() }
         all_params.update(self.post_params)
         all_params.update(self.file_params)
         return all_params

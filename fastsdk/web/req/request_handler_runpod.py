@@ -5,6 +5,7 @@ from fastsdk.web.req.request_handler import RequestHandler
 
 
 class RequestHandlerRunpod(RequestHandler):
+
     async def request(
             self,
             url: str = None,

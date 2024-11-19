@@ -25,7 +25,7 @@ class ServiceClient:
             self,
             # required information for execution
             service_urls: Union[dict, str, list],
-            default_service: str = "localhost",
+            active_service: str = "localhost",
             # optional information for documentation and services
             service_name: str = None,
             service_description: str = None,
@@ -40,10 +40,10 @@ class ServiceClient:
         """
         Initialize the ServiceClient with the required information.
         :param service_urls: urls to possible hosts of the service api. Structured as { service_url_nickname: url }
-        :param default_service: which of the services to use
+        :param active_service: which of the services to use
         :param service_name: the name of the service. Used to find the service in the registry.
         :param service_description: a description of the service.
-        :param model_description: a description of the model used in the service. Used for documentation.
+        :param model_description: a description of the model_description used in the service. Used for documentation.
         :param cloud_storage: if specified, files will be uploaded to azure / s3 for file transfer instead of sending them as bytes directly.
              Then a file_url is sent to the endpoint instead of the file as bytes.
              Property can be overwritten with the fast_sdk init of the service.
@@ -52,15 +52,18 @@ class ServiceClient:
         """
         # definitions and registry
         self.service_description = service_description
-        self.model = model_description
+        self.model_description = model_description
         # create the service urls
         self.service_urls = self._create_service_urls(service_urls)
-        self._default_service = default_service
+        self._active_service = active_service
 
         # add api keys for authorization
         # If nothing is specified we use the default api keys defined by environment variables
         if api_keys is None:
             api_keys = { name: val for name, val in API_KEYS.items() if val is not None }
+        if isinstance(api_keys, str):
+            api_keys = { active_service: api_keys }
+
         self.api_keys = api_keys
 
         # init request handler
@@ -68,7 +71,7 @@ class ServiceClient:
         self.service_url = None
         self._cloud_handler = cloud_storage
         self._upload_to_cloud_handler_limit_mb = upload_to_cloud_storage_threshold_mb
-        self.set_service(default_service)
+        self.set_service(active_service)
 
         # add the service client to the registry. This makes it easier to find them later on.
         self.service_name = service_name if service_name is not None else self.service_url
@@ -83,8 +86,8 @@ class ServiceClient:
         Caution: changing service while requests are ongoing might result in unexpected behaviour.
         :param service_name: the url of the service
         """
-        if service_name is None and self._default_service in self.service_urls:
-            service_name = self._default_service
+        if service_name is None and self._active_service in self.service_urls:
+            service_name = self._active_service
 
         if service_name not in self.service_urls:
             print(f"Service {service_name} not found in the service urls {self.service_urls}."
@@ -92,6 +95,7 @@ class ServiceClient:
             service_name = list(self.service_urls.keys())[0]
 
         self.service_url = self.service_urls[service_name]
+        self._active_service = service_name
 
         # create new request handler if necessary; or use the existing one
         if self._request_handler is None or self._request_handler.service_url != self.service_url:
@@ -277,7 +281,7 @@ class ServiceClient:
         """
         Remove the service from the registry when the object is deleted.
         """
-        Registry().remove_service(self.service_name)
+        Registry().remove_service(self)
 
 
 def create_request_handler(

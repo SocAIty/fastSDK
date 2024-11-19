@@ -3,14 +3,15 @@ from typing import Union, Any
 
 from httpx import HTTPStatusError
 
+from fastsdk.web.definitions.server_response.base_response import BaseJobResponse
+from fastsdk.web.definitions.server_response.response_parser import ResponseParser
 from fastsdk.web.req.request_handler import RequestHandler
 from media_toolkit import MediaFile
 from media_toolkit.utils.file_conversion import media_from_file_result
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
 from fastsdk.web.definitions.endpoint import EndPoint
-from fastsdk.web.definitions.socaity_server_response import ServerJobStatus, ServerJobResponse
+from fastsdk.web.definitions.server_job_status import ServerJobStatus
 
-from fastsdk.web.req.server_response_parser import parse_response, has_request_status_code_error
 import time
 
 
@@ -91,7 +92,7 @@ class EndPointRequest:
         if hasattr(self.server_response, "result"):
             result = self.server_response.result
 
-        if isinstance(result, ServerJobResponse):
+        if isinstance(result, BaseJobResponse):
             result = result.result
 
         if isinstance(result, dict) and "file_name" in result and "content" in result:
@@ -106,8 +107,8 @@ class EndPointRequest:
         """
         # Status for non socaity jobs
         if (
-                not isinstance(self.server_response, ServerJobResponse)
-                and not isinstance(self.in_between_server_response, ServerJobResponse)
+                not isinstance(self.server_response, BaseJobResponse)
+                and not isinstance(self.in_between_server_response, BaseJobResponse)
         ):
             if self.first_request_send_at is not None:
                 return 1, 'Request send'
@@ -171,16 +172,17 @@ class EndPointRequest:
             return self
 
         # deal with status errors like Not Found 404 or internal server errors
-        request_status_error = has_request_status_code_error(async_job_result)
-        if request_status_error is not False:
+        rp = ResponseParser()
+        request_status_error = rp.check_response_status(async_job_result)
+        if request_status_error is not None:
             self.error = request_status_error
             return self
 
-        # Parse the server_response and convert it to SocaityServerResponse if is that response type.
-        server_response = parse_response(async_job_result)
+        # Parse the server_response and maybe convert it to BaseJobResponse.
+        server_response = rp.parse_response(async_job_result)
 
         # if not is a socaity job / runpod job, we can return the server_response
-        if not isinstance(server_response, ServerJobResponse):
+        if not isinstance(server_response, BaseJobResponse):
             self.server_response = server_response
             return self
 
@@ -198,10 +200,11 @@ class EndPointRequest:
 
         # In this case it was a refresh call
         self.in_between_server_response = server_response
+
         # if not finished, we need to refresh the job
         # by calling this recursively we can refresh the job until it's finished
-
         refresh_url = self._request_handler.service_url + server_response.refresh_job_url
+
         self._ongoing_async_request = self._request_handler.request_url_async(
             refresh_url,
             callback=self._response_callback,
@@ -252,7 +255,8 @@ class EndPointRequest:
         if retry:
             # TODO: implement retry logic for other endpoint types than socaity
             # for socaity
-            if self.in_between_server_response is not None and isinstance(self.in_between_server_response, ServerJobResponse):
+            if (self.in_between_server_response is not None
+                    and isinstance(self.in_between_server_response, BaseJobResponse)):
                 self._current_retry_counter += 1
                 if self._current_retry_counter < self._retries_on_error:
                     # use previous job server_response to retry
