@@ -5,13 +5,13 @@ import httpx
 
 from fastCloud import CloudStorage
 from fastsdk.definitions.enums import EndpointSpecification
-from fastsdk.settings import API_KEYS
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.web.req.endpoint_request import EndPointRequest
 
 from fastsdk.registry import Registry
 from fastsdk.web.req.request_handler import RequestHandler
+from fastsdk.web.req.request_handler_replicate import RequestHandlerReplicate
 from fastsdk.web.req.request_handler_runpod import RequestHandlerRunpod
 
 
@@ -25,7 +25,7 @@ class ServiceClient:
             self,
             # required information for execution
             service_urls: Union[dict, str, list],
-            active_service: str = "localhost",
+            active_service: str = None,
             # optional information for documentation and services
             service_name: str = None,
             service_description: str = None,
@@ -55,11 +55,16 @@ class ServiceClient:
         self.model_description = model_description
         # create the service urls
         self.service_urls = self._create_service_urls(service_urls)
+
+        if active_service is None:
+            active_service = list(self.service_urls.keys())[0]
+
         self._active_service = active_service
 
         # add api keys for authorization
         # If nothing is specified we use the default api keys defined by environment variables
         if api_keys is None:
+            from fastsdk.settings import API_KEYS
             api_keys = { name: val for name, val in API_KEYS.items() if val is not None }
         if isinstance(api_keys, str):
             api_keys = { active_service: api_keys }
@@ -91,7 +96,7 @@ class ServiceClient:
 
         if service_name not in self.service_urls:
             print(f"Service {service_name} not found in the service urls {self.service_urls}."
-                  f"Using {list(self.service_urls.keys())[0]} instead.")
+                  f"Using {list(self.service_urls.keys())[0]} instead. Specify active_service on init.")
             service_name = list(self.service_urls.keys())[0]
 
         self.service_url = self.service_urls[service_name]
@@ -294,6 +299,7 @@ def create_request_handler(
     ep_req = {
         EndpointSpecification.FASTTASKAPI: RequestHandler,
         EndpointSpecification.RUNPOD: RequestHandlerRunpod,
+        EndpointSpecification.REPLICATE: RequestHandlerReplicate,
         EndpointSpecification.OTHER: RequestHandler
     }
     if st not in ep_req:

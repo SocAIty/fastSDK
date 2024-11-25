@@ -1,90 +1,19 @@
-from typing import Optional, Any, Union, Dict
-from abc import ABC, abstractmethod
+from typing import Optional, Union
 import json
 import httpx
 
-from fastsdk.web.definitions.server_job_status import ServerJobStatus
-from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, SocaityJobResponse, RunpodJobResponse
 
-
-class ResponseParserStrategy(ABC):
-    @abstractmethod
-    def can_parse(self, data: Dict) -> bool:
-        pass
-
-    @abstractmethod
-    def parse(self, data: Dict) -> BaseJobResponse:
-        pass
-
-
-class SocaityResponseParser(ResponseParserStrategy):
-    def can_parse(self, data: Dict) -> bool:
-        if not isinstance(data, dict):
-            return False
-        return (data.get("endpoint_protocol") == "socaity" and
-                "id" in data and "status" in data)
-
-    def parse(self, data: Dict) -> SocaityJobResponse:
-        status = ServerJobStatus.from_str(data.get("status"))
-
-        progress = data.get("progress", None)
-        progress = float(progress) if progress is not None else 0.0
-
-        return SocaityJobResponse(
-            id=data["id"],
-            status=status,
-            message=data.get("message"),
-            progress=progress,
-            result=data.get("result"),
-            refresh_job_url=data.get("refresh_job_url", f'/status/{data["id"]}'),
-            cancel_job_url=data.get("cancel_job_url", f'/cancel/{data["id"]}'),
-            created_at=data.get("created_at"),
-            execution_started_at=data.get("execution_started_at"),
-            execution_finished_at=data.get("execution_finished_at")
-        )
-
-
-class RunpodResponseParser(ResponseParserStrategy):
-    STATUS_MAP = {
-        "IN_QUEUE": ServerJobStatus.QUEUED,
-        "IN_PROGRESS": ServerJobStatus.PROCESSING,
-        "COMPLETED": ServerJobStatus.FINISHED,
-        "FAILED": ServerJobStatus.FAILED,
-        "CANCELLED": ServerJobStatus.CANCELLED,
-        "TIMED_OUT": ServerJobStatus.TIMEOUT
-    }
-
-    def can_parse(self, data: Dict) -> bool:
-        if not isinstance(data, dict):
-            return False
-        return ("id" in data and "status" in data and
-                data.get("status") in self.STATUS_MAP.keys())
-
-    def parse(self, data: Dict) -> RunpodJobResponse:
-        status = self.STATUS_MAP.get(data.get("status", "").upper(), ServerJobStatus.QUEUED)
-
-        progress = data.get("progress", None)
-        progress = float(progress) if progress is not None else 0.0
-
-        return RunpodJobResponse(
-            id=data["id"],
-            status=status,
-            message=data.get("error"),  # Runpod uses 'error' instead of 'message'
-            progress=progress,
-            result=data.get("output"),
-            refresh_job_url=data.get("refresh_job_url", f'/status/{data["id"]}'),
-            cancel_job_url=data.get("cancel_job_url", f'/cancel/{data["id"]}'),
-            delayTime=data.get("delayTime"),
-            execution_time=data.get("execution_time"),
-            retries=data.get("retries")
-        )
+from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, RunpodJobResponse
+from fastsdk.web.definitions.server_response.response_parser_strategies import SocaityResponseParser, \
+    RunpodResponseParser, ReplicateResponseParser
 
 
 class ResponseParser:
     def __init__(self):
         self.strategies = [
             SocaityResponseParser(),
-            RunpodResponseParser()
+            RunpodResponseParser(),
+            ReplicateResponseParser()
         ]
 
     def parse_response(self, response: httpx.Response) -> Union[BaseJobResponse, bytes, None]:
@@ -128,6 +57,7 @@ class ResponseParser:
 
         error_messages = {
             401: f"Endpoint {response.url} error: Unauthorized. Did you forget to set the API key?",
+            403: f"Endpoint {response.url} error: Unauthorized. Did you forget to set the API key?",
             404: f"Endpoint {response.url} error: not found.",
         }
 

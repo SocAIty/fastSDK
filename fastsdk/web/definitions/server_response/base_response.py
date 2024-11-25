@@ -47,5 +47,19 @@ class SocaityJobResponse(BaseJobResponse):
 @dataclass
 class RunpodJobResponse(BaseJobResponse):
     delayTime: Optional[int] = None
-    execution_time: Optional[int] = None
+    executionTime: Optional[int] = None
     retries: Optional[int] = None
+    workerId: Optional[str] = None
+    endpoint_protocol: str = None  # If was implemented with fast-task-api this is returned too
+
+
+@dataclass
+class ReplicateJobResponse(BaseJobResponse):
+    created_at: Optional[str] = None
+    execution_started_at: Optional[str] = None
+    execution_finished_at: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
+    stream_job_url: Optional[str] = None
+    version: Optional[str] = None
+    data_removed: Optional[bool] = None
+    logs: Optional[str] = None

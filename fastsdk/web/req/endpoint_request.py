@@ -146,7 +146,8 @@ class EndPointRequest:
     @property
     def job_id(self) -> Union[str, None]:
         """
-        Returns the job id of the server if it is a socaity job. Otherwise None.
+        Returns: the job id of the server if it is a socaity job, or runpod job id
+        Otherwise None.
         """
         if self.server_response is not None and hasattr(self.server_response, "id"):
             return self.server_response.id
@@ -203,7 +204,9 @@ class EndPointRequest:
 
         # if not finished, we need to refresh the job
         # by calling this recursively we can refresh the job until it's finished
-        refresh_url = self._request_handler.service_url + server_response.refresh_job_url
+        refresh_url = server_response.refresh_job_url
+        if "http" not in server_response.refresh_job_url:
+            refresh_url = self._request_handler.service_url + server_response.refresh_job_url
 
         self._ongoing_async_request = self._request_handler.request_url_async(
             refresh_url,
