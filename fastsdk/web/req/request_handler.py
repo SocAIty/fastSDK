@@ -1,4 +1,5 @@
 import httpx
+from pydantic import BaseModel
 
 from fastCloud import CloudStorage
 from media_toolkit import media_from_any
@@ -98,26 +99,55 @@ class RequestHandler:
         return async_job
 
     @staticmethod
-    def _prepare_endpoint_params_for_request(endpoint: EndPoint, *args, **kwargs):
-        # make dict from args and kwargs
-        # get named args of endpoint and fill with args
-        _named_args = {k: v for k, v in zip(endpoint.params(), args)}
-        # update with kwargs
+    def _parse_request_params(pams, *args, **kwargs) -> dict:
+        if isinstance(pams, BaseModel):
+            base_model_class = type(pams)
+            # match *args with model_fields
+            _named_args = {k: v for k, v in zip(base_model_class.model_fields.keys(), args)}
+            _named_args.update(kwargs)
+            # validate the model with the given args and kwargs
+            get_params = base_model_class.model_validate(_named_args)
+            # return as dict
+            return get_params.dict(exclude_unset=True)
+
+        _named_args = {k: v for k, v in zip(pams, args)}
+        # update with kwargs (fill values)
         _named_args.update(kwargs)
+        # filter out the parameters that are not in the endpoint definition
+        return {k: v for k, v in _named_args.items() if k in pams}
 
-        # sort the parameters by paramater typ
-        get_params = {k: v for k, v in _named_args.items() if k in endpoint.get_params}
-        post_params = {k: v for k, v in _named_args.items() if k in endpoint.post_params}
-        file_params = {k: v for k, v in _named_args.items() if k in endpoint.file_params}
-        header_params = {k: v for k, v in _named_args.items() if k in endpoint.headers}
-
-        # convert files to send able format
+    @staticmethod
+    def _prepare_endpoint_params_for_request(endpoint: EndPoint, *args, **kwargs):
+        get_params = RequestHandler._parse_request_params(endpoint.get_params, *args, **kwargs)
+        post_params = RequestHandler._parse_request_params(endpoint.post_params, *args, **kwargs)
+        file_params = RequestHandler._parse_request_params(endpoint.file_params, *args, **kwargs)
+        header_params = RequestHandler._parse_request_params(endpoint.headers, *args, **kwargs)
+        ## convert files to send able format
         file_params = {
             k: media_from_any(v, endpoint.file_params.get(k, None))
             for k, v in file_params.items()
         }
-
         return get_params, post_params, file_params, header_params
+
+        ## make dict from args and kwargs
+        ## get named args of endpoint and fill with args
+        #_named_args = {k: v for k, v in zip(endpoint.params(), args)}
+        ## update with kwargs (fill values)
+        #_named_args.update(kwargs)
+#
+        ## sort the parameters by parameter type (and insert only the ones that are in the endpoint) definition
+        #get_params = {k: v for k, v in _named_args.items() if k in endpoint.get_params}
+        #post_params = {k: v for k, v in _named_args.items() if k in endpoint.post_params}
+        #file_params = {k: v for k, v in _named_args.items() if k in endpoint.file_params}
+        #header_params = {k: v for k, v in _named_args.items() if k in endpoint.headers}
+#
+        ## convert files to send able format
+        #file_params = {
+        #    k: media_from_any(v, endpoint.file_params.get(k, None))
+        #    for k, v in file_params.items()
+        #}
+#
+        #return get_params, post_params, file_params, header_params
 
     @staticmethod
     def add_get_params_to_url(url: str, get_params: dict):
@@ -159,7 +189,6 @@ class RequestHandler:
         if files is not None:
             file_size = sum([v.file_size('mb') for v in files.values()])
 
-            # TODO: Add check if socaity endpoint.
             # If it is a socaity endpoint, get the upload key from endpoint and create new cloud handler.
             # With this workaround, we can make sure, that users upload files directly to the cloud.
             if self.cloud_handler is not None and file_size > self.upload_to_cloud_handler_limit_mb:

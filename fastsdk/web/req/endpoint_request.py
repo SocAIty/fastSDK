@@ -246,7 +246,13 @@ class EndPointRequest:
             self.first_response_received_at = async_job.future_result_received_at
             # If there was an error on the first request stop
             if async_job.error:
-                self.error = f"Error on first request to {self._endpoint.endpoint_route}: {async_job.error}"
+                if "Errno 11001" in async_job.error:
+                    self.error = (f"Error on first request to {self._endpoint.endpoint_route}: "
+                                  f"Failed to resolve the server address '{self._request_handler.service_url}'. "
+                                  f"Host not resolvable. Check internet connection and service url. "
+                                  f"Details: {async_job.error}")
+                else:
+                    self.error = f"Error on first request to {self._endpoint.endpoint_route}: {async_job.error}"
                 return self
 
         # normal refresh

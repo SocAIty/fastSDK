@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Union, Optional, Any, Dict
 
 from fastsdk.web.definitions.server_job_status import ServerJobStatus
@@ -63,3 +64,23 @@ class ReplicateJobResponse(BaseJobResponse):
     version: Optional[str] = None
     data_removed: Optional[bool] = None
     logs: Optional[str] = None
+
+    def _replicate_time_to_datetime(self, time_str: str) -> datetime:
+        if "Z" in time_str:
+            # Remove the trailing 'Z' and truncate nanoseconds to microseconds
+            time_str = time_str.rstrip("Z")[:26]
+            # Parse the datetime string and add UTC timezone info
+        return datetime.fromisoformat(time_str).replace(tzinfo=timezone.utc)
+
+    @property
+    def execution_time_ms(self) -> Union[int, None]:
+        if self.execution_started_at is None or self.execution_finished_at is None:
+            return None
+
+        try:
+            start = self._replicate_time_to_datetime(self.execution_started_at)
+            end = self._replicate_time_to_datetime(self.execution_finished_at)
+            diff = end - start
+            return diff.microseconds // 1000
+        except ValueError:
+            return None

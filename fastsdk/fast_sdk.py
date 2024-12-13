@@ -1,4 +1,6 @@
 import functools
+import inspect
+from typing import ParamSpec, TypeVar, Callable, get_type_hints
 
 from fastCloud import CloudStorage
 from fastsdk.jobs.threaded.internal_job import InternalJob
@@ -30,9 +32,9 @@ def fastSDK(
                 *args, **kwargs
         ):
             self.service_client = service_client
-            self.service_client.add_api_key(name=service, key=api_key)
-            self.service_client.set_service(service)
-            self.service_client.set_cloud_storage(cloud_storage, upload_to_cloud_threshold=upload_to_cloud_threshold)
+            self.service_client.add_api_key(service_name=service, key=api_key)
+            self.service_client.active_service = service
+            self.service_client.set_cloud_storage(cloud_storage, upload_to_cloud_threshold_mb=upload_to_cloud_threshold)
             self.start_jobs_immediately = start_jobs_immediately
             return original_init(self, *args, **kwargs)
 
@@ -85,6 +87,24 @@ def fastJob(func):
         if start_jobs_immediately:
             job.run()
         return job
+
+    # This is a not working approach to provide type hinting in IDEs by just writing one method.
+    # get the function names of the func and exclude "job" parameters
+    # attach a copy partial func to the class with a signature without the job parameter to be used anywhere else.
+    # Create a copy of the original function's signature without the job parameter
+    # original_sig = inspect.signature(func)
+    # new_params = [
+    #     param for name, param in original_sig.parameters.items()
+    #     if name != "job" and "InternalJob" not in str(param.annotation)
+    # ]
+    # # Dynamically create a new signature
+    # new_sig = original_sig.replace(parameters=new_params)
+    # # Use inspect.Signature to modify the wrapper's signature
+    # wrapper.__signature__ = new_sig
+    # wrapper.__annotations__ = get_type_hints(func)
+    # return wrapper
+
     return wrapper
+
 
 

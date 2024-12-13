@@ -1,7 +1,9 @@
 import inspect
+import threading
 from typing import Union, Tuple
 from urllib.parse import urlparse
 import httpx
+from pydantic import BaseModel
 
 from fastCloud import CloudStorage
 from fastsdk.definitions.enums import EndpointSpecification
@@ -41,7 +43,7 @@ class ServiceClient:
         Initialize the ServiceClient with the required information.
         :param service_urls: urls to possible hosts of the service api. Structured as { service_url_nickname: url }
         :param active_service: which of the services to use
-        :param service_name: the name of the service. Used to find the service in the registry.
+        :param service_name: the service_name of the service. Used to find the service in the registry.
         :param service_description: a description of the service.
         :param model_description: a description of the model_description used in the service. Used for documentation.
         :param cloud_storage: if specified, files will be uploaded to azure / s3 for file transfer instead of sending them as bytes directly.
@@ -50,91 +52,124 @@ class ServiceClient:
         :param upload_to_cloud_storage_threshold_mb:  if the combined file size is greater than this limit, the file is uploaded to the cloud handler.
         :param api_keys: dictionary structured as {service_url_nickname: api_key} to add api keys to the service.
         """
-        # definitions and registry
-        self.service_description = service_description
-        self.model_description = model_description
         # create the service urls
         self.service_urls = self._create_service_urls(service_urls)
 
-        if active_service is None:
-            active_service = list(self.service_urls.keys())[0]
+        # Default active service
+        self._default_service = active_service or next(iter(self.service_urls))
 
-        self._active_service = active_service
+        # service metadata
+        self.service_name = service_name if service_name is not None else self.service_urls.get(self._default_service)
+        self.service_description = service_description
+        self.model_description = model_description
+
+        # endpoint function holders
+        self.endpoint_request_funcs = {}  # { endpoint_name: function, endpoint_name_async: function }
+        self.endpoints = {}  # { endpoint_name: endpoint }
 
         # add api keys for authorization
         # If nothing is specified we use the default api keys defined by environment variables
         if api_keys is None:
             from fastsdk.settings import API_KEYS
-            api_keys = { name: val for name, val in API_KEYS.items() if val is not None }
-        if isinstance(api_keys, str):
+            api_keys = { name: val for name, val in API_KEYS.items() if val is not None } # copy the dict
+        elif isinstance(api_keys, str):
             api_keys = { active_service: api_keys }
 
-        self.api_keys = api_keys
+        self.api_keys = api_keys or {}
 
-        # init request handler
-        self._request_handler = None
-        self.service_url = None
-        self._cloud_handler = cloud_storage
-        self._upload_to_cloud_handler_limit_mb = upload_to_cloud_storage_threshold_mb
-        self.set_service(active_service)
+        # request handlers are shared between active services.
+        # They get lazy initialized when a request is made to a not yet initialized service.
+        self.request_handlers = {}
+        self.upload_to_cloud_storage_threshold_mb = upload_to_cloud_storage_threshold_mb
+        self.cloud_storage = cloud_storage
+
+        # init request handlers and their configurations
+        # We use a thread-local storage for the request handlers to avoid conflicts between threads.
+        # Store service configurations
+        # Note that each value in the thread local only exists in the specific thread.
+        # Initialize thread-local storage
+        self._thread_local = threading.local()
+        self._thread_local.current_service = self._default_service
 
         # add the service client to the registry. This makes it easier to find them later on.
-        self.service_name = service_name if service_name is not None else self.service_url
-        Registry().add_service(service_name, self)
+        # Is also used in other packages.
+        Registry().add_service(self.service_name, self)
 
-        self.endpoint_request_funcs = {}  # { endpoint_name: function, endpoint_name_async: function }
-        self.endpoints = {}  # { endpoint_name: endpoint }
-
-    def set_service(self, service_name: str = None):
+    @property
+    def active_service(self) -> str:
         """
-        Set the service to send requests to. Instantiates the request handler.
-        Caution: changing service while requests are ongoing might result in unexpected behaviour.
-        :param service_name: the url of the service
+        Get the active service for the current thread.
+        :return: Active service name
         """
-        if service_name is None and self._active_service in self.service_urls:
-            service_name = self._active_service
+        if not hasattr(self._thread_local, 'current_service'):
+            self.active_service = self._default_service
 
+        return self._thread_local.current_service
+
+    @active_service.setter
+    def active_service(self, service_name: str):
+        """
+        Set the active service for the upcoming requests in the current thread context.
+
+        :param service_name: Name of the service to switch to
+        :raises ValueError: If the service service_name is not found in service configurations
+        """
         if service_name not in self.service_urls:
-            print(f"Service {service_name} not found in the service urls {self.service_urls}."
-                  f"Using {list(self.service_urls.keys())[0]} instead. Specify active_service on init.")
-            service_name = list(self.service_urls.keys())[0]
+            raise ValueError(f"Service {service_name} not found in service URLs")
 
-        self.service_url = self.service_urls[service_name]
-        self._active_service = service_name
+        # Set the current service for this thread
+        self._thread_local.current_service = service_name
 
-        # create new request handler if necessary; or use the existing one
-        if self._request_handler is None or self._request_handler.service_url != self.service_url:
-            # first check if api key is in our list of global api keys settings.API_KEYS
-            api_key = self.api_keys.get(service_name, None) if self.api_keys is not None else None
+    def _get_current_request_handler(self) -> RequestHandler:
+        """
+        Get or create a request handler for the current thread's active service.
 
-            self._request_handler = create_request_handler(
-                service_url=self.service_url,
-                cloud_storage=self._cloud_handler,
-                upload_to_cloud_storage_threshold_mb=10,
-                api_key=api_key
+        :return: RequestHandler for the current service
+        """
+        current_service = self.active_service
+        # Lazy initialize request handler
+        if current_service not in self.request_handlers:
+            # Create request handler
+            self.request_handlers[current_service] = create_request_handler(
+                service_url=self.service_urls.get(current_service),
+                api_key=self.api_keys.get(current_service),
+                cloud_storage=self.cloud_storage,
+                upload_to_cloud_storage_threshold_mb=self.upload_to_cloud_storage_threshold_mb
             )
 
-        return self
+        return self.request_handlers[current_service]
 
-    def add_api_key(self, name: str, key: str):
-        if key is None or name is None or len(key) == 0:
+    def add_api_key(self, service_name: str, key: str):
+        """
+        Add or update an API key for a service.
+
+        :param service_name: Service service_name or nickname
+        :param key: API key to add
+        :return: Updated API keys dictionary
+        """
+        if not service_name or not key:
             return self.api_keys
 
-        if self.api_keys is None:
-            self.api_keys = {name: key}
-        else:
-            self.api_keys[name] = key
+        self.api_keys[service_name] = key
+
         return self.api_keys
 
-    def set_cloud_storage(self, cloud_storage: CloudStorage, upload_to_cloud_threshold: int = 10):
+    def set_cloud_storage(self, cloud_storage: CloudStorage, upload_to_cloud_threshold_mb: int = 10):
         """
-        Set the cloud handler for the service. Used to upload / download files to the cloud handler.
-        :param cloud_storage: the cloud storage to use.
+        Set or update the cloud storage handler for all request_handlers.
+
+        :param cloud_storage: Cloud storage handler to use
+        :param upload_to_cloud_threshold_mb: Threshold for cloud upload in MB
+        :return: Self, for method chaining
         """
-        self._cloud_handler = cloud_storage
-        self._upload_to_cloud_handler_limit_mb = upload_to_cloud_threshold
-        # update the request handler
-        self._request_handler.set_cloud_storage(cloud_storage, upload_to_cloud_threshold)
+        # Set thread-local cloud storage
+        self.cloud_storage = cloud_storage
+        self.upload_to_cloud_storage_threshold_mb = upload_to_cloud_threshold_mb
+
+        for service_name, handler in self.request_handlers.items():
+            handler.set_cloud_storage(cloud_storage, upload_to_cloud_threshold_mb)
+
+        return self
 
     def _create_endpoint_func(
             self,
@@ -159,9 +194,12 @@ class ServiceClient:
             :param kwargs:
             :return:
             """
+            # Get the current service's request handler
+            request_handler = self._get_current_request_handler()
+
             endpoint_request = EndPointRequest(
                 endpoint=endpoint,
-                request_handler=self._request_handler,
+                request_handler=request_handler,
                 retries_on_error=retries_on_error
             )
             endpoint_request.request(*args, **kwargs)
@@ -171,7 +209,7 @@ class ServiceClient:
             return endpoint_request
 
         # create method parameters
-        ep_args = endpoint.params()
+        ep_args = endpoint.request_params_as_dict()
         func_name = f"{endpoint.endpoint_route}" if not is_async else f"{endpoint.endpoint_route}_async"
         endpoint_job_wrapper.__name__ = func_name
         sig_params = [
@@ -183,21 +221,6 @@ class ServiceClient:
         self.endpoint_request_funcs[func_name] = endpoint_job_wrapper
 
         return endpoint_job_wrapper
-        # Create a partial function with default values as None
-        #func_name = f"{endpoint.endpoint_route}" if not is_async else f"{endpoint.endpoint_route}_async"
-        #partial_func = functools.partial(endpoint_job_wrapper, **{name: t for name, t in ep_args.items()})
-        ## Set the function name
-        #partial_func.__name__ = func_name
-        #sig_params = [inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=ptype) for name, ptype
-        #              in ep_args.items()]
-        #partial_func.__signature__ = inspect.Signature(parameters=sig_params)
-#
-        ## add method to class
-        #bound_method = types.MethodType(partial_func, self)
-        #self.__setattr__(partial_func.__name__, bound_method)
-        #self.endpoint_request_funcs[partial_func.__name__] = partial_func
-
-        #return partial_func
 
     def _add_endpoint(self, endpoint: EndPoint) -> Tuple[callable, callable]:
         """
@@ -219,8 +242,8 @@ class ServiceClient:
     def add_endpoint(
             self,
             endpoint_route: str,
-            get_params: dict = None,
-            post_params: dict = None,
+            get_params: Union[dict, BaseModel] = None,
+            post_params: Union[dict, BaseModel] = None,
             file_params: dict = None,
             timeout: int = 3600,
             refresh_interval: float = 0.5
@@ -253,7 +276,7 @@ class ServiceClient:
             service_urls = {str(i): url for i, url in enumerate(service_urls)}
 
         # fix problems with "handwritten" urls
-        service_urls = {k: ServiceClient._url_sanitize(url) for k, url in service_urls.items()}
+        service_urls = {k.lower(): ServiceClient._url_sanitize(url) for k, url in service_urls.items()}
         return service_urls
 
     @staticmethod
@@ -268,18 +291,22 @@ class ServiceClient:
 
     def __call__(self, endpoint_route: str, call_async: bool = False, *args, **kwargs) -> EndPointRequest:
         """
-        Call a function synchronously by name.
-        :param endpoint_route: the name of the function
-        :param args: the arguments to pass to the function
-        :param kwargs: the keyword arguments to pass to the function
-        :return: the server_response of the function
+        Call an endpoint using the current thread's active service context.
+
+        :param endpoint_route: The endpoint route to call
+        :param call_async: Whether to call the endpoint asynchronously
+        :param args: Positional arguments for the endpoint
+        :param kwargs: Keyword arguments for the endpoint
+        :return: EndPointRequest object
         """
+        # Get the endpoint
         if call_async:
             endpoint_route = f"{endpoint_route}_async" if not endpoint_route.endswith("_async") else endpoint_route
 
         if endpoint_route not in self.endpoint_request_funcs:
             raise ValueError(f"Function {endpoint_route} not found in the service.")
 
+        # Call the endpoint function
         return self.endpoint_request_funcs[endpoint_route](*args, **kwargs)
 
     def __del__(self):

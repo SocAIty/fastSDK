@@ -22,7 +22,7 @@ class Registry:
         self._services[name] = obj
 
     def remove_service(self, service: ServiceClient):
-        self._services.pop(service.service_name)
+        self._services.pop(service._default_service)
 
     def get_services(self) -> Dict[str, ServiceClient]:
         return self._services

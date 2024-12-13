@@ -163,3 +163,4 @@ cython_debug/
 
 # other
 test/test_cloud_handler.py
+test/test_files/text2img
