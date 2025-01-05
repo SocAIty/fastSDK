@@ -1,7 +1,10 @@
+from typing import Union
+
 import httpx
 from pydantic import BaseModel
 
 from fastCloud import CloudStorage
+from fastsdk.web.definitions.service_adress import ServiceAddress, create_service_address
 from media_toolkit import media_from_any
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
@@ -17,7 +20,7 @@ class RequestHandler:
     """
     def __init__(
             self,
-            service_url: str,
+            service_address: Union[str, ServiceAddress],
             async_job_manager: AsyncJobManager = None,
             api_key: str = None,
             cloud_handler: CloudStorage = None,
@@ -25,7 +28,7 @@ class RequestHandler:
             *args, **kwargs
     ):
         """
-        :param service_url: The url of the service.
+        :param service_address: The service_address or URL of the service.
         :param async_job_manager: The async_jobs job manager to use.
         :param cloud_handler:
             If given: files are uploaded to the cloud provider (azure, sr) and the file url is sent to the endpoint
@@ -33,9 +36,14 @@ class RequestHandler:
         :param upload_to_cloud_storage_threshold_mb:
             If the combined file size is greater than this limit, the file is uploaded to the cloud handler.
         """
-        self.service_url = service_url
+        if not isinstance(service_address, ServiceAddress):
+            service_address = create_service_address(service_address)
+
+        self.service_address = service_address
+        self.service_url = self.service_address.url
+
         self.api_key = api_key
-        # self.service_spec = determine_service_type(self.service_url)
+        # self.service_spec = determine_service_type(self.service_address)
         # add the async_jobs job manager or create a new one
         self.async_job_manager = async_job_manager if async_job_manager is not None else AsyncJobManager()
         self.httpx_client = httpx.Client()
@@ -62,7 +70,7 @@ class RequestHandler:
         get_p, post_p, file_p, header_p = self._prepare_endpoint_params_for_request(endpoint, *args, **kwargs)
 
         return self.request_url_async(
-            url=f"{self.service_url}/{endpoint.endpoint_route}",
+            url=f"{self.service_address.url}/{endpoint.endpoint_route}",
             get_params=get_p,
             post_params=post_p,
             files=file_p,
@@ -105,7 +113,7 @@ class RequestHandler:
             # match *args with model_fields
             _named_args = {k: v for k, v in zip(base_model_class.model_fields.keys(), args)}
             _named_args.update(kwargs)
-            # validate the model with the given args and kwargs
+            # validate the model_hosting_info with the given args and kwargs
             get_params = base_model_class.model_validate(_named_args)
             # return as dict
             return get_params.dict(exclude_unset=True)
