@@ -1,68 +1,70 @@
 import json
+from typing import Union
+
+from fastCloud import FastCloud, ReplicateUploadAPI
+from fastsdk.jobs.async_jobs.async_job_manager import AsyncJobManager
+from fastsdk.web.definitions.endpoint import EndPoint
+from fastsdk.web.definitions.service_adress import ServiceAddress
 from fastsdk.web.req.request_handler import RequestHandler
 
 
 class RequestHandlerReplicate(RequestHandler):
-    async def request(
-            self,
-            url: str = None,
-            get_params: dict = None,
-            post_params: dict = None,
-            headers: dict = None,
-            files: dict = None,
-            timeout: float = None
-    ):
-        """
-          Makes a request to the given url.
-          :param get_params: The parameters to be sent in the GET request.
-          :param post_params: The parameters to be sent in the POST request.
-          :param url: The url of the request.
-          :param headers: The header_params of the request.
-          :param files: The files to be sent in the request.
-          :param timeout: The timeout of the request.
-          :return: The response of the request.
-          """
-        # make dicts if they are None avoids assignment errors like headers[axyfd]
-        get_params = {} if get_params is None else get_params
-        post_params = {} if post_params is None else post_params
-        headers = {} if headers is None else headers
-        headers = self._add_authorization_to_headers(headers)
+    """
+    Works with Replicate API. https://replicate.com/docs/topics/predictions/create-a-prediction
+    """
+    def __init__(self,
+                 service_address: Union[str, ServiceAddress],
+                 async_job_manager: AsyncJobManager = None,
+                 api_key: str = None,
+                 fast_cloud: Union[ReplicateUploadAPI, FastCloud] = None,
+                 upload_to_cloud_threshold_mb: int = 10,
+                 *args, **kwargs
+                 ):
+        super().__init__(
+            service_address=service_address,
+            async_job_manager=async_job_manager,
+            fast_cloud=fast_cloud,
+            upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb,
+            api_key=api_key,
+            *args, **kwargs
+        )
+        # replicate expects the files to be in base64 format in the input post parameter.
+        # setting the value changes the behavior of the _upload_files method
+        self._attached_files_format = 'base64'
 
-        # it is a refresh call so just send it
-        if "https://api.replicate.com/v1/predictions" in url:
-            # replicate strictly wants get here
-            return self.httpx_client.get(url=url, headers=headers, timeout=timeout)
+    def _prepare_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
+        # Overwrites the default implementation, because /endpoint_route is not attached.
+        # (replicate always just has 1 endpoint)
+        url = self._add_query_params_to_url(self.service_address.url, query_parameters=query_params)
+        return url
 
-        # add endpoint route: fast-task-api takes the route as "path" parameter
-        # Reparse method e.g. myservice/swap_img to myservice/run + post_params
-        # if socaity endpoint, the method name will come as "path" parameter within the post_params
-        # if method name not in url, then path is just ignored
-        replicate_url = "https://api.replicate.com/v1/models/"
-        if replicate_url in url:
-            latter_part = url[len(replicate_url):]
-            s = latter_part.split("/")
-            publisher, model_name = s[0], s[1]
-            url = f"{replicate_url}{publisher}/{model_name}/predictions"
+    async def _request_endpoint(self, endpoint: EndPoint, timeout: float = None, *args, **kwargs):
+        # Prepare the request
+        url, query_params, body_params, file_p, headers = await self._prepare_request(endpoint,  *args, **kwargs)
 
-        # every other param goes into the post_params
-        if get_params is not None:
-            post_params.update(get_params)
+        # Strategy:
+        # Official models '/models/' -> Normal post request
+        # Deployment '/deployments/' -> Normal post request
+        # Community models '/predictions'/ -> Add version parameter and is get request
+        # Refresh call '/predictions?job_id=' -> Get request
 
-        # deal with the files
-        if files is not None:
-            file_size = sum([v.file_size('mb') for v in files.values()])
-            if self.cloud_handler is not None and file_size > self.upload_to_cloud_handler_limit_mb:
-                uploaded_files = {
-                    k: self.cloud_handler.upload(v.file_name, v.file_content, folder=None)
-                    for k, v in files.items()
-                }
-                post_params.update(uploaded_files)
-            else:
-                files = {k: v.to_base64() for k, v in files.items()}
-                post_params.update(files)
+        # Refresh call send directly. Refresh calls strictly require get requests.
+        #if "/predictions/" in url:
+        #    return await self.httpx_client.get(url=url, headers=headers, timeout=timeout)
 
-        data = json.dumps({"input": post_params})
-        return self.httpx_client.post(url=url, data=data, headers=headers, timeout=timeout)
+        # replicate wants file params attached to body as base64
+        if file_p:
+            body_params.update(file_p)
 
+        # replicate formats the body as json with {"input": body_params, "version?": model_version}
+        body_params = {"input": body_params}
+        # Add version parameter for community models to get params to make predictions
+        version = getattr(self.service_address, "version", None)
+        if "/predictions" in url and version:
+            body_params['version'] = version
+
+        # replicate requires the data to be a json input parameter
+        data = json.dumps(body_params)
+        return await self.httpx_client.post(url=url, data=data, headers=headers, timeout=timeout)
 
 

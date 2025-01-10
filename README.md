@@ -65,6 +65,7 @@ To build your SDK for a web API follow these steps:
 2. Use the ```@fastSDK``` and ```@fastJob``` decorators around the service client to create your SDK.
 
 Create the service client - the object that sends the requests to the server.
+
 ```python
 from fastsdk import ServiceClient, ImageFile
 
@@ -73,8 +74,8 @@ srvc_face2face = ServiceClient(service_url="localhost:8020/api")
 # on a request the module will try to cast the parameters to the specified types
 srvc_face2face.add_endpoint(
     endpoint_route="add_face",
-    post_params={"face_name": str},
-    file_params={"img": ImageFile} 
+    body_params={"face_name": str},
+    file_params={"img": ImageFile}
 )
 ```
 Based on the service we create the SDK by using the smart decorators ```@fastSDK``` and ```@fastJob```.
@@ -132,7 +133,7 @@ from fastsdk import create_cloud_storage, ServiceClient
 
 cs = create_cloud_storage(azure_sas_access_token=AZURE_SAS_ACCESS_TOKEN,
                           azure_connection_string=AZURE_SAS_CONNECTION_STRING)
-srvc_face2face = ServiceClient(cloud_storage=cs, upload_to_cloud_storage_threshold_mb=10)
+srvc_face2face = ServiceClient(fast_cloud=cs, upload_to_cloud_threshold_mb=10)
 ```
 In this case every file > 10mb will be uploaded to the cloud storage provider. 
 Then instead of the file, the file_url will be send to the service.

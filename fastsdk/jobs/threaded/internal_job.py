@@ -1,4 +1,5 @@
 import inspect
+import itertools
 import time
 import traceback
 from datetime import datetime
@@ -62,42 +63,58 @@ class InternalJob:
 
     def get_result(self, print_progress: bool = True, throw_error: bool = True):
         """
-        Waits until the job is finished and returns the result of underlying threaded function.
+        Waits until the job is finished and returns the result of the underlying threaded function.
         :param print_progress: If true, the progress is printed.
         :param throw_error: If true, the error is raised if the job failed.
         """
 
+        spinning_wheel = itertools.cycle(['◐', '◐', '◓', '◓', '◑', '◑', '◒', '◒'])
+        progress = None
         if print_progress:
-            desc = f"{self._job_function.__name__}, progress: "
-            pbar = tqdm(total=100, desc=desc)
+            pbar = tqdm(total=100, bar_format="{desc}")
+            desc = f"{self._job_function.__name__}, status: initializing, {next(spinning_wheel)}"
+            pbar.set_description(desc)
 
+        job_id = None
         while not self.finished():
+            job_id = (
+                self._ongoing_async_request.job_id
+                if self._ongoing_async_request and self._ongoing_async_request.job_id
+                else None
+            )
             if print_progress:
-                desc = f"{self._job_function.__name__} "
-                if self._ongoing_async_request is not None and self._ongoing_async_request.job_id is not None:
-                    desc += f"job_id: {self._ongoing_async_request.job_id} "
-
-                percent, message = self.progress
-                if percent is not None and type(percent) in [int, float]:
-                    pbar.n = percent*100
-
-                if message is not None and isinstance(message, str):
-                    desc += message + " "
-
-                desc += "progress"
+                if job_id is None:
+                    desc = f"{self._job_function.__name__}, status: preparing request, {next(spinning_wheel)}"
+                else:
+                    progress, message = self.progress
+                    if progress > 0:
+                        desc = (
+                            f"{self._job_function.__name__}, job_id: {job_id}, "
+                            f"status []: {self.status.name}, progress: {progress:.0%},  {next(spinning_wheel)}"
+                        )
+                    else:
+                        desc = (
+                            f"{self._job_function.__name__}, job_id: {job_id}, "
+                            f"status: {self.status.name}, {next(spinning_wheel)}"
+                        )
                 pbar.set_description(desc)
+                time.sleep(0.1)
 
-            time.sleep(0.1)
+        if print_progress:
+            progress, message = self.progress
+            if self.status is JOB_STATUS.FINISHED and job_id:
+                final_desc = (
+                    f"{self._job_function.__name__}, job_id: {job_id}, "
+                    f"status: {self.status.name}, progress: {progress:.0%}"
+                )
+            else:
+                final_desc = f"{self._job_function.__name__}, status: {self.status.name}"
+
+            pbar.set_description(final_desc)
+            pbar.close()
 
         if self.status == JOB_STATUS.FAILED and throw_error:
             raise self.error
-
-        # reset progress bar
-        desc = f"{self._job_function.__name__} "
-        if self._ongoing_async_request is not None and self._ongoing_async_request.job_id is not None:
-            desc += f"job_id: {self._ongoing_async_request.job_id} status: {self.status} "
-        pbar.n = 100
-        pbar.set_description(desc)
 
         return self.result
 
@@ -139,6 +156,11 @@ class InternalJob:
 
     @property
     def progress(self) -> tuple[float, str]:
+        """
+        Returns the job's progress and status message.
+        """
+        if self._ongoing_async_request:
+            return self._ongoing_async_request.progress
         return self.job_progress.get_progress()
 
     def set_progress(self, progress: float, message: str = None):

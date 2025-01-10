@@ -9,19 +9,8 @@ class ModelDomainTag(Enum):
     OTHER = "other"
 
 
-class ModelTag(Enum):
-    TEXT2VOICE = "text2voice"
-    TEXT2SOUND = "text2sound"
-    TEXT2IMG = "text2img"
-    TEXT2VIDEO = "text2video"
-    VOICE2VOICE = "voice2voice"
-    AUDIO2FACE = "audio2face"
-    IMAGE2IMAGE = "image2image"
-    FACE2FACE = "face2face"
-    OTHER = "other"
-
-
 class EndpointSpecification(Enum):
+    SOCAITY = "socaity"  # all socaity.ai endpoints that support socaity protocol
     FASTTASKAPI = "fasttaskapi"  # all servers that support socaity protocol with job queues
     RUNPOD = "runpod"  # for example runpod servers
     REPLICATE = "replicate"

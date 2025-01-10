@@ -28,6 +28,8 @@ class SocaityResponseParser(ResponseParserStrategy):
 
         progress = data.get("progress", None)
         progress = float(progress) if progress is not None else 0.0
+        if status == ServerJobStatus.FINISHED:
+            progress = 1.0
 
         return SocaityJobResponse(
             id=data["id"],
@@ -65,6 +67,8 @@ class RunpodResponseParser(ResponseParserStrategy):
 
         progress = data.get("progress", None)
         progress = float(progress) if progress is not None else 0.0
+        if status == ServerJobStatus.FINISHED:
+            progress = 1.0
 
         return RunpodJobResponse(
             id=data["id"],
@@ -85,6 +89,7 @@ class RunpodResponseParser(ResponseParserStrategy):
 class ReplicateResponseParser(ResponseParserStrategy):
     STATUS_MAP = {
         "starting": ServerJobStatus.QUEUED,
+        "booting": ServerJobStatus.PROCESSING,
         "processing": ServerJobStatus.PROCESSING,
         "succeeded": ServerJobStatus.FINISHED,
         "failed": ServerJobStatus.FAILED,
@@ -101,14 +106,25 @@ class ReplicateResponseParser(ResponseParserStrategy):
 
     def parse(self, data: Dict) -> ReplicateJobResponse:
         _id = data.get("id")
-        status = self.STATUS_MAP.get(data.get("status", "").lower(), ServerJobStatus.QUEUED)
+
+        status = data.get("status", None)
+        if not status:
+            if data.get("status_code", 200) and not data.get("is_error", True):
+                status = "succeeded"
+
+        status = self.STATUS_MAP.get(status, ServerJobStatus.QUEUED)
+
+        progress = data.get("progress", None)
+        progress = float(progress) if progress is not None else 0.0
+        if status == ServerJobStatus.FINISHED:
+            progress = 1.0
 
         urls = data.get("urls", {})
         return ReplicateJobResponse(
             id=_id,
             status=status,
             message=data.get("error"),  # Replicate uses 'error' instead of 'message'
-            progress=0.0,
+            progress=progress,
             result=data.get("output"),
             refresh_job_url=urls.get("get", f"v1/predictions/{_id}"),
             cancel_job_url=urls.get("cancel", f"v1/predictions/{_id}/cancel"),

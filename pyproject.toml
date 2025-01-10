@@ -16,7 +16,9 @@ dependencies = [
     "tqdm",
     "httpx",
     "media-toolkit>=0.1.1",
-    "singleton_decorator==1.0.0"
+    "singleton_decorator==1.0.0",
+    "pydantic>=2.10.4"
+    "fastcloud>=0.0.0"
 ]
 
 [project.optional-dependencies]

@@ -5,10 +5,12 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel
 
-from fastCloud import CloudStorage
+from fastCloud import FastCloud, ReplicateUploadAPI, SocaityUploadAPI
 from fastsdk.definitions.enums import EndpointSpecification
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.definitions.ai_model import AIModelDescription
+from fastsdk.web.definitions.service_adress import (ServiceAddress, SocaityServiceAddress, ReplicateServiceAddress,
+                                                    RunpodServiceAddress, create_service_address)
 from fastsdk.web.req.endpoint_request import EndPointRequest
 
 from fastsdk.registry import Registry
@@ -26,15 +28,15 @@ class ServiceClient:
     def __init__(
             self,
             # required information for execution
-            service_urls: Union[dict, str, list],
+            service_urls: Union[dict, str, list, ServiceAddress],
             active_service: str = None,
             # optional information for documentation and services
             service_name: str = None,
             service_description: str = None,
             model_description: AIModelDescription = None,
             # optional args for s3 upload and co.
-            cloud_storage: CloudStorage = None,
-            upload_to_cloud_storage_threshold_mb: int = 10,
+            fast_cloud: FastCloud = None,
+            upload_to_cloud_threshold_mb: int = 10,
             api_keys: dict = None,
             *args,
             **kwargs
@@ -46,10 +48,11 @@ class ServiceClient:
         :param service_name: the service_name of the service. Used to find the service in the registry.
         :param service_description: a description of the service.
         :param model_description: a description of the model_description used in the service. Used for documentation.
-        :param cloud_storage: if specified, files will be uploaded to azure / s3 for file transfer instead of sending them as bytes directly.
+        :param fast_cloud: if specified, files will be uploaded via fastcloud for file transfer.
              Then a file_url is sent to the endpoint instead of the file as bytes.
              Property can be overwritten with the fast_sdk init of the service.
-        :param upload_to_cloud_storage_threshold_mb:  if the combined file size is greater than this limit, the file is uploaded to the cloud handler.
+        :param upload_to_cloud_threshold_mb:
+            if the combined file size is greater than this limit, the file is uploaded to the cloud handler.
         :param api_keys: dictionary structured as {service_url_nickname: api_key} to add api keys to the service.
         """
         # create the service urls
@@ -80,8 +83,10 @@ class ServiceClient:
         # request handlers are shared between active services.
         # They get lazy initialized when a request is made to a not yet initialized service.
         self.request_handlers = {}
-        self.upload_to_cloud_storage_threshold_mb = upload_to_cloud_storage_threshold_mb
-        self.cloud_storage = cloud_storage
+        if upload_to_cloud_threshold_mb is None:
+            upload_to_cloud_threshold_mb = 10
+        self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
+        self.fast_cloud = fast_cloud
 
         # init request handlers and their configurations
         # We use a thread-local storage for the request handlers to avoid conflicts between threads.
@@ -131,10 +136,10 @@ class ServiceClient:
         if current_service not in self.request_handlers:
             # Create request handler
             self.request_handlers[current_service] = create_request_handler(
-                service_url=self.service_urls.get(current_service),
+                service_address=self.service_urls.get(current_service),
                 api_key=self.api_keys.get(current_service),
-                cloud_storage=self.cloud_storage,
-                upload_to_cloud_storage_threshold_mb=self.upload_to_cloud_storage_threshold_mb
+                fast_cloud=self.fast_cloud,
+                upload_to_cloud_threshold_mb=self.upload_to_cloud_threshold_mb
             )
 
         return self.request_handlers[current_service]
@@ -142,32 +147,44 @@ class ServiceClient:
     def add_api_key(self, service_name: str, key: str):
         """
         Add or update an API key for a service.
-
+        If a request handler for the service exists, it will be recreated to use the new API key.
         :param service_name: Service service_name or nickname
         :param key: API key to add
         :return: Updated API keys dictionary
         """
-        if not service_name or not key:
+        if not key:
             return self.api_keys
+
+        if not service_name:
+            service_name = self.active_service
 
         self.api_keys[service_name] = key
 
+        if service_name in self.request_handlers:
+            # force creating a new one. Note: If there's references to it, it won't be deleted.
+            # chose this implementation instead of del to avoid requests going into empty.
+            # However, this might lead to memory leaks.
+            self.request_handlers[service_name] = None
+
         return self.api_keys
 
-    def set_cloud_storage(self, cloud_storage: CloudStorage, upload_to_cloud_threshold_mb: int = 10):
+    def set_fast_cloud(self, fast_cloud: FastCloud, upload_to_cloud_threshold_mb: int = 10):
         """
         Set or update the cloud storage handler for all request_handlers.
 
-        :param cloud_storage: Cloud storage handler to use
+        :param fast_cloud: Cloud storage handler to use
         :param upload_to_cloud_threshold_mb: Threshold for cloud upload in MB
         :return: Self, for method chaining
         """
         # Set thread-local cloud storage
-        self.cloud_storage = cloud_storage
-        self.upload_to_cloud_storage_threshold_mb = upload_to_cloud_threshold_mb
+        self.fast_cloud = fast_cloud
+
+        if upload_to_cloud_threshold_mb is None:
+            upload_to_cloud_threshold_mb = 10
+        self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
 
         for service_name, handler in self.request_handlers.items():
-            handler.set_cloud_storage(cloud_storage, upload_to_cloud_threshold_mb)
+            handler.set_fast_cloud(fast_cloud, upload_to_cloud_threshold_mb)
 
         return self
 
@@ -209,7 +226,7 @@ class ServiceClient:
             return endpoint_request
 
         # create method parameters
-        ep_args = endpoint.request_params_as_dict()
+        ep_args = endpoint.get_parameter_definition_as_dict()
         func_name = f"{endpoint.endpoint_route}" if not is_async else f"{endpoint.endpoint_route}_async"
         endpoint_job_wrapper.__name__ = func_name
         sig_params = [
@@ -242,16 +259,16 @@ class ServiceClient:
     def add_endpoint(
             self,
             endpoint_route: str,
-            get_params: Union[dict, BaseModel] = None,
-            post_params: Union[dict, BaseModel] = None,
+            query_params: Union[dict, BaseModel] = None,
+            body_params: Union[dict, BaseModel] = None,
             file_params: dict = None,
             timeout: int = 3600,
             refresh_interval: float = 0.5
     ):
         ep = EndPoint(
             endpoint_route=endpoint_route,
-            get_params=get_params,
-            post_params=post_params,
+            query_params=query_params,
+            body_params=body_params,
             file_params=file_params,
             timeout=timeout,
             refresh_interval=refresh_interval
@@ -271,23 +288,15 @@ class ServiceClient:
     def _create_service_urls(service_urls: Union[dict, str, list]):
         # set service urls and fix them if necessary
         if isinstance(service_urls, str):
-            service_urls = {"0": service_urls}
+            service_urls = {"0": create_service_address(service_urls)}
         elif isinstance(service_urls, list):
-            service_urls = {str(i): url for i, url in enumerate(service_urls)}
+            service_urls = {str(i): create_service_address(url) for i, url in enumerate(service_urls)}
+        elif isinstance(service_urls, ServiceAddress):
+            service_urls = {"0": service_urls}
 
         # fix problems with "handwritten" urls
-        service_urls = {k.lower(): ServiceClient._url_sanitize(url) for k, url in service_urls.items()}
+        service_urls = { k: create_service_address(addr) for k, addr in service_urls.items() }
         return service_urls
-
-    @staticmethod
-    def _url_sanitize(url: str):
-        """
-        Add http: // if not present and remove trailing slash
-        """
-        url = url if url[-1] != "/" else url[:-1]
-        if not url.startswith("http") and not url.startswith("https"):
-            url = f"http://{url}"
-        return url
 
     def __call__(self, endpoint_route: str, call_async: bool = False, *args, **kwargs) -> EndPointRequest:
         """
@@ -301,6 +310,7 @@ class ServiceClient:
         """
         # Get the endpoint
         if call_async:
+            endpoint_route = endpoint_route.strip("/")
             endpoint_route = f"{endpoint_route}_async" if not endpoint_route.endswith("_async") else endpoint_route
 
         if endpoint_route not in self.endpoint_request_funcs:
@@ -317,46 +327,67 @@ class ServiceClient:
 
 
 def create_request_handler(
-        service_url: str,
-        api_key: dict = None,
-        cloud_storage: CloudStorage = None,
-        upload_to_cloud_storage_threshold_mb: int = 10
+        service_address: [str, ServiceAddress, SocaityServiceAddress, RunpodServiceAddress, ReplicateServiceAddress],
+        api_key: str = None,
+        fast_cloud: FastCloud = None,
+        upload_to_cloud_threshold_mb: int = 10
 ) -> RequestHandler:
-    st = determine_service_type(service_url)
-    ep_req = {
-        EndpointSpecification.FASTTASKAPI: RequestHandler,
-        EndpointSpecification.RUNPOD: RequestHandlerRunpod,
-        EndpointSpecification.REPLICATE: RequestHandlerReplicate,
-        EndpointSpecification.OTHER: RequestHandler
-    }
-    if st not in ep_req:
-        st = EndpointSpecification.OTHER
+    """
+    Create a request handler based on the service address.
+    :param service_address: The address of the service
+    :param api_key: The API key for the service
+    :param fast_cloud: The cloud handler to use for file uploads.
+        If not specified, the cloud handler is created based on the service type (if api-key is given).
+    :param upload_to_cloud_threshold_mb: Threshold for cloud upload in MB
+    """
 
-    return ep_req[st](
-        service_url=service_url,
-        cloud_handler=cloud_storage,
-        upload_to_cloud_storage_threshold_mb=upload_to_cloud_storage_threshold_mb,
+    _rqh = RequestHandler
+
+    if isinstance(service_address, str):
+        service_address = create_service_address(service_address)
+
+    if isinstance(service_address, ReplicateServiceAddress):
+        _rqh = RequestHandlerReplicate
+        if fast_cloud is None and api_key is not None:
+            fast_cloud = ReplicateUploadAPI(api_key=api_key)
+    elif isinstance(service_address, RunpodServiceAddress):
+        _rqh = RequestHandlerRunpod
+    elif isinstance(service_address, SocaityServiceAddress):
+        _rqh = RequestHandler
+        if fast_cloud is None and api_key is not None:
+            fast_cloud = SocaityUploadAPI(api_key=api_key)
+    else:
+        st = determine_service_type_from_api_spec(service_address.url)
+        ep_req = {
+            EndpointSpecification.SOCAITY: RequestHandler,
+            EndpointSpecification.FASTTASKAPI: RequestHandler,
+            EndpointSpecification.RUNPOD: RequestHandlerRunpod,
+            EndpointSpecification.REPLICATE: RequestHandlerReplicate,
+            EndpointSpecification.OTHER: RequestHandler
+        }
+        if st not in ep_req:
+            st = EndpointSpecification.OTHER
+
+        if st == EndpointSpecification.RUNPOD:  # needed in localhost deploy
+            service_address = RunpodServiceAddress(service_address.url)
+
+        _rqh = ep_req[st]
+
+    return _rqh(
+        service_address=service_address,
+        fast_cloud=fast_cloud,
+        upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb,
         api_key=api_key
     )
 
 
-def determine_service_type(service_url: str, parse_open_api_definition: bool = True) -> EndpointSpecification:
+def determine_service_type_from_api_spec(service_url: str) -> EndpointSpecification:
     """
     Determines the type of service based on the service url.
     :param service_url: The service type is guessed based on the service url
     :param parse_open_api_definition:
         If true and the type can't be determined from the url alone, the openapi.json is parsed to check for fasttaskapi
     """
-    # case hosted on runpod
-    if "api.runpod.ai" in service_url:
-        return EndpointSpecification.RUNPOD
-
-    if "api.replicate.com" in service_url:
-        return EndpointSpecification.REPLICATE
-
-    if not parse_open_api_definition:
-        return EndpointSpecification.OTHER
-
     # try to get openapi.json to determine the service type
     try:
         parsed = urlparse(service_url)

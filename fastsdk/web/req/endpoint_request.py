@@ -3,7 +3,7 @@ from typing import Union, Any
 
 from httpx import HTTPStatusError
 
-from fastsdk.web.definitions.server_response.base_response import BaseJobResponse
+from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, SocaityJobResponse, RunpodJobResponse
 from fastsdk.web.definitions.server_response.response_parser import ResponseParser
 from fastsdk.web.req.request_handler import RequestHandler
 from media_toolkit import MediaFile
@@ -43,7 +43,7 @@ class EndPointRequest:
         self._ongoing_async_request = None
 
         # public attributes to get the server_response
-        self.server_response = None
+        self.server_response: Union[BaseJobResponse, None] = None
         self.error = None
         self.in_between_server_response = None
 
@@ -69,7 +69,7 @@ class EndPointRequest:
         That submits a coroutine which server_response is retrieved with a callback self._response_callback.
             - In the callback it is checked for errors, response types and if the request is refreshed.
         """
-        self._ongoing_async_request = self._request_handler.request_endpoint_async(
+        self._ongoing_async_request = self._request_handler.request_endpoint(
             self._endpoint,
             self._response_callback,
             *args,
@@ -103,30 +103,17 @@ class EndPointRequest:
     @property
     def progress(self) -> (float, str):
         """
-        Returns the progress of the job.
+        Returns the progress of the job along with a message.
         """
-        # Status for non socaity jobs
-        if (
-                not isinstance(self.server_response, BaseJobResponse)
-                and not isinstance(self.in_between_server_response, BaseJobResponse)
-        ):
-            if self.first_request_send_at is not None:
-                return 1, 'Request send'
-            elif self.first_response_received_at is not None:
-                return 100, 'First response received'
-            else:
-                return 0, "Starting job. Waiting for endpoint."
-
-        # Status for socaity jobs
-        if self.server_response is not None and hasattr(self.server_response, "progress"):
+        if self.server_response and hasattr(self.server_response, "progress"):
             return self.server_response.progress, self.server_response.message
 
-        if self.in_between_server_response is not None and hasattr(self.in_between_server_response, "progress"):
+        if self.in_between_server_response and hasattr(self.in_between_server_response, "progress"):
             return self.in_between_server_response.progress, self.in_between_server_response.message
 
-        if self.first_request_send_at is not None:
-            return 1, 'Request send'
-        return 0, "Starting job. Waiting for endpoint."
+        if self.first_request_send_at:
+            return 0, "Request sent"
+        return 0, "Preparing request"
 
     def is_finished(self):
         """
@@ -198,18 +185,24 @@ class EndPointRequest:
                 self.error = "Job failed without error message."
 
             return self
+        elif server_response.status == ServerJobStatus.CANCELLED:
+            self.error = "Job was cancelled."
+            self.server_response = server_response
+            return self
+
 
         # In this case it was a refresh call
         self.in_between_server_response = server_response
 
         # if not finished, we need to refresh the job
         # by calling this recursively we can refresh the job until it's finished
-        refresh_url = server_response.refresh_job_url
-        if "http" not in server_response.refresh_job_url:
-            refresh_url = self._request_handler.service_url + server_response.refresh_job_url
+        method = 'GET'
+        if isinstance(server_response, RunpodJobResponse) or isinstance(server_response, SocaityJobResponse):
+            method = 'POST'
 
-        self._ongoing_async_request = self._request_handler.request_url_async(
-            refresh_url,
+        self._ongoing_async_request = self._request_handler.request_url(
+            server_response.refresh_job_url,
+            method=method,
             callback=self._response_callback,
             delay=self._refresh_interval
         )
@@ -246,10 +239,10 @@ class EndPointRequest:
             self.first_response_received_at = async_job.future_result_received_at
             # If there was an error on the first request stop
             if async_job.error:
-                if "Errno 11001" in async_job.error:
+                if "Errno 11001" in str(async_job.error):
                     self.error = (f"Error on first request to {self._endpoint.endpoint_route}: "
-                                  f"Failed to resolve the server address '{self._request_handler.service_url}'. "
-                                  f"Host not resolvable. Check internet connection and service url. "
+                                  f"Failed to resolve the server address '{self._request_handler.service_address.url}'."
+                                  f" Host not resolvable. Check internet connection and service url. "
                                   f"Details: {async_job.error}")
                 else:
                     self.error = f"Error on first request to {self._endpoint.endpoint_route}: {async_job.error}"
