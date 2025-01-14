@@ -19,7 +19,8 @@ class RequestHandler:
             async_job_manager: AsyncJobManager = None,
             api_key: str = None,
             fast_cloud: FastCloud = None,
-            upload_to_cloud_threshold_mb: int = 10,
+            upload_to_cloud_threshold_mb: int = 5,
+            max_upload_file_size_mb: int = 1000,
             *args, **kwargs
     ):
         """
@@ -31,6 +32,7 @@ class RequestHandler:
             If None: send files as bytes or base64 to the endpoint.
         :param upload_to_cloud_threshold_mb:
             If the combined file size is greater than this limit, the file is uploaded to the cloud handler.
+        :param max_upload_file_size_mb: an upper limit for the upload. If > this limit the job will return immediately.
         """
         if not isinstance(service_address, ServiceAddress):
             service_address = create_service_address(service_address)
@@ -45,6 +47,7 @@ class RequestHandler:
 
         self.fast_cloud = fast_cloud
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
+        self.max_upload_file_size_mb = max_upload_file_size_mb
         self._attached_files_format = 'httpx'
         self._attach_files_to = 'body'
 
@@ -170,6 +173,8 @@ class RequestHandler:
         # Case 1: Attach directly if size is below limit
         if file_size < self.upload_to_cloud_threshold_mb:
             return self._upload_attach_files_to_request_params(body_params, files)
+        elif self.max_upload_file_size_mb is not None and file_size > self.max_upload_file_size_mb:
+            raise Exception(f"The file you have provided exceed the max upload limit of {self.max_upload_file_size_mb}mb")
         else:
             # upload async
             if isinstance(self.fast_cloud, BaseUploadAPI):
