@@ -180,6 +180,7 @@ class InternalJob:
         # run job
         self.started_at = datetime.utcnow()
         self.status = JOB_STATUS.PROCESSING
+
         try:
             self._add_job_progress_to_kwargs()  # add to job to jub_function if is in signature
             self.result = self._job_function(**self._job_params)

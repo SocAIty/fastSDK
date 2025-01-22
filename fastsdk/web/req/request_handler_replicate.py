@@ -17,20 +17,22 @@ class RequestHandlerReplicate(RequestHandler):
                  async_job_manager: AsyncJobManager = None,
                  api_key: str = None,
                  fast_cloud: Union[ReplicateUploadAPI, FastCloud] = None,
-                 upload_to_cloud_threshold_mb: int = 10,
+                 upload_to_cloud_threshold_mb: float = 10,
                  *args, **kwargs
                  ):
+
         super().__init__(
             service_address=service_address,
             async_job_manager=async_job_manager,
             fast_cloud=fast_cloud,
-            upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb,
+            upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb if upload_to_cloud_threshold_mb else 10,
             api_key=api_key,
             *args, **kwargs
         )
         # replicate expects the files to be in base64 format in the input post parameter.
         # setting the value changes the behavior of the _upload_files method
         self._attached_files_format = 'base64'
+        self._attach_files_to = 'body'
 
     def _prepare_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
         # Overwrites the default implementation, because /endpoint_route is not attached.
@@ -52,7 +54,7 @@ class RequestHandlerReplicate(RequestHandler):
         #if "/predictions/" in url:
         #    return await self.httpx_client.get(url=url, headers=headers, timeout=timeout)
 
-        # replicate wants file params attached to body as base64
+        # replicate wants file params attached to body as base64 or url
         if file_p:
             body_params.update(file_p)
 

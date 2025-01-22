@@ -24,9 +24,10 @@ def fastSDK(
         def new_init(
                 self,
                 service: str = None,
-                fast_cloud: FastCloud = None,
-                upload_to_cloud_threshold: int = None,
                 api_key:  str = None,
+                fast_cloud: FastCloud = None,
+                upload_to_cloud_threshold_mb: float = None,
+                max_upload_file_size_mb: float = 1000,
                 *args, **kwargs
         ):
             self.service_client = service_client
@@ -37,7 +38,9 @@ def fastSDK(
                 self.service_client.active_service = service
 
             if fast_cloud is not None:
-                self.service_client.set_fast_cloud(fast_cloud, upload_to_cloud_threshold_mb=upload_to_cloud_threshold)
+                self.service_client.set_fast_cloud(fast_cloud=fast_cloud,
+                                                   upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb,
+                                                   max_upload_file_size_mb=max_upload_file_size_mb)
             self.start_jobs_immediately = start_jobs_immediately
 
             return original_init(self, *args, **kwargs)

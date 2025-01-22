@@ -24,6 +24,9 @@ class ServiceAddress:
             url = f"http://{url}"
         return url
 
+    def __str__(self):
+        return self.url
+
 
 class RunpodServiceAddress(ServiceAddress):
     def __init__(self, address: str):

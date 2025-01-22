@@ -1,3 +1,4 @@
+import json
 from typing import Union, Tuple
 
 import httpx
@@ -19,8 +20,8 @@ class RequestHandler:
             async_job_manager: AsyncJobManager = None,
             api_key: str = None,
             fast_cloud: FastCloud = None,
-            upload_to_cloud_threshold_mb: int = 5,
-            max_upload_file_size_mb: int = 1000,
+            upload_to_cloud_threshold_mb: float = 1,
+            max_upload_file_size_mb: float = 1000,
             *args, **kwargs
     ):
         """
@@ -48,12 +49,16 @@ class RequestHandler:
         self.fast_cloud = fast_cloud
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
         self.max_upload_file_size_mb = max_upload_file_size_mb
-        self._attached_files_format = 'httpx'
-        self._attach_files_to = 'body'
 
-    def set_cloud_storage(self, cloud_storage: FastCloud, upload_to_cloud_threshold: int = 10):
-        self.fast_cloud = cloud_storage
-        self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold
+        self._attached_files_format = 'httpx'
+        self._attach_files_to = None
+
+    def set_fast_cloud(self, fast_cloud: FastCloud,
+                       upload_to_cloud_threshold_mb: float = None,
+                       max_upload_file_size_mb: float = None):
+        self.fast_cloud = fast_cloud
+        self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
+        self.max_upload_file_size_mb = max_upload_file_size_mb
 
     @staticmethod
     def _format_params(p_def: Union[BaseModel, dict], *args, **kwargs) -> dict:
@@ -130,27 +135,11 @@ class RequestHandler:
             return {k: v.to_base64() for k, v in files.items()}
         return files
 
-    def _upload_attach_files_to_request_params(self, body_params: dict, files: dict) -> Tuple[dict, dict]:
-        """
-        Attaches the files to the request parameters.
-        Files get attached to body if self._attach_files_to == 'body'. Else they are attached as files.
-
-        :param body_params: The body parameters of the request
-        :param files: The files to attach.
-        :return: The body_params, files
-        """
-        files = self._convert_files_to_attachable_format(files)
-        if self._attach_files_to == 'body':
-            body_params.update(files)
-            files = {}
-
-        return body_params, files
-
-    async def _upload_files(self, body_params: dict, files: dict) -> Tuple:
+    async def _upload_files(self, files: dict) -> Union[dict, None]:
         """
         Uploads the files based on different upload strategies:
         (1) If the cloud handler is not set:
-            - If self._attach_files_to == 'body' the files are attached to the body_params.
+            - files are either converted to base64 or httpx based on the _attached_files_format setting.
             - else the files are attached as files in httpx.
         (2) If the cloud handler is set:
             - If the combined file size is below the limit, the files are attached using method (1)
@@ -158,54 +147,69 @@ class RequestHandler:
 
         :param files: The files to be uploaded.
         :returns:
-            - None, None: If no files were uploaded.
-            - dict, None: If files were uploaded. The dict is formatted as { file_name: download_url }.
-            - None, dict: If files were not uploaded. The dict contains the files in a format that can be sent with httpx.
+            - None: If no files were uploaded.
+            - dict: If files were uploaded. The dict is formatted as { file_name: download_url }.
+            - dict: If files are attached. The dict contains the files in a format that can be sent with httpx.
         """
         if files is None or len(files) == 0:
             return files
 
-        if self.fast_cloud is None:
-            return self._upload_attach_files_to_request_params(body_params=body_params, files=files)
-
         # determine combined file size
         file_size = sum([v.file_size('mb') for v in files.values()])
+        if self.max_upload_file_size_mb is not None and file_size > self.max_upload_file_size_mb:
+            raise Exception(
+                f"The file you have provided exceed the max upload limit of {self.max_upload_file_size_mb}mb"
+            )
+
+        if self.fast_cloud is None:
+            return self._convert_files_to_attachable_format(files) #self._upload_attach_files_to_request_params(body_params=body_params, files=files)
+
         # Case 1: Attach directly if size is below limit
         if file_size < self.upload_to_cloud_threshold_mb:
-            return self._upload_attach_files_to_request_params(body_params, files)
-        elif self.max_upload_file_size_mb is not None and file_size > self.max_upload_file_size_mb:
-            raise Exception(f"The file you have provided exceed the max upload limit of {self.max_upload_file_size_mb}mb")
+            return self._convert_files_to_attachable_format(files) #self._upload_attach_files_to_request_params(body_params, files)
         else:
             # upload async
             if isinstance(self.fast_cloud, BaseUploadAPI):
-                uploaded_files = {k: self.fast_cloud.upload_async(v) for k, v in files.items()}
-                # await all uploads
-                for k, v in uploaded_files.items():
-                    uploaded_files[k] = await v
+                uploaded_file_urls = await self.fast_cloud.upload_async(list(files.values()))
             else:
-                uploaded_files = {k: self.fast_cloud.upload(v) for k, v in files.items()}
+                uploaded_file_urls = self.fast_cloud.upload(list(files.values()))
 
-            body_params = {} if body_params is None else body_params
-            body_params.update(uploaded_files)
-            return body_params, {}
+            uploaded_files = dict(zip(files.keys(), uploaded_file_urls))
 
-    async def _process_file_params(self, body_params: dict, file_params: dict) -> Tuple[dict, dict]:
+            return uploaded_files
+
+    async def _process_file_params(self, file_params: dict) -> dict:
         """
         Converts the file params to a format that can be sent with httpx.
         if the total file size > 10 and cloud handler is given, upload the files to the cloud handler
         - if files were uploaded, the file content is replaced with the file url
         - if files are not uploaded, they are converted to a with httpx send able format.
           In the latter case they are also attached to body_params because they are not treated explicitly by httpx.
+        - In case of file_params that are provided as "url" they are not read but attached directly to the body_params.
         :param file_params: The file params to convert.
-        :param body_params: The body_params to attach read files to.
-        :return: converted file params, body_params with the files attached.
+        :return: converted file params
         """
         if not file_params or len(file_params) == 0:
-            return file_params, body_params
+            return file_params
 
-        file_params = await self._read_files(file_params)
-        body_params, file_params = await self._upload_files(body_params=body_params, files=file_params)
-        return body_params, file_params
+        # separate files which are provided as "urls" from physical upload files
+        upload_file_params = {}
+        url_files = {}
+        for k, v in file_params.items():
+            if MediaFile._is_url(v):
+                url_files[k] = v
+            else:
+                upload_file_params[k] = v
+
+        # read and upload files
+        file_params = await self._read_files(upload_file_params)
+        file_params = await self._upload_files(files=file_params)
+
+        # check which files where uploaded and attach the ones that where to the body_params
+        ## add url files to body_params
+        #body_params.update(url_files)
+
+        return file_params
 
     @staticmethod
     def _add_query_params_to_url(url: str, query_parameters: dict):
@@ -229,7 +233,7 @@ class RequestHandler:
 
     async def _prepare_request(self, endpoint: EndPoint, *args, **kwargs):
         query_p, body_p, file_p, headers = await self._format_request_params(endpoint, *args, **kwargs)
-        body_p, file_p = await self._process_file_params(body_p, file_p)
+        file_p = await self._process_file_params(file_p)
 
         # add query parameters to the url like '/endpoint?param1=value1&param2=value2'
         url = self._prepare_request_url(endpoint, query_params=query_p)
@@ -238,7 +242,18 @@ class RequestHandler:
     async def _request_endpoint(self, endpoint: EndPoint, timeout: float = None, *args, **kwargs):
         # Format, read files, upload files, format urls
         url, query_params, body_params, file_p, headers = await self._prepare_request(endpoint, *args, **kwargs)
-        return await self.httpx_client.post(url=url, params=body_params, files=file_p, headers=headers, timeout=timeout)
+        # return await self.httpx_client.post(url=url, files=body_params, headers=headers, timeout=timeout)
+        #x3 = await self.httpx_client.post(url=url, data=data, headers=headers, timeout=timeout)
+        # attach files that are urls to the body_params and remove them from file_ps
+
+        # ToDo: Figure out how to accept either string or file in the endpoint
+        url_files = {k: v for k, v in file_p.items() if MediaFile._is_url(v)}
+        body_params.update(url_files)
+        file_p = {k: v for k,v in file_p.items() if k not in url_files}
+        file_p = None if len(file_p) == 0 else file_p
+
+        return await self.httpx_client.post(url=url, data=body_params, files=file_p, headers=headers, timeout=timeout)
+
 
     def request_endpoint(self, endpoint: EndPoint, callback: callable = None, *args, **kwargs) -> AsyncJob:
         """

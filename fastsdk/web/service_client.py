@@ -36,7 +36,7 @@ class ServiceClient:
             model_description: AIModelDescription = None,
             # optional args for s3 upload and co.
             fast_cloud: FastCloud = None,
-            upload_to_cloud_threshold_mb: int = 10,
+            upload_to_cloud_threshold_mb: int = None,
             api_keys: dict = None,
             *args,
             **kwargs
@@ -83,8 +83,6 @@ class ServiceClient:
         # request handlers are shared between active services.
         # They get lazy initialized when a request is made to a not yet initialized service.
         self.request_handlers = {}
-        if upload_to_cloud_threshold_mb is None:
-            upload_to_cloud_threshold_mb = 10
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
         self.fast_cloud = fast_cloud
 
@@ -168,7 +166,8 @@ class ServiceClient:
 
         return self.api_keys
 
-    def set_fast_cloud(self, fast_cloud: FastCloud, upload_to_cloud_threshold_mb: int = 10):
+    def set_fast_cloud(self, fast_cloud: FastCloud, upload_to_cloud_threshold_mb: float = 10,
+                       max_upload_file_size_mb: float = 1000):
         """
         Set or update the cloud storage handler for all request_handlers.
 
@@ -184,7 +183,9 @@ class ServiceClient:
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
 
         for service_name, handler in self.request_handlers.items():
-            handler.set_fast_cloud(fast_cloud, upload_to_cloud_threshold_mb)
+            handler.set_fast_cloud(fast_cloud,
+                                   upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb,
+                                   max_upload_file_size_mb=max_upload_file_size_mb)
 
         return self
 
@@ -330,7 +331,7 @@ def create_request_handler(
         service_address: [str, ServiceAddress, SocaityServiceAddress, RunpodServiceAddress, ReplicateServiceAddress],
         api_key: str = None,
         fast_cloud: FastCloud = None,
-        upload_to_cloud_threshold_mb: int = 10
+        upload_to_cloud_threshold_mb: int = None
 ) -> RequestHandler:
     """
     Create a request handler based on the service address.
@@ -354,8 +355,13 @@ def create_request_handler(
         _rqh = RequestHandlerRunpod
     elif isinstance(service_address, SocaityServiceAddress):
         _rqh = RequestHandler
+        upload_to_cloud_threshold_mb = 5 # 0.1 #1
         if fast_cloud is None and api_key is not None:
-            fast_cloud = SocaityUploadAPI(api_key=api_key)
+            # for debugging the backend
+            if "http://localhost:8000" in service_address.url:
+                fast_cloud = SocaityUploadAPI(api_key=api_key, upload_endpoint="http://localhost:8000/api/v0/files")
+            else:
+                fast_cloud = SocaityUploadAPI(api_key=api_key)
     else:
         st = determine_service_type_from_api_spec(service_address.url)
         ep_req = {
