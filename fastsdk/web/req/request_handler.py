@@ -211,25 +211,8 @@ class RequestHandler:
 
         return file_params
 
-    @staticmethod
-    def _add_query_params_to_url(url: str, query_parameters: dict):
-        """
-        Adds the get parameters to the url.
-        :param url: The url to add the parameters to.
-        :param query_parameters: The parameters to add.
-        :return: The url with the parameters added.
-        """
-        if query_parameters:
-            url += "?"
-            for k, v in query_parameters.items():
-                url += f"{k}={str(v)}&"
-            url = url[:-1]
-        return url
-
     def _prepare_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
-        url = f"{self.service_address.url}/{endpoint.endpoint_route}"
-        url = self._add_query_params_to_url(url, query_parameters=query_params)
-        return url
+        return f"{self.service_address.url}/{endpoint.endpoint_route}"
 
     async def _prepare_request(self, endpoint: EndPoint, *args, **kwargs):
         query_p, body_p, file_p, headers = await self._format_request_params(endpoint, *args, **kwargs)
@@ -246,13 +229,14 @@ class RequestHandler:
         #x3 = await self.httpx_client.post(url=url, data=data, headers=headers, timeout=timeout)
         # attach files that are urls to the body_params and remove them from file_ps
 
-        # ToDo: Figure out how to accept either string or file in the endpoint
         url_files = {k: v for k, v in file_p.items() if MediaFile._is_url(v)}
         body_params.update(url_files)
         file_p = {k: v for k,v in file_p.items() if k not in url_files}
         file_p = None if len(file_p) == 0 else file_p
 
-        return await self.httpx_client.post(url=url, data=body_params, files=file_p, headers=headers, timeout=timeout)
+        return await self.httpx_client.post(
+            url=url, params=query_params, data=body_params, files=file_p, headers=headers, timeout=timeout
+        )
 
 
     def request_endpoint(self, endpoint: EndPoint, callback: callable = None, *args, **kwargs) -> AsyncJob:

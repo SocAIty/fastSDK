@@ -28,8 +28,7 @@ class EndPoint:
         :param timeout: time in seconds until the request to the endpoint fails.
         :param refresh_interval: in which interval in seconds is the status checkpoint called.
         """
-        # remove slash at beginning
-        self.endpoint_route = endpoint_route if endpoint_route[0] != "/" else endpoint_route[1:]
+        self.endpoint_route = endpoint_route.strip("/")  # remove slash at beginning and end
         self.timeout = timeout
         self.refresh_interval = refresh_interval
         self.query_params = query_params if query_params is not None else {}

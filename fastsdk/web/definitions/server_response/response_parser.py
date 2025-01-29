@@ -58,7 +58,7 @@ class ResponseParser:
         error_messages = {
             401: f"Endpoint {response.url} error: Unauthorized. Did you forget to set the API key?",
             403: f"Endpoint {response.url} error: Unauthorized. Did you forget to set the API key?",
-            404: f"Endpoint {response.url} error: not found.",
+            404: f"Endpoint {response.url} error: not found. Check the URL and API key.",
         }
 
         if response.status_code in error_messages:

@@ -31,7 +31,7 @@ class ServiceAddress:
 class RunpodServiceAddress(ServiceAddress):
     def __init__(self, address: str):
         self.url, self.pod_id, _ = self.parse_url(address)
-        super().__init__(address)
+        super().__init__(self.url)
 
     @staticmethod
     def parse_url(url: str) -> tuple:
@@ -56,13 +56,25 @@ class RunpodServiceAddress(ServiceAddress):
                 url = f"{runpod_url}{url}"
 
         parsed_url = urlparse(url)
-        path = parsed_url.path.lstrip("/v2/")
-        parts = path.split("/", 1)
-        pod_id = parts[0]
-        if len(parts) > 1:
-            path = parts[1]
 
-        url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        # remove v2 and run
+        path = parsed_url.path.lstrip("/v2/")
+        path = path.replace("/run", "")
+
+        pod_id = None
+        if "api.runpod.ai" in url:
+            # get pod_id from path
+            parts = path.split("/", 1)
+            pod_id = parts[0]
+            if len(parts) > 1:
+                path = "/".join(parts[1:])
+            else:
+                path = ""
+
+            url = f"{parsed_url.scheme}://{parsed_url.netloc}/v2/{pod_id}"
+        else:
+            url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
         return url, pod_id, path
 
 

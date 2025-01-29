@@ -37,8 +37,8 @@ class RequestHandlerReplicate(RequestHandler):
     def _prepare_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
         # Overwrites the default implementation, because /endpoint_route is not attached.
         # (replicate always just has 1 endpoint)
-        url = self._add_query_params_to_url(self.service_address.url, query_parameters=query_params)
-        return url
+        return self.service_address.url
+
 
     async def _request_endpoint(self, endpoint: EndPoint, timeout: float = None, *args, **kwargs):
         # Prepare the request
@@ -57,6 +57,10 @@ class RequestHandlerReplicate(RequestHandler):
         # replicate wants file params attached to body as base64 or url
         if file_p:
             body_params.update(file_p)
+
+        # replicates expects query params to be in body also
+        if query_params:
+            body_params.update(query_params)
 
         # replicate formats the body as json with {"input": body_params, "version?": model_version}
         body_params = {"input": body_params}

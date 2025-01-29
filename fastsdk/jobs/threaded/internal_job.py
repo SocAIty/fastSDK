@@ -69,7 +69,6 @@ class InternalJob:
         """
 
         spinning_wheel = itertools.cycle(['◐', '◐', '◓', '◓', '◑', '◑', '◒', '◒'])
-        progress = None
         if print_progress:
             pbar = tqdm(total=100, bar_format="{desc}")
             desc = f"{self._job_function.__name__}, status: initializing, {next(spinning_wheel)}"
