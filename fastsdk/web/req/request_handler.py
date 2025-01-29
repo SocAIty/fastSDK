@@ -206,8 +206,7 @@ class RequestHandler:
         file_params = await self._upload_files(files=file_params)
 
         # check which files where uploaded and attach the ones that where to the body_params
-        ## add url files to body_params
-        #body_params.update(url_files)
+        file_params.update(url_files)
 
         return file_params
 

@@ -264,15 +264,33 @@ class ServiceClient:
             body_params: Union[dict, BaseModel] = None,
             file_params: dict = None,
             timeout: int = 3600,
-            refresh_interval: float = 0.5
+            refresh_interval_s: float = 0.5
     ):
+        """
+        :param endpoint_route: for example api/img2img/stable_diffusion
+        :param query_params: Defines the parameters which are send as url?params=... to the endpoint.
+            It is a dict in format {param_name: param_type} for example {"my_text": str}.
+        :param body_params: Defines the parameters which are send in the request body e.g. post.
+            Expects a dict in format {param_name: param_type} for example {"my_text": str}
+        :param file_params: Defines the parameters which are send as files. Might be, read, converted, uploaded.
+        :param timeout: time in seconds until the request to the endpoint fails.
+        :param refresh_interval_s: in which interval in seconds is the status checkpoint called.
+        """
+        endpoint_route = endpoint_route.strip("/")
+        if endpoint_route in ["health", "status", "cancel"]:
+            print(f"Endpoint name {endpoint_route} is reserved and can't be used. We ignore it")
+            return
+
+        if endpoint_route in self.endpoint_request_funcs:
+            raise ValueError(f"Endpoint {endpoint_route} already exists in the service.")
+
         ep = EndPoint(
             endpoint_route=endpoint_route,
             query_params=query_params,
             body_params=body_params,
             file_params=file_params,
             timeout=timeout,
-            refresh_interval=refresh_interval
+            refresh_interval_s=refresh_interval_s
         )
         self._add_endpoint(ep)
 

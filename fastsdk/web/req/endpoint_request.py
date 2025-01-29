@@ -35,7 +35,7 @@ class EndPointRequest:
         self._endpoint = endpoint
         self._request_handler = request_handler
 
-        self._refresh_interval = endpoint.refresh_interval
+        self._refresh_interval = endpoint.refresh_interval_s
         self._retries_on_error = retries_on_error
         self._current_retry_counter = 0
 
@@ -189,6 +189,12 @@ class EndPointRequest:
             self.error = "Job was cancelled."
             self.server_response = server_response
             return self
+
+        # ToDo: Runpod: Deal with unhealthy endpoints.
+        # In runpod it might be, that a job starts, then the server crashes and the job goes back into the loop
+        # In this case the job is never finished until timout and very likely causes more servers to crash.
+        # A solution could be to check if the job changed from queue_to processing and back to queue.
+        # Another solution could be to monitor the worker. Check the health of the worker id and if it's unhealthy the job gets cancelled.
 
 
         # In this case it was a refresh call

@@ -58,7 +58,10 @@ class RunpodServiceAddress(ServiceAddress):
         parsed_url = urlparse(url)
 
         # remove v2 and run
-        path = parsed_url.path.lstrip("/v2/")
+        path = parsed_url.path
+        if path.startswith("/v2/"):
+            path = path[4:]
+
         path = path.replace("/run", "")
 
         pod_id = None
