@@ -15,10 +15,10 @@ readme = "README.md"
 dependencies = [
     "tqdm",
     "httpx",
-    "media-toolkit>=0.1.1",
+    "media-toolkit>=0.1.5",
     "singleton_decorator==1.0.0",
-    "pydantic>=2.10.4"
-    "fastcloud>=0.0.0"
+    "pydantic>=2.10.4",
+    "fastcloud>=0.0.1"
 ]
 
 [project.optional-dependencies]
