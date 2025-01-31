@@ -221,7 +221,7 @@ class RequestHandler:
         url = self._prepare_request_url(endpoint, query_params=query_p)
         return url, query_p, body_p, file_p, headers
 
-    async def _request_endpoint(self, endpoint: EndPoint, timeout: float = None, *args, **kwargs):
+    async def _request_endpoint(self, endpoint: EndPoint, *args, **kwargs):
         # Format, read files, upload files, format urls
         url, query_params, body_params, file_p, headers = await self._prepare_request(endpoint, *args, **kwargs)
         # return await self.httpx_client.post(url=url, files=body_params, headers=headers, timeout=timeout)
@@ -234,9 +234,8 @@ class RequestHandler:
         file_p = None if len(file_p) == 0 else file_p
 
         return await self.httpx_client.post(
-            url=url, params=query_params, data=body_params, files=file_p, headers=headers, timeout=timeout
+            url=url, params=query_params, data=body_params, files=file_p, headers=headers, timeout=endpoint.timeout
         )
-
 
     def request_endpoint(self, endpoint: EndPoint, callback: callable = None, *args, **kwargs) -> AsyncJob:
         """
@@ -247,7 +246,7 @@ class RequestHandler:
         :param kwargs: arbitrary values that are matched with the endpoint def
         :return: An AsyncJob object that can be used to get the result of the request.
         """
-        req_coroutine = self._request_endpoint(endpoint, *args, timeout=endpoint.timeout, **kwargs)
+        req_coroutine = self._request_endpoint(endpoint, *args, **kwargs)
         async_job = self.async_job_manager.submit(req_coroutine, callback=callback, delay=None)
         return async_job
 

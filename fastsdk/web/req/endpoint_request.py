@@ -1,4 +1,6 @@
 import traceback
+from copy import copy
+from datetime import datetime
 from typing import Union, Any
 
 from httpx import HTTPStatusError
@@ -51,6 +53,11 @@ class EndPointRequest:
         self.first_request_send_at = None
         self.first_response_received_at = None
 
+        # statistic based on server responses (status)
+        self.queued_on_server_at = None
+        self.processing_on_server_at = None
+        self.finished_on_server_at = None
+
     @property
     def last_refresh_call_at(self):
         if self._ongoing_async_request is None:
@@ -62,6 +69,19 @@ class EndPointRequest:
         if self._ongoing_async_request is None:
             return None
         return self._ongoing_async_request.future_result_received_at
+
+    @property
+    def queue_time_ms(self):
+        if self.queued_on_server_at is None:
+            return None
+
+        return (self.processing_on_server_at - self.queued_on_server_at).total_seconds() * 1000
+
+    @property
+    def processing_time_ms(self):
+        if self.processing_on_server_at is None:
+            return None
+        return (self.finished_on_server_at - self.processing_on_server_at).total_seconds() * 1000
 
     def request(self, *args, **kwargs):
         """
@@ -178,17 +198,31 @@ class EndPointRequest:
         if server_response.status == ServerJobStatus.FINISHED:
             self.in_between_server_response = None
             self.server_response = server_response
+            self.finished_on_server_at = copy(self.last_refresh_call_response_at)
             return self
         elif server_response.status == ServerJobStatus.FAILED:
             self.error = server_response.message
             if server_response.message is None:
                 self.error = "Job failed without error message."
-
+            self.finished_on_server_at = copy(self.last_refresh_call_response_at)
             return self
         elif server_response.status == ServerJobStatus.CANCELLED:
             self.error = "Job was cancelled."
             self.server_response = server_response
+            self.finished_on_server_at = copy(self.last_refresh_call_response_at)
             return self
+
+        #### SERVER JOB NOT TERMINED ####
+        if server_response.status == ServerJobStatus.QUEUED:
+            if self.queued_on_server_at is None:
+                self.queued_on_server_at = copy(self.last_refresh_call_response_at)
+            else:
+                if self.processing_on_server_at is not None:
+                    print(f"Job {self.job_id} was added on queue on server, then removed, then readded to server queue")
+        elif server_response.status == ServerJobStatus.PROCESSING:
+            if self.processing_on_server_at is None:
+                self.processing_on_server_at = copy(self.last_refresh_call_response_at)
+
 
         # ToDo: Runpod: Deal with unhealthy endpoints.
         # In runpod it might be, that a job starts, then the server crashes and the job goes back into the loop
@@ -196,7 +230,7 @@ class EndPointRequest:
         # A solution could be to check if the job changed from queue_to processing and back to queue.
         # Another solution could be to monitor the worker. Check the health of the worker id and if it's unhealthy the job gets cancelled.
 
-
+        #  REFRESH CALLS -- ASK FOR JOB STATUS AGAIN
         # In this case it was a refresh call
         self.in_between_server_response = server_response
 

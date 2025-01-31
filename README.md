@@ -103,7 +103,7 @@ Add this point your SDK is ready and now you can work with it as follows
 f2f = face2face()
 # start the request in a seperate thread
 # Note that the job object is not passed to the kwargs. The wrapper will handle this for us.
-ref_face_v_job = f2f.add_face(face_name="potter", img="path/to/image/of/harry")
+ref_face_v_job = f2f.add_face(face_name="potter", image="path/to/image/of/harry")
 # do something else... this works becauce ref_face_v_job will start a thread
 ref_face_vector = ref_face_v_job.get_result() # wait for the server and thread to finish the job
 ```
