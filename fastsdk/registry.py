@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Dict, TYPE_CHECKING
+from typing import Dict, TYPE_CHECKING, Union
+
 if TYPE_CHECKING:
     from fastsdk import ServiceClient
 
@@ -21,8 +22,12 @@ class Registry:
 
         self._services[name] = obj
 
-    def remove_service(self, service: ServiceClient):
-        self._services.pop(service._default_service)
+    def remove_service(self, service: Union[ServiceClient, str]):
+        if isinstance(service, str):
+            self._services.pop(service)
+        elif isinstance(service, ServiceClient):
+            self._services.pop(service.service_name)
+
 
     def get_services(self) -> Dict[str, ServiceClient]:
         return self._services

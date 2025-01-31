@@ -342,7 +342,10 @@ class ServiceClient:
         """
         Remove the service from the registry when the object is deleted.
         """
-        Registry().remove_service(self)
+        try:
+            Registry().remove_service(self)
+        except Exception as e:
+            pass
 
 
 def create_request_handler(
