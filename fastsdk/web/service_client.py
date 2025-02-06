@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from fastCloud import FastCloud, ReplicateUploadAPI, SocaityUploadAPI
 from fastsdk.definitions.enums import EndpointSpecification
+from fastsdk.utils import normalize_name
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.web.definitions.service_adress import (ServiceAddress, SocaityServiceAddress, ReplicateServiceAddress,
@@ -17,6 +18,7 @@ from fastsdk.registry import Registry
 from fastsdk.web.req.request_handler import RequestHandler
 from fastsdk.web.req.request_handler_replicate import RequestHandlerReplicate
 from fastsdk.web.req.request_handler_runpod import RequestHandlerRunpod
+from fastsdk.web.req.request_handler_socaity import RequestHandlerSocaity
 
 
 class ServiceClient:
@@ -62,7 +64,8 @@ class ServiceClient:
         self._default_service = active_service or next(iter(self.service_urls))
 
         # service metadata
-        self.service_name = service_name if service_name is not None else self.service_urls.get(self._default_service)
+        normalized_name = normalize_name(service_name)
+        self.service_name = normalized_name if normalized_name is not None else self.service_urls.get(self._default_service)
         self.service_description = service_description
         self.model_description = model_description
 
@@ -264,7 +267,8 @@ class ServiceClient:
             body_params: Union[dict, BaseModel] = None,
             file_params: dict = None,
             timeout: int = 3600,
-            refresh_interval_s: float = 0.5
+            refresh_interval_s: float = 0.5,
+            normalize_route_name: bool = True
     ):
         """
         :param endpoint_route: for example api/img2img/stable_diffusion
@@ -275,8 +279,15 @@ class ServiceClient:
         :param file_params: Defines the parameters which are send as files. Might be, read, converted, uploaded.
         :param timeout: time in seconds until the request to the endpoint fails.
         :param refresh_interval_s: in which interval in seconds is the status checkpoint called.
+        :param normalize_route_name:
+            If on, removes special characters and replaces spaces and under-score with hyphens.
+            This is used to standardize endpoint names across the socaity services.
+            turn off, when you are 100% sure about the endpoint path.
+            For example when you work with any other arbitrary service.
         """
-        endpoint_route = endpoint_route.strip("/")
+        if normalize_route_name:
+            endpoint_route = normalize_name(endpoint_route, preserve_paths=True)
+            endpoint_route = endpoint_route.strip("/")
         if endpoint_route in ["health", "status", "cancel"]:
             print(f"Endpoint name {endpoint_route} is reserved and can't be used. We ignore it")
             return
@@ -328,8 +339,10 @@ class ServiceClient:
         :return: EndPointRequest object
         """
         # Get the endpoint
+        endpoint_route = normalize_name(endpoint_route, preserve_paths=True)
+        endpoint_route = endpoint_route.strip("/")
+
         if call_async:
-            endpoint_route = endpoint_route.strip("/")
             endpoint_route = f"{endpoint_route}_async" if not endpoint_route.endswith("_async") else endpoint_route
 
         if endpoint_route not in self.endpoint_request_funcs:
@@ -375,7 +388,7 @@ def create_request_handler(
     elif isinstance(service_address, RunpodServiceAddress):
         _rqh = RequestHandlerRunpod
     elif isinstance(service_address, SocaityServiceAddress):
-        _rqh = RequestHandler
+        _rqh = RequestHandlerSocaity
         upload_to_cloud_threshold_mb = 5 # 0.1 #1
         if fast_cloud is None and api_key is not None:
             # for debugging the backend
@@ -386,8 +399,8 @@ def create_request_handler(
     else:
         st = determine_service_type_from_api_spec(service_address.url)
         ep_req = {
-            EndpointSpecification.SOCAITY: RequestHandler,
-            EndpointSpecification.FASTTASKAPI: RequestHandler,
+            EndpointSpecification.SOCAITY: RequestHandlerSocaity,
+            EndpointSpecification.FASTTASKAPI: RequestHandlerSocaity,
             EndpointSpecification.RUNPOD: RequestHandlerRunpod,
             EndpointSpecification.REPLICATE: RequestHandlerReplicate,
             EndpointSpecification.OTHER: RequestHandler

@@ -39,11 +39,16 @@ class RequestHandlerReplicate(RequestHandler):
         # (replicate always just has 1 endpoint)
         return self.service_address.url
 
-
-    async def _request_endpoint(self, endpoint: EndPoint, timeout: float = None, *args, **kwargs):
-        # Prepare the request
-        url, query_params, body_params, file_p, headers = await self._prepare_request(endpoint,  *args, **kwargs)
-
+    async def _request_endpoint(
+            self,
+            url: Union[str, None],
+            query_params: Union[dict, None],
+            body_params: Union[dict, None],
+            file_params: Union[dict, None],
+            headers: Union[dict, None],
+            timeout: float,
+            endpoint: EndPoint
+    ):
         # Strategy:
         # Official models '/models/' -> Normal post request
         # Deployment '/deployments/' -> Normal post request
@@ -55,8 +60,8 @@ class RequestHandlerReplicate(RequestHandler):
         #    return await self.httpx_client.get(url=url, headers=headers, timeout=timeout)
 
         # replicate wants file params attached to body as base64 or url
-        if file_p:
-            body_params.update(file_p)
+        if file_params:
+            body_params.update(file_params)
 
         # replicates expects query params to be in body also
         if query_params:

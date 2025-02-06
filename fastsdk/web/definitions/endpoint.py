@@ -37,7 +37,7 @@ class EndPoint:
         self.headers = header_params if header_params is not None else {}
 
     def get_parameter_definition_as_dict(self):
-        parse = lambda x: x.dict(exclude_unset=True) if isinstance(x, BaseModel) else copy(x)
+        parse = lambda x: x.dict(exclude_unset=False) if isinstance(x, BaseModel) else copy(x)
         all_params = parse(self.query_params)
         all_params.update(parse(self.body_params))
         all_params.update(parse(self.file_params))

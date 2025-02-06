@@ -28,7 +28,6 @@ class Registry:
         elif isinstance(service, ServiceClient):
             self._services.pop(service.service_name)
 
-
     def get_services(self) -> Dict[str, ServiceClient]:
         return self._services
 

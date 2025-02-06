@@ -221,20 +221,35 @@ class RequestHandler:
         url = self._prepare_request_url(endpoint, query_params=query_p)
         return url, query_p, body_p, file_p, headers
 
-    async def _request_endpoint(self, endpoint: EndPoint, *args, **kwargs):
-        # Format, read files, upload files, format urls
-        url, query_params, body_params, file_p, headers = await self._prepare_request(endpoint, *args, **kwargs)
-        # return await self.httpx_client.post(url=url, files=body_params, headers=headers, timeout=timeout)
-        #x3 = await self.httpx_client.post(url=url, data=data, headers=headers, timeout=timeout)
-        # attach files that are urls to the body_params and remove them from file_ps
-
-        url_files = {k: v for k, v in file_p.items() if MediaFile._is_url(v)}
-        body_params.update(url_files)
-        file_p = {k: v for k,v in file_p.items() if k not in url_files}
-        file_p = None if len(file_p) == 0 else file_p
-
+    async def _request_endpoint(
+            self,
+            url: Union[str, None],
+            query_params: Union[dict, None],
+            body_params: Union[dict, None],
+            file_params: Union[dict, None],
+            headers: Union[dict, None],
+            timeout: float,
+            endpoint: EndPoint
+    ):
+        """
+        Please overwrite this method to handle specified requests in your service.
+        All params are already formatted and prepared.
+        Default implementation is a simple httpx post request.
+        """
         return await self.httpx_client.post(
-            url=url, params=query_params, data=body_params, files=file_p, headers=headers, timeout=endpoint.timeout
+            url=url, params=query_params, data=body_params, files=file_params, headers=headers, timeout=timeout
+        )
+
+    async def _req_ep(self, endpoint: EndPoint, *args, **kwargs):
+        url, query_params, body_params, file_p, headers = await self._prepare_request(endpoint, *args, **kwargs)
+        return await self._request_endpoint(
+            url=url,
+            query_params=query_params,
+            body_params=body_params,
+            file_params=file_p,
+            headers=headers,
+            timeout=endpoint.timeout,
+            endpoint=endpoint
         )
 
     def request_endpoint(self, endpoint: EndPoint, callback: callable = None, *args, **kwargs) -> AsyncJob:
@@ -246,7 +261,7 @@ class RequestHandler:
         :param kwargs: arbitrary values that are matched with the endpoint def
         :return: An AsyncJob object that can be used to get the result of the request.
         """
-        req_coroutine = self._request_endpoint(endpoint, *args, **kwargs)
+        req_coroutine = self._req_ep(endpoint, *args, **kwargs)
         async_job = self.async_job_manager.submit(req_coroutine, callback=callback, delay=None)
         return async_job
 
