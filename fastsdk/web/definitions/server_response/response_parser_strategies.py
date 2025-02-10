@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from fastsdk.web.definitions.server_job_status import ServerJobStatus
 from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, SocaityJobResponse, \
     RunpodJobResponse, ReplicateJobResponse
+from media_toolkit.utils.file_conversion import media_from_file_result
 
 
 class ResponseParserStrategy(ABC):
@@ -23,6 +24,21 @@ class SocaityResponseParser(ResponseParserStrategy):
         return (data.get("endpoint_protocol") == "socaity" and
                 "id" in data and "status" in data)
 
+    @staticmethod
+    def _parse_inner_media_of_result(result):
+        """
+        Method checks the results of the job, and converts file results to media-toolkit objects
+        """
+        if isinstance(result, dict):
+            return media_from_file_result(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
+        elif isinstance(result, list):
+            return [
+                media_from_file_result(r, allow_reads_from_disk=False, default_return_if_not_file_result=result)
+                for r in result
+            ]
+        else:
+            return result
+
     def parse(self, data: Dict) -> SocaityJobResponse:
         status = ServerJobStatus.from_str(data.get("status"))
 
@@ -31,12 +47,14 @@ class SocaityResponseParser(ResponseParserStrategy):
         if status == ServerJobStatus.FINISHED:
             progress = 1.0
 
+        result = self._parse_inner_media_of_result(data.get("result"))
+
         return SocaityJobResponse(
             id=data["id"],
             status=status,
             message=data.get("message"),
             progress=progress,
-            result=data.get("result"),
+            result=result,  # of media files the endpoint request takes care by parsing nested socaity results
             refresh_job_url=data.get("refresh_job_url", f'/status/{data["id"]}'),
             cancel_job_url=data.get("cancel_job_url", f'/cancel/{data["id"]}'),
             created_at=data.get("created_at"),

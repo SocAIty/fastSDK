@@ -4,6 +4,9 @@ import os
 from collections.abc import Iterable
 import re
 
+from media_toolkit.utils.file_conversion import media_from_file_result
+
+
 def is_valid_file_path(path: str):
     try:
         is_file = os.path.isfile(path)
@@ -87,3 +90,4 @@ def normalize_name(name: str, preserve_paths: bool = False) -> Union[str, None]:
         result = normalize_segment(name)
 
     return result if result else None
+

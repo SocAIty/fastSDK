@@ -114,13 +114,13 @@ class EndPointRequest:
         if isinstance(result, BaseJobResponse):
             result = result.result
 
-        if isinstance(result, dict) and "file_name" in result and "content" in result:
-            try:
-                return media_from_file_result(result, allow_reads_from_disk=False)
-            except Exception as e:
-                print(f"Error in converting the FileResult of server_response: {self.server_response.id} "
-                      f"to MediaFile. Error: {e}")
-                return result
+        #if isinstance(result, dict) and "file_name" in result and "content" in result:
+        #    try:
+        #        return media_from_file_result(result, allow_reads_from_disk=False)
+        #    except Exception as e:
+        #        print(f"Error in converting the FileResult of server_response: {self.server_response.id} "
+        #              f"to MediaFile. Error: {e}")
+        #        return result
 
         return result
 
