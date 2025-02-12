@@ -18,7 +18,7 @@ dependencies = [
     "media-toolkit>=0.1.9",
     "singleton_decorator==1.0.0",
     "pydantic>=2.10.4",
-    "fastcloud>=0.0.4"
+    "fastcloud>=0.0.5"
 ]
 
 [project.optional-dependencies]
