@@ -33,7 +33,7 @@ class SocaityResponseParser(ResponseParserStrategy):
             return media_from_file_result(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
         elif isinstance(result, list):
             return [
-                media_from_file_result(r, allow_reads_from_disk=False, default_return_if_not_file_result=result)
+                media_from_file_result(r, allow_reads_from_disk=False, default_return_if_not_file_result=r)
                 for r in result
             ]
         else:

@@ -8,7 +8,6 @@ from fastsdk.web.definitions.server_response.base_response import BaseJobRespons
 from fastsdk.web.definitions.server_response.response_parser import ResponseParser
 from fastsdk.web.req.request_handler import RequestHandler
 from media_toolkit import MediaFile
-from media_toolkit.utils.file_conversion import media_from_file_result
 from fastsdk.jobs.async_jobs.async_job import AsyncJob
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.server_job_status import ServerJobStatus

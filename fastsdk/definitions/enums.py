@@ -6,7 +6,7 @@ class ModelDomainTag(Enum):
     AUDIO = "audio"
     IMAGE = "image"
     VIDEO = "video"
-    OTHER = "other"
+    MISC = "other"
 
 
 class EndpointSpecification(Enum):

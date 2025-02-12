@@ -30,7 +30,7 @@ class AIModelDescription:
 
         # Model domain tags
         if model_domain_tags is None:
-            self.model_domain_tags = [ModelDomainTag.OTHER]
+            self.model_domain_tags = [ModelDomainTag.MISC]
         elif isinstance(model_domain_tags, str):
             self.model_domain_tags = [ModelDomainTag(model_domain_tags)]
         elif isinstance(model_domain_tags, list):

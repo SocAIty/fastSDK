@@ -31,6 +31,11 @@ def get_function_parameters_as_dict(
     :param func_kwargs: the keyword arguments of the function at runtime
     :return: a dict with the parameters as key and the value as value
     """
+    exclude_param_names = [] if not exclude_param_names else exclude_param_names
+    exclude_param_types = [] if not exclude_param_types else exclude_param_types
+    func_args = [] if not func_args else func_args
+    func_kwargs = {} if not func_kwargs else func_kwargs
+
     if isinstance(exclude_param_names, str):
         exclude_param_names = [exclude_param_names]
     if not isinstance(exclude_param_types, list):

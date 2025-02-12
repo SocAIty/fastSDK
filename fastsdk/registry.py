@@ -28,8 +28,11 @@ class Registry:
         elif isinstance(service, ServiceClient):
             self._services.pop(service.service_name)
 
-    def get_services(self) -> Dict[str, ServiceClient]:
-        return self._services
+    def get_services(self, name_filter: str = None) -> Dict[str, ServiceClient]:
+        if not name_filter:
+            return self._services
+
+        return {name: srvc for name, srvc in self._services.items() if name_filter in name}
 
     def list_endpoints(self):
         """

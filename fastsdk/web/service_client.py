@@ -169,8 +169,12 @@ class ServiceClient:
 
         return self.api_keys
 
-    def set_fast_cloud(self, fast_cloud: FastCloud, upload_to_cloud_threshold_mb: float = 10,
-                       max_upload_file_size_mb: float = 1000):
+    def set_fast_cloud(
+            self,
+            fast_cloud: FastCloud,
+            upload_to_cloud_threshold_mb: float = 3,
+            max_upload_file_size_mb: float = 1000
+    ):
         """
         Set or update the cloud storage handler for all request_handlers.
 
@@ -182,7 +186,7 @@ class ServiceClient:
         self.fast_cloud = fast_cloud
 
         if upload_to_cloud_threshold_mb is None:
-            upload_to_cloud_threshold_mb = 10
+            upload_to_cloud_threshold_mb = 3
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
 
         for service_name, handler in self.request_handlers.items():
@@ -389,7 +393,7 @@ def create_request_handler(
         _rqh = RequestHandlerRunpod
     elif isinstance(service_address, SocaityServiceAddress):
         _rqh = RequestHandlerSocaity
-        upload_to_cloud_threshold_mb = 5 # 0.1 #1
+        upload_to_cloud_threshold_mb = 3  # 0.1 #1
         if fast_cloud is None and api_key is not None:
             # for debugging the backend
             if "http://localhost:8000" in service_address.url:

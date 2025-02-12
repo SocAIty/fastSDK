@@ -20,7 +20,7 @@ class RequestHandler:
             async_job_manager: AsyncJobManager = None,
             api_key: str = None,
             fast_cloud: FastCloud = None,
-            upload_to_cloud_threshold_mb: float = 2,
+            upload_to_cloud_threshold_mb: float = 3,
             max_upload_file_size_mb: float = 1000,
             *args, **kwargs
     ):
@@ -152,6 +152,11 @@ class RequestHandler:
             - dict: If files are attached. The dict contains the files in a format that can be sent with httpx.
         """
         if files is None or len(files) == 0:
+            return files
+
+        # filter out Nones
+        files = {k: v for k, v in files.items() if v is not None and isinstance(v, MediaFile)}
+        if len(files) == 0:
             return files
 
         # determine combined file size

@@ -12,20 +12,30 @@ class RequestHandlerReplicate(RequestHandler):
     """
     Works with Replicate API. https://replicate.com/docs/topics/predictions/create-a-prediction
     """
-    def __init__(self,
-                 service_address: Union[str, ServiceAddress],
-                 async_job_manager: AsyncJobManager = None,
-                 api_key: str = None,
-                 fast_cloud: Union[ReplicateUploadAPI, FastCloud] = None,
-                 upload_to_cloud_threshold_mb: float = 10,
-                 *args, **kwargs
-                 ):
+    def __init__(
+            self,
+            service_address: Union[str, ServiceAddress],
+            async_job_manager: AsyncJobManager = None,
+            api_key: str = None,
+            fast_cloud: Union[ReplicateUploadAPI, FastCloud] = None,
+            upload_to_cloud_threshold_mb: float = 3,
+            *args, **kwargs
+        ):
+
+        if isinstance(upload_to_cloud_threshold_mb, str):
+            try:
+                upload_to_cloud_threshold_mb = float(upload_to_cloud_threshold_mb)
+            except ValueError:
+                upload_to_cloud_threshold_mb = 3
+
+        if not isinstance(upload_to_cloud_threshold_mb, float) and not isinstance(upload_to_cloud_threshold_mb, int):
+            upload_to_cloud_threshold_mb = 3
 
         super().__init__(
             service_address=service_address,
             async_job_manager=async_job_manager,
             fast_cloud=fast_cloud,
-            upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb if upload_to_cloud_threshold_mb else 10,
+            upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb,
             api_key=api_key,
             *args, **kwargs
         )
@@ -54,10 +64,6 @@ class RequestHandlerReplicate(RequestHandler):
         # Deployment '/deployments/' -> Normal post request
         # Community models '/predictions'/ -> Add version parameter and is get request
         # Refresh call '/predictions?job_id=' -> Get request
-
-        # Refresh call send directly. Refresh calls strictly require get requests.
-        #if "/predictions/" in url:
-        #    return await self.httpx_client.get(url=url, headers=headers, timeout=timeout)
 
         # replicate wants file params attached to body as base64 or url
         if file_params:
