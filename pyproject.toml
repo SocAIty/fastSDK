@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsdk"
-version = "0.0.9"
+version = "00.01.00"
 description = "Conveniently build an SDK for web apis. Handle file uploads, downloads and streaming. Interact with job services. Natively work with FastTaskAPI."
 requires-python = ">=3.8"
 authors = [
@@ -15,10 +15,10 @@ readme = "README.md"
 dependencies = [
     "tqdm",
     "httpx",
-    "media-toolkit>=0.1.9",
+    "media-toolkit>=00.02.00",
     "singleton_decorator==1.0.0",
     "pydantic>=2.10.4",
-    "fastcloud>=0.0.5"
+    "fastcloud>=0.0.4"
 ]
 
 [project.optional-dependencies]
