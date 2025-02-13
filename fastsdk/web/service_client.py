@@ -145,6 +145,9 @@ class ServiceClient:
 
         return self.request_handlers[current_service]
 
+    def add_service_url(self, service_name: str, service_url: str):
+        self.service_urls[service_name] = create_service_address(service_url)
+
     def add_api_key(self, service_name: str, key: str):
         """
         Add or update an API key for a service.
