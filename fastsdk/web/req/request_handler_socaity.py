@@ -1,6 +1,7 @@
 from typing import Union
 
 from fastsdk.web.definitions.endpoint import EndPoint
+from fastsdk.web.definitions.service_adress import SocaityServiceAddress
 from fastsdk.web.req.request_handler import RequestHandler
 from media_toolkit import MediaFile
 
@@ -8,7 +9,6 @@ class APIKeyError(Exception):
     """Custom exception for API key validation errors."""
     def __init__(self, message: str):
         message = f"{message}\nPlease create an account at https://www.socaity.ai/ and get an API key."
-
         super().__init__(message)
 
 
@@ -18,7 +18,7 @@ class RequestHandlerSocaity(RequestHandler):
     """
     def validate_api_key(self):
         # pass for non officially hosted or localhost services
-        if "api.socaity.ai" not in self.service_address:
+        if not isinstance(self.service_address, SocaityServiceAddress) or "api.socaity.ai" not in self.service_address.url:
             return True
 
         if self.api_key is None:
@@ -38,8 +38,6 @@ class RequestHandlerSocaity(RequestHandler):
             timeout: float,
             endpoint: EndPoint
     ):
-        self.validate_api_key()
-
         # Socaity expects all parameters except of files as query parameters.
         # Only files go in the body.
         url_files = {k: v for k, v in file_params.items() if MediaFile._is_url(v)}

@@ -41,6 +41,8 @@ class RequestHandler:
         self.service_address = service_address
         self.api_key = api_key
 
+        self.validate_api_key()
+
         # self.service_spec = determine_service_type(self.service_address)
         # add the async_jobs job manager or create a new one
         self.async_job_manager = async_job_manager if async_job_manager is not None else AsyncJobManager()
@@ -52,6 +54,13 @@ class RequestHandler:
 
         self._attached_files_format = 'httpx'
         self._attach_files_to = None
+
+    def validate_api_key(self):
+        """
+        Validates the api key. Override this method to add custom api key validation.
+        :raises APIKeyError: If the api key is invalid.
+        """
+        return True
 
     def set_fast_cloud(self, fast_cloud: FastCloud,
                        upload_to_cloud_threshold_mb: float = None,
