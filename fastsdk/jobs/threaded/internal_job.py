@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from fastsdk.jobs.threaded.internal_job_manager import InternalJobManager
 from fastsdk.jobs.threaded.job_status import JOB_STATUS
-from fastsdk.jobs.threaded.job_progress import JobProgress
+from fastsdk.jobs.threaded.job_progress import FastJobProgress
 from fastsdk.web.req.endpoint_request import EndPointRequest
 
 
@@ -37,7 +37,7 @@ class InternalJob:
         self._job_function = job_function
         self._job_params = job_params
         self.status: JOB_STATUS = JOB_STATUS.CREATED
-        self.job_progress = JobProgress()
+        self.job_progress = FastJobProgress()
 
         # overwrite request function
         self._request_function = request_function
@@ -154,12 +154,17 @@ class InternalJob:
         return self._ongoing_async_request.wait_until_finished()
 
     @property
-    def progress(self) -> tuple[float, str]:
+    def progress(self) -> FastJobProgress:
         """
         Returns the job's progress and status message.
         """
         if self._ongoing_async_request:
-            return self._ongoing_async_request.progress
+            # ToDo: api job progress vs internal job progress mapping must be better distinguished and displayed.
+            self.set_progress(
+                self._ongoing_async_request.progress.progress,
+                self._ongoing_async_request.progress.message
+            )
+
         return self.job_progress.get_progress()
 
     def set_progress(self, progress: float, message: str = None):

@@ -1,20 +1,48 @@
-from typing import Dict
+from typing import Dict, Union
 from abc import ABC, abstractmethod
 
 from fastsdk.web.definitions.server_job_status import ServerJobStatus
 from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, SocaityJobResponse, \
-    RunpodJobResponse, ReplicateJobResponse
+    RunpodJobResponse, ReplicateJobResponse, JobProgress
 from media_toolkit.utils.file_conversion import media_from_file_result
 
 
 class ResponseParserStrategy(ABC):
     @abstractmethod
     def can_parse(self, data: Dict) -> bool:
+        """Check if this strategy can parse the given data."""
         pass
 
     @abstractmethod
     def parse(self, data: Dict) -> BaseJobResponse:
+        """Parse the data into a BaseJobResponse object."""
         pass
+
+    @staticmethod
+    def parse_status_and_progress(data: Dict) -> tuple[ServerJobStatus, JobProgress]:
+        """Parse status and progress from response data."""
+        status = ServerJobStatus.from_str(data.get("status"))
+
+        # Extract progress data
+        progress_value = data.get("progress", 0.0)
+        message = data.get("message")
+
+        # Handle nested progress info
+        if isinstance(progress_value, dict):
+            message = progress_value.get("message", message)
+            progress_value = progress_value.get("progress", 0.0)
+
+        # Convert progress to float
+        try:
+            progress_value = float(progress_value) if progress_value is not None else 0.0
+        except (ValueError, TypeError):
+            progress_value = 0.0
+
+        # If status is FINISHED, set progress to 100%
+        if status == ServerJobStatus.FINISHED:
+            progress_value = 1.0
+
+        return status, JobProgress(progress_value, message=message)
 
 
 class SocaityResponseParser(ResponseParserStrategy):
@@ -25,7 +53,7 @@ class SocaityResponseParser(ResponseParserStrategy):
                 "id" in data and "status" in data)
 
     @staticmethod
-    def _parse_inner_media_of_result(result):
+    def _parse_media_result(result):
         """
         Method checks the results of the job, and converts file results to media-toolkit objects
         """
@@ -40,20 +68,14 @@ class SocaityResponseParser(ResponseParserStrategy):
             return result
 
     def parse(self, data: Dict) -> SocaityJobResponse:
-        status = ServerJobStatus.from_str(data.get("status"))
-
-        progress = data.get("progress", None)
-        progress = float(progress) if progress is not None else 0.0
-        if status == ServerJobStatus.FINISHED:
-            progress = 1.0
-
-        result = self._parse_inner_media_of_result(data.get("result"))
+        status, progress = self.parse_status_and_progress(data)
+        result = self._parse_media_result(data.get("result"))
 
         return SocaityJobResponse(
             id=data["id"],
             status=status,
-            message=data.get("message"),
             progress=progress,
+            error=data.get("error"),
             result=result,  # of media files the endpoint request takes care by parsing nested socaity results
             refresh_job_url=data.get("refresh_job_url", f'/status/{data["id"]}'),
             cancel_job_url=data.get("cancel_job_url", f'/cancel/{data["id"]}'),
@@ -65,33 +87,22 @@ class SocaityResponseParser(ResponseParserStrategy):
 
 
 class RunpodResponseParser(ResponseParserStrategy):
-    STATUS_MAP = {
-        "IN_QUEUE": ServerJobStatus.QUEUED,
-        "IN_PROGRESS": ServerJobStatus.PROCESSING,
-        "COMPLETED": ServerJobStatus.FINISHED,
-        "FAILED": ServerJobStatus.FAILED,
-        "CANCELLED": ServerJobStatus.CANCELLED,
-        "TIMED_OUT": ServerJobStatus.TIMEOUT
-    }
-
     def can_parse(self, data: Dict) -> bool:
         if not isinstance(data, dict):
             return False
-        return ("id" in data and "status" in data and
-                data.get("status") in self.STATUS_MAP.keys())
+        return (
+            "id" in data and
+            "status" in data and
+            ServerJobStatus.map_runpod_status(data.get("status")) != ServerJobStatus.UNKNOWN
+        )
 
     def parse(self, data: Dict) -> RunpodJobResponse:
-        status = self.STATUS_MAP.get(data.get("status", "").upper(), ServerJobStatus.QUEUED)
-
-        progress = data.get("progress", None)
-        progress = float(progress) if progress is not None else 0.0
-        if status == ServerJobStatus.FINISHED:
-            progress = 1.0
+        status, progress = self.parse_status_and_progress(data)
 
         return RunpodJobResponse(
             id=data["id"],
             status=status,
-            message=data.get("error"),  # Runpod uses 'error' instead of 'message'
+            error=data.get("error"),
             progress=progress,
             result=data.get("output"),
             refresh_job_url=data.get("refresh_job_url", f'/status/{data["id"]}'),
@@ -105,54 +116,37 @@ class RunpodResponseParser(ResponseParserStrategy):
 
 
 class ReplicateResponseParser(ResponseParserStrategy):
-    STATUS_MAP = {
-        "starting": ServerJobStatus.QUEUED,
-        "booting": ServerJobStatus.PROCESSING,
-        "processing": ServerJobStatus.PROCESSING,
-        "succeeded": ServerJobStatus.FINISHED,
-        "failed": ServerJobStatus.FAILED,
-        "canceled": ServerJobStatus.CANCELLED,
-    }
-
     def can_parse(self, data: Dict) -> bool:
-        urls = data.get("urls", None)
-        if urls:
-            get = urls.get("get", "")
-            if "api.replicate.com" in get:
-                return True
-        return False
+        urls = data.get("urls", {})
+        return urls and "api.replicate.com" in urls.get("get", "")
 
     def parse(self, data: Dict) -> ReplicateJobResponse:
-        _id = data.get("id")
+        status, progress = self.parse_status_and_progress(data)
 
-        status = data.get("status", None)
-        if not status:
-            if data.get("status_code", 200) and not data.get("is_error", True):
-                status = "succeeded"
-
-        status = self.STATUS_MAP.get(status, ServerJobStatus.QUEUED)
-
-        progress = data.get("progress", None)
-        progress = float(progress) if progress is not None else 0.0
-        if status == ServerJobStatus.FINISHED:
-            progress = 1.0
+        # Handle Replicate-specific status edge case
+        if status == ServerJobStatus.UNKNOWN:
+            if data.get("status_code", 200) == 200 and not data.get("is_error", False):
+                status = ServerJobStatus.FINISHED
 
         urls = data.get("urls", {})
+        job_id = data.get("id", "")
+
         return ReplicateJobResponse(
-            id=_id,
+            id=job_id,
             status=status,
-            message=data.get("error"),  # Replicate uses 'error' instead of 'message'
+            error=data.get("error"),
             progress=progress,
             result=data.get("output"),
-            refresh_job_url=urls.get("get", f"v1/predictions/{_id}"),
-            cancel_job_url=urls.get("cancel", f"v1/predictions/{_id}/cancel"),
-            stream_job_url=urls.get("stream", None),
-            version=data.get("version", None),
-            data_removed=data.get("data_removed", None),
-            logs=data.get("logs", None),
-            metrics=data.get("metrics", None),
-            created_at=data.get("created_at", None),
-            execution_started_at=data.get("started_at", None),
-            execution_finished_at=data.get("completed_at", None)
+            refresh_job_url=urls.get("get", f"v1/predictions/{job_id}"),
+            cancel_job_url=urls.get("cancel", f"v1/predictions/{job_id}/cancel"),
+            stream_job_url=urls.get("stream"),
+            version=data.get("version"),
+            data_removed=data.get("data_removed"),
+            logs=data.get("logs"),
+            metrics=data.get("metrics"),
+            created_at=data.get("created_at"),
+            execution_started_at=data.get("started_at"),
+            execution_finished_at=data.get("completed_at"),
+            endpoint_protocol="replicate"
         )
 

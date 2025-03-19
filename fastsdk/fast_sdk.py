@@ -3,11 +3,11 @@ import functools
 from fastCloud import FastCloud
 from fastsdk.jobs.threaded.internal_job import InternalJob
 from fastsdk.utils import get_function_parameters_as_dict
-from fastsdk.web.service_client import ServiceClient
+from fastsdk.web.api_client import APIClient
 
 
 def fastSDK(
-        service_client: ServiceClient,
+        api_client: APIClient,
         start_jobs_immediately=True
 ):
     """
@@ -30,15 +30,15 @@ def fastSDK(
                 max_upload_file_size_mb: float = 1000,
                 *args, **kwargs
         ):
-            self.service_client = service_client
-            self.service_client.add_api_key(service_name=service, key=api_key)
+            self.api_client = api_client
+            self.api_client.add_api_key(service_name=service, key=api_key)
 
             if service is not None:
-                self.service_client._default_service = service
-                self.service_client.active_service = service
+                self.api_client._default_service = service
+                self.api_client.active_service = service
 
             if fast_cloud is not None:
-                self.service_client.set_fast_cloud(fast_cloud=fast_cloud,
+                self.api_client.set_fast_cloud(fast_cloud=fast_cloud,
                                                    upload_to_cloud_threshold_mb=upload_to_cloud_threshold_mb,
                                                    max_upload_file_size_mb=max_upload_file_size_mb)
             self.start_jobs_immediately = start_jobs_immediately
@@ -46,7 +46,7 @@ def fastSDK(
             return original_init(self, *args, **kwargs)
 
         def request(self, endpoint_route: str, call_async=True, *args, **kwargs):
-            return self.service_client(endpoint_route, call_async, *args, **kwargs)
+            return self.api_client(endpoint_route, call_async, *args, **kwargs)
 
         # Add new attributes and methods to the original class
         cls.__init__ = new_init
@@ -68,7 +68,7 @@ def fastJob(func):
     @functools.wraps(func)
     def wrapper(instance, *func_args, **func_kwargs) -> InternalJob:
         # check if the function is called from a fastsdk class:
-        if not hasattr(instance, "service_client") or not hasattr(instance, "request"):
+        if not hasattr(instance, "api_client") or not hasattr(instance, "request"):
             raise RuntimeError("The fastJob decorator can only be used in a class decorated with fastSDK.")
 
         # get the function names of the func and exclude "job" parameters

@@ -7,7 +7,7 @@ from media_toolkit import MediaFile
 
 class RequestHandlerSocaity(RequestHandler):
     """
-    Works with Replicate API. https://replicate.com/docs/topics/predictions/create-a-prediction
+    Works with Socaity API: https://api.socaity.ai/docs
     """
     async def _request_endpoint(
             self,

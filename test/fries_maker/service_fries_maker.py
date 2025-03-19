@@ -1,10 +1,10 @@
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.definitions.enums import ModelDomainTag
-from fastsdk.web.service_client import ServiceClient
+from fastsdk.web.api_client import APIClient
 from fastsdk import MediaFile, ImageFile, AudioFile, VideoFile
 
 
-srvc_fries_maker = ServiceClient(
+srvc_fries_maker = APIClient(
     service_url="localhost:8000/api",
     model_description=AIModelDescription(
         model_name="FriesMaker",

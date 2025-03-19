@@ -4,7 +4,8 @@ from typing import Union, Any
 
 from httpx import HTTPStatusError
 
-from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, SocaityJobResponse, RunpodJobResponse
+from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, SocaityJobResponse, \
+    RunpodJobResponse, JobProgress
 from fastsdk.web.definitions.server_response.response_parser import ResponseParser
 from fastsdk.web.req.request_handler import RequestHandler
 from media_toolkit import MediaFile
@@ -124,19 +125,19 @@ class EndPointRequest:
         return result
 
     @property
-    def progress(self) -> (float, str):
+    def progress(self) -> JobProgress:
         """
         Returns the progress of the job along with a message.
         """
-        if self.server_response and hasattr(self.server_response, "progress"):
-            return self.server_response.progress, self.server_response.message
+        if self.server_response and getattr(self.server_response, "progress", None):
+            return self.server_response.progress
 
-        if self.in_between_server_response and hasattr(self.in_between_server_response, "progress"):
-            return self.in_between_server_response.progress, self.in_between_server_response.message
+        if self.in_between_server_response and getattr(self.in_between_server_response, "progress", None):
+            return self.in_between_server_response.progress
 
         if self.first_request_send_at:
-            return 0, "Request sent"
-        return 0, "Preparing request"
+            return JobProgress(progress=0, message="Request sent")
+        return JobProgress(progress=0, message="Preparing request")
 
     def is_finished(self):
         """
@@ -204,9 +205,7 @@ class EndPointRequest:
             self.finished_on_server_at = copy(self.last_refresh_call_response_at)
             return self
         elif server_response.status == ServerJobStatus.FAILED:
-            self.error = server_response.message
-            if server_response.message is None:
-                self.error = "Job failed without error message."
+            self.error = server_response.error or "Job failed without error message."
             self.finished_on_server_at = copy(self.last_refresh_call_response_at)
             return self
         elif server_response.status == ServerJobStatus.CANCELLED:

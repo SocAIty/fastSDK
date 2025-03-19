@@ -1,4 +1,4 @@
-class JobProgress:
+class FastJobProgress:
     def __init__(self, progress: float = 0, message: str = None):
         """
         Used to display _progress of a job while executing.

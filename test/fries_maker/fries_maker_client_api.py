@@ -4,7 +4,7 @@ from typing import List, Union
 
 from fastsdk import ImageFile, MediaFile, AudioFile
 from fastsdk.jobs.threaded.internal_job import InternalJob
-from fastsdk.fast_sdk import FastSDK
+from fastsdk import fastSDK
 
 import cv2
 import librosa
@@ -12,7 +12,7 @@ import numpy as np
 
 from .service_fries_maker import srvc_fries_maker
 
-fries_maker_client_api = FastSDK(srvc_fries_maker)
+fries_maker_client_api = fastSDK(srvc_fries_maker)
 
 @fries_maker_client_api.sdk()
 class FriesMaker:

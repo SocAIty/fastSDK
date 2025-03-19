@@ -79,6 +79,7 @@ def normalize_name(name: str, preserve_paths: bool = False) -> Union[str, None]:
         """Helper function to normalize a single segment of text"""
         text = text.lower()
         text = ' '.join(text.split())  # Replace multiple spaces with single space
+        text = text.replace("\\", "/")  # Replace backslashes with forward slashes
         text = text.replace(' ', '-').replace("_", '-')   # Replace spaces and _ with hyphens
         text = re.sub(r'[^a-z0-9-]', '', text)  # Keep only alphanumeric and hyphens
         text = re.sub(r'-+', '-', text)  # Replace multiple hyphens with single hyphen

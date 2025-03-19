@@ -21,11 +21,11 @@ from fastsdk.web.req.request_handler_runpod import RequestHandlerRunpod
 from fastsdk.web.req.request_handler_socaity import RequestHandlerSocaity
 
 
-class ServiceClient:
+class APIClient:
     """
-    The ServiceClient is used to interact with a service and its endpoints.
+    The APIClient is used to interact with an API (service) and its endpoints.
     A service usually has multiple endpoints with different routes.
-    The ServiceClient makes it easy to add and call these endpoints.
+    The APIClient makes it easy to add and call these endpoints.
     """
     def __init__(
             self,
@@ -44,7 +44,7 @@ class ServiceClient:
             **kwargs
     ):
         """
-        Initialize the ServiceClient with the required information.
+        Initialize the APIClient with the required information.
         :param service_urls: urls to possible hosts of the service api. Structured as { service_url_nickname: url }
         :param active_service: which of the services to use
         :param service_name: the service_name of the service. Used to find the service in the registry.
@@ -253,8 +253,8 @@ class ServiceClient:
     def _add_endpoint(self, endpoint: EndPoint) -> Tuple[callable, callable]:
         """
         Adds and endpoint and convenience functions to an service
-        You can call the ServiceClient.endpoint_function_name to send a request to the endpoint and wait for the server_response.
-        Use the ServiceClient.endpoint_function_name_async to send a request and get an asyncio_task object.
+        You can call the APIClient.endpoint_function_name to send a request to the endpoint and wait for the server_response.
+        Use the APIClient.endpoint_function_name_async to send a request and get an asyncio_task object.
         --> this is in particular useful to get fine graded updates of the server.
         :param endpoint: an instance of an EndPoint object.
         :return: a tuple of the sync and async_jobs function
@@ -400,7 +400,7 @@ def create_request_handler(
         if fast_cloud is None and api_key is not None:
             # for debugging the backend
             if "http://localhost:8000" in service_address.url:
-                fast_cloud = SocaityUploadAPI(api_key=api_key, upload_endpoint="http://localhost:8000/api/v0/files")
+                fast_cloud = SocaityUploadAPI(api_key=api_key, upload_endpoint="http://localhost:8000/v0/files")
             else:
                 fast_cloud = SocaityUploadAPI(api_key=api_key)
     else:

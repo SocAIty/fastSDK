@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Dict, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    from fastsdk import ServiceClient
+    from fastsdk import APIClient
 
 from singleton_decorator import singleton
 
@@ -16,19 +16,19 @@ class Registry:
     def __init__(self):
         self._services = {}
 
-    def add_service(self, name: str, obj: ServiceClient):
+    def add_service(self, name: str, obj: APIClient):
         if name is None or not isinstance(name, str):
             raise ValueError("service_name must be given and be a string.")
 
         self._services[name] = obj
 
-    def remove_service(self, service: Union[ServiceClient, str]):
+    def remove_service(self, service: Union[APIClient, str]):
         if isinstance(service, str):
             self._services.pop(service)
-        elif isinstance(service, ServiceClient):
+        elif isinstance(service, APIClient):
             self._services.pop(service.service_name)
 
-    def get_services(self, name_filter: str = None) -> Dict[str, ServiceClient]:
+    def get_services(self, name_filter: str = None) -> Dict[str, APIClient]:
         if not name_filter:
             return self._services
 

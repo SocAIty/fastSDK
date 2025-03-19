@@ -1,6 +1,6 @@
 from fastsdk import MediaFile, ImageFile
 from fastsdk.jobs.job_utils import gather_generator
-from tests.fries_maker.fries_maker_client_api import FriesMaker
+from .fries_maker_client_api import FriesMaker
 
 import cv2
 import base64

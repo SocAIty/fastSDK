@@ -2,37 +2,68 @@ from enum import Enum
 
 
 class ServerJobStatus(Enum):
-    """
-    These status are delivered by the server to indicate the current state of a submitted job to it
-    Works with socaity endpoints and runpod endpoints
-    """
-    QUEUED: str = "QUEUED"  # job was recieved by the server and is waiting there to be processed
-    PROCESSING: str = "PROCESSING"
-    FINISHED: str = "FINISHED"
-    FAILED: str = "FAILED"
-    TIMEOUT: str = "TIMEOUT"
-    CANCELLED: str = "CANCELLED"
-    UNKNOWN: str = "UNKNOWN"  # If the server returns a status which is not in the list
+    """Unified status enum for jobs across multiple server providers"""
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    FINISHED = "FINISHED"
+    FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+    CANCELLED = "CANCELLED"
+    UNKNOWN = "UNKNOWN"
 
     @staticmethod
-    def from_str(status: str):
-        if str is None:
+    def map_runpod_status(status: str) -> 'ServerJobStatus':
+        if not status:
             return ServerJobStatus.UNKNOWN
 
-        status = status.upper()
-
-        # runpod reparse
-        runpod_status_map = {
+        RUNPOD_STATUS_MAPPINGS = {
+            # Runpod mappings
             "IN_QUEUE": ServerJobStatus.QUEUED,
             "IN_PROGRESS": ServerJobStatus.PROCESSING,
             "COMPLETED": ServerJobStatus.FINISHED,
-            "TIMED_OUT": ServerJobStatus.TIMEOUT,
+            "FAILED": ServerJobStatus.FAILED,
+            "CANCELLED": ServerJobStatus.CANCELLED,
+            "TIMED_OUT": ServerJobStatus.TIMEOUT
         }
-        if status in runpod_status_map:
-            return runpod_status_map[status]
 
-        # else it should be an ordinary status
-        try:
-            return ServerJobStatus(status)
-        except Exception as e:
+        return RUNPOD_STATUS_MAPPINGS.get(status, ServerJobStatus.UNKNOWN)
+
+    @staticmethod
+    def map_replicate_status(status: str) -> 'ServerJobStatus':
+        if not status:
             return ServerJobStatus.UNKNOWN
+
+        REPLICATE_STATUS_MAPPINGS = {
+            # Replicate mappings
+            "STARTING": ServerJobStatus.QUEUED,
+            "BOOTING": ServerJobStatus.PROCESSING,
+            "PROCESSING": ServerJobStatus.PROCESSING,
+            "SUCCEEDED": ServerJobStatus.FINISHED,
+            "FAILED": ServerJobStatus.FAILED,
+            "CANCELED": ServerJobStatus.CANCELLED,
+        }
+
+        return REPLICATE_STATUS_MAPPINGS.get(status, ServerJobStatus.UNKNOWN)
+
+
+    @classmethod
+    def from_str(cls, status_str: str) -> 'ServerJobStatus':
+        """Convert any platform's status string to the unified enum"""
+        if not status_str:
+            return cls.UNKNOWN
+
+        if isinstance(status_str, cls):
+            return status_str
+
+        if isinstance(status_str, str):
+            status_str = status_str.upper()
+
+        # Try direct match first
+        try:
+            return cls(status_str)
+        except ValueError:
+            # Try mapped values
+            x = cls.map_runpod_status(status_str)
+            if x is not None and x != cls.UNKNOWN:
+                return x
+            return cls.map_replicate_status(status_str)
