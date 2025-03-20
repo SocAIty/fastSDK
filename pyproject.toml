@@ -18,7 +18,7 @@ dependencies = [
     "media-toolkit>=00.02.01",
     "singleton_decorator==1.0.0",
     "pydantic>=2.10.4",
-    "fastcloud>=0.0.4"
+    "fastcloud>=0.0.5"
 ]
 
 [project.optional-dependencies]
@@ -36,3 +36,4 @@ full = [
 
 [project.urls]
 Repository = "https://github.com/SocAIty/fastSDK"
+Homepage = "https://www.socaity.ai"
