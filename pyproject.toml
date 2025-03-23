@@ -10,12 +10,12 @@ requires-python = ">=3.8"
 authors = [
     { name = "SocAIty" }
 ]
-license = { text = "GPLv3" }
+license = {file = "LICENSE"}
 readme = "README.md"
 dependencies = [
     "tqdm",
     "httpx",
-    "media-toolkit>=00.02.01",
+    "media-toolkit>=00.02.02",
     "singleton_decorator==1.0.0",
     "pydantic>=2.10.4",
     "fastcloud>=0.0.5"
