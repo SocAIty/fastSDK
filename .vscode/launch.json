@@ -3,7 +3,7 @@
     "configurations": [
         {
             "name": "Python: Fries Maker Client API",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/fries_maker/fries_maker_client_api.py",
             "console": "integratedTerminal",
@@ -14,7 +14,7 @@
         },
         {
             "name": "Python: FastSDK",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/fastsdk",
             "console": "integratedTerminal",
@@ -25,7 +25,7 @@
         },
         {
             "name": "Python: Tests",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test",
             "console": "integratedTerminal",

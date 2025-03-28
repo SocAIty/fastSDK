@@ -19,7 +19,7 @@ class RequestData:
         self.headers = headers
         self.url = url
 
-            
+
 class RequestHandler:
     def __init__(
             self,
@@ -33,7 +33,7 @@ class RequestHandler:
     ):
         """
         Initialize the RequestHandler with service configuration and file handling settings.
-        
+
         Args:
             service_address: URL or ServiceAddress object for the target service
             async_job_manager: Optional AsyncJobManager for handling async operations
@@ -46,7 +46,7 @@ class RequestHandler:
         self.api_key = api_key
         self.async_job_manager = async_job_manager or AsyncJobManager()
         self.httpx_client = httpx.AsyncClient()
-        
+
         # File handling configuration
         self.fast_cloud = fast_cloud
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
@@ -75,12 +75,12 @@ class RequestHandler:
     def _format_params(p_def: Union[BaseModel, dict], *args, **kwargs) -> dict:
         """
         Format request parameters according to the endpoint definition.
-        
+
         Args:
             p_def: Parameter definition (Pydantic model or dict)
             *args: Positional arguments
             **kwargs: Keyword arguments
-            
+
         Returns:
             Formatted parameter dictionary
         """
@@ -115,7 +115,7 @@ class RequestHandler:
         body_params = self._format_params(endpoint.body_params, *args, **kwargs)
         file_params = self._format_params(endpoint.file_params, *args, **kwargs)
         headers = self._add_authorization_to_headers(endpoint.headers)
-            
+
         return RequestData(
             query_params=query_params,
             body_params=body_params,
@@ -164,13 +164,13 @@ class RequestHandler:
 
         # Process remaining files
         processable_files = files.get_processable_files(raise_exception=False, silent=True)
-        
+
         if self._attached_files_format == 'base64':
             body_params.update(processable_files.to_base64())
             file_params = {}
         else:
             file_params = processable_files.to_httpx_send_able_tuple()
-            
+
         return body_params, file_params
 
     def _build_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
@@ -185,18 +185,18 @@ class RequestHandler:
         """Prepare all request components."""
         # According to the endpoint definition, the request parameters are formatted.
         request_data = await self._format_request_params(endpoint, *args, **kwargs)
-        
+
         # Process and prepare files
         media_files = MediaDict(files=request_data.file_params, download_files=False, read_system_files=True)
 
         processed_files = await self._handle_file_upload(media_files)
         if processed_files:
             body_files, file_params = await self._prepare_files(processed_files)
+            request_data.file_params = file_params
             request_data.body_params.update(body_files)
 
         request_data.url = self._build_request_url(endpoint, request_data.query_params)
         return request_data
-
 
     async def _process_endpoint_request(self, endpoint: EndPoint, *args, **kwargs):
         """Process a complete endpoint request."""
@@ -211,17 +211,16 @@ class RequestHandler:
             timeout=endpoint.timeout
         )
 
-
     def request_endpoint(self, endpoint: EndPoint, callback: callable = None, *args, **kwargs) -> AsyncJob:
         """
         Submit an endpoint request as an async job.
-        
+
         Args:
             endpoint: The endpoint definition
             callback: Optional callback function
             *args: Positional arguments
             **kwargs: Keyword arguments
-            
+
         Returns:
             AsyncJob object for tracking the request
         """
@@ -239,7 +238,7 @@ class RequestHandler:
     ) -> AsyncJob:
         """
         Submit a direct URL request as an async job.
-        
+
         Args:
             url: Target URL
             method: HTTP method
@@ -247,7 +246,7 @@ class RequestHandler:
             callback: Optional callback function
             delay: Optional delay before execution
             timeout: Request timeout
-            
+
         Returns:
             AsyncJob object for tracking the request
         """

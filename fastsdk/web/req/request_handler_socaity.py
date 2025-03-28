@@ -1,10 +1,5 @@
-from io import BytesIO
-from typing import Union, Tuple, Dict, Any
-
-from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.service_adress import SocaityServiceAddress
-from fastsdk.web.req.request_handler import RequestHandler, RequestData
-from media_toolkit import MediaFile, MediaList, MediaDict
+from fastsdk.web.req.request_handler import RequestHandler
 
 
 class APIKeyError(Exception):
@@ -29,18 +24,3 @@ class RequestHandlerSocaity(RequestHandler):
         if len(self.api_key) != 67 or not self.api_key.startswith("sk_"):
             raise APIKeyError("Invalid API key. It should look like 'sk_...'. ")
         return True
-
-    async def _prepare_request_params(self, endpoint: EndPoint, *args, **kwargs) -> RequestData:
-        """Prepare request parameters for Socaity API."""
-        request_data = await super()._prepare_request_params(endpoint, *args, **kwargs)
-        
-        # Convert file_params to MediaDict if needed
-        if file_params and not isinstance(file_params, MediaDict):
-            request_data.file_params = MediaDict(request_data.file_params, download_files=False)
-            
-        # Process files using base handler logic
-        body_files, file_params = await self._prepare_files(request_data.file_params)
-        request_data.body_params.update(body_files)
-
-        return request_data
-
