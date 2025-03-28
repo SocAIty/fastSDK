@@ -1,6 +1,6 @@
 import json
 from fastsdk.web.definitions.endpoint import EndPoint
-from fastsdk.web.req.request_handler import RequestHandler, RequestData
+from fastsdk.web.req.request_handler import RequestHandler, RequestData, APIKeyError
 from media_toolkit import MediaDict
 
 
@@ -10,6 +10,11 @@ class RequestHandlerRunpod(RequestHandler):
         # Runpod expects the files to be in base64 format in the input post parameter.
         # setting the value changes the behavior of the _upload_files method
         self._attached_files_format = 'base64'
+
+    def validate_api_key(self):
+        if self.api_key is None:
+            raise APIKeyError("API key is required for using runpod services.", "runpod", "https://www.runpod.com/")
+        return True
 
     def _prepare_request_url(self, endpoint: EndPoint, query_params: dict | None = None) -> str:
         # Overwrites the default implementation, because query parameters are not added to the url but to the body

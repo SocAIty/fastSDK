@@ -11,8 +11,15 @@ from fastsdk.web.definitions.service_adress import ServiceAddress, create_servic
 from media_toolkit import MediaDict
 
 
+class APIKeyError(Exception):
+    """Custom exception for API key validation errors."""
+    def __init__(self, message: str, service_name: str, signup_url: str):
+        message = f"{message}\nPlease create an account at {signup_url} and get an API key. Set the API key using environment variable {service_name.upper()}_API_KEY."
+        super().__init__(message)
+
+
 class RequestData:
-    def __init__(self, query_params: dict = {}, body_params: dict = {}, file_params: dict = {}, headers: dict = {}, url: str = ""):
+    def __init__(self, query_params: dict = {}, body_params: dict = {}, file_params: Union[dict, any, None] = None, headers: dict = {}, url: str = ""):
         self.query_params = query_params
         self.body_params = body_params
         self.file_params = file_params
@@ -44,6 +51,7 @@ class RequestHandler:
         """
         self.service_address = create_service_address(service_address) if not isinstance(service_address, ServiceAddress) else service_address
         self.api_key = api_key
+        self.validate_api_key()
         self.async_job_manager = async_job_manager or AsyncJobManager()
         self.httpx_client = httpx.AsyncClient()
 

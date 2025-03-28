@@ -5,8 +5,7 @@ from fastCloud import FastCloud, ReplicateUploadAPI
 from fastsdk.jobs.async_jobs.async_job_manager import AsyncJobManager
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.service_adress import ServiceAddress
-from fastsdk.web.req.request_handler import RequestHandler, RequestData
-from media_toolkit import MediaDict
+from fastsdk.web.req.request_handler import RequestHandler, RequestData, APIKeyError
 
 
 class RequestHandlerReplicate(RequestHandler):
@@ -45,6 +44,15 @@ class RequestHandlerReplicate(RequestHandler):
         self._attached_files_format = 'base64'
         self._attach_files_to = 'body'
 
+    def validate_api_key(self):
+        if self.api_key is None:
+            raise APIKeyError("API key is required for Replicate API.", "replicate", "https://www.replicate.com/")
+        
+        if not self.api_key.startswith("r8_"):
+            raise APIKeyError("Invalid API key. It should look like 'r8_...'. ", "replicate", "https://www.replicate.com/")
+
+        return True
+
     def _build_request_url(self, endpoint: EndPoint, query_params: dict | None = None) -> str:
         # Overwrites the default implementation, because /endpoint_route is not attached.
         # Also query_parameters are added to body not to url.
@@ -55,13 +63,10 @@ class RequestHandlerReplicate(RequestHandler):
         """Prepare request parameters for Replicate API."""
         request_data = await super()._prepare_request_params(endpoint, *args, **kwargs)
 
-        # Convert file_params to MediaDict if needed
-        if request_data.file_params and not isinstance(request_data.file_params, MediaDict):
-            request_data.file_params = MediaDict(request_data.file_params)
-
         # replicates expects query params to be in body also
         if request_data.query_params:
             request_data.body_params.update(request_data.query_params)
+            request_data.query_params = {}
 
         # replicate formats the body as json with {"input": body_params, "version?": model_version}
         request_data.body_params = {"input": request_data.body_params}

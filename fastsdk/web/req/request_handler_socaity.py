@@ -1,12 +1,5 @@
 from fastsdk.web.definitions.service_adress import SocaityServiceAddress
-from fastsdk.web.req.request_handler import RequestHandler
-
-
-class APIKeyError(Exception):
-    """Custom exception for API key validation errors."""
-    def __init__(self, message: str):
-        message = f"{message}\nPlease create an account at https://www.socaity.ai/ and get an API key. Set the API key using environment variable SOCAITY_API_KEY."
-        super().__init__(message)
+from fastsdk.web import RequestHandler, RequestData, APIKeyError, EndPoint
 
 
 class RequestHandlerSocaity(RequestHandler):
@@ -19,8 +12,19 @@ class RequestHandlerSocaity(RequestHandler):
             return True
 
         if self.api_key is None:
-            raise APIKeyError("API key is required for Socaity API.")
+            raise APIKeyError("API key is required for Socaity API.", "socaity", "https://www.socaity.ai/")
 
         if len(self.api_key) != 67 or not self.api_key.startswith("sk_"):
-            raise APIKeyError("Invalid API key. It should look like 'sk_...'. ")
+            raise APIKeyError("Invalid API key. It should look like 'sk_...'. ", "socaity", "https://www.socaity.ai/")
         return True
+
+    async def _prepare_request_params(self, endpoint: EndPoint, *args, **kwargs) -> RequestData:
+        """Prepare request parameters for Replicate API."""
+        request_data = await super()._prepare_request_params(endpoint, *args, **kwargs)
+
+        # socaity expects query params to be in body also
+        if request_data.query_params:
+            request_data.body_params.update(request_data.query_params)
+            request_data.query_params = {}
+
+        return request_data
