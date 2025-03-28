@@ -26,6 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -164,3 +165,6 @@ cython_debug/
 # other
 test/test_cloud_handler.py
 test/test_files/text2img
+
+# vscode
+.vscode/
