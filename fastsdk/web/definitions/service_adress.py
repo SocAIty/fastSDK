@@ -87,7 +87,7 @@ class SocaityServiceAddress(ServiceAddress):
 
 
 class ReplicateServiceAddress(ServiceAddress):
-    def __init__(self, address: str = None, model_name: str = None, version: str = None):
+    def __init__(self, address: str | None = None, model_name: str | None = None, version: str | None = None):
         if address:
             self.url, self.model_name, self.version = self.parse_url(address)
         elif not address and model_name:

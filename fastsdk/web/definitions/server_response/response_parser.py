@@ -5,18 +5,18 @@ import httpx
 
 from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, RunpodJobResponse
 from fastsdk.web.definitions.server_response.response_parser_strategies import SocaityResponseParser, \
-    RunpodResponseParser, ReplicateResponseParser
+    RunpodResponseParser, ReplicateResponseParser, ResponseParserStrategy
 
 
 class ResponseParser:
     def __init__(self):
-        self.strategies = [
+        self.strategies: list[ResponseParserStrategy] = [
             SocaityResponseParser(),
             RunpodResponseParser(),
             ReplicateResponseParser()
         ]
 
-    def parse_response(self, response: httpx.Response) -> Union[BaseJobResponse, bytes, None]:
+    def parse_response(self, response: httpx.Response) -> Union[BaseJobResponse, bytes, dict, None]:
         """Parse HTTP response into appropriate response object."""
         if not response:
             return None

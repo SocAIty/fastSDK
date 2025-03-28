@@ -1,3 +1,5 @@
+from typing import List
+
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.definitions.enums import ModelDomainTag
 from fastsdk.web.api_client import APIClient
@@ -5,19 +7,36 @@ from fastsdk import MediaFile, ImageFile, AudioFile, VideoFile
 
 
 srvc_fries_maker = APIClient(
-    service_url="localhost:8000/api",
-    model_description=AIModelDescription(
-        model_name="FriesMaker",
-        model_domain_tags=[ModelDomainTag.IMAGE, ModelDomainTag.AUDIO],
-        model_description="This service is used to make fries. This is the test service of the socaity_router."
-    )
+    service_name="fries_maker",
+    service_urls={
+        "local": "localhost:8000/api",
+        "runpod_local": "localhost:8000/run"
+    }
 )
-srvc_fries_maker.add_endpoint(endpoint_route="make_fries", body_params={"fries_name": str, "amount": int})
+
 srvc_fries_maker.add_endpoint(
-    endpoint_route="make_file_fries",
-    file_params={"potato_one": MediaFile, "potato_two": MediaFile, "potato_three": MediaFile}
+    endpoint_route="test_single_file_upload",
+    file_params={"file1": ImageFile}
 )
-srvc_fries_maker.add_endpoint(endpoint_route="make_image_fries", file_params={"potato_one": ImageFile})
-srvc_fries_maker.add_endpoint(endpoint_route="make_audio_fries", file_params={"potato_one": AudioFile, "potato_two": AudioFile})
-srvc_fries_maker.add_endpoint(endpoint_route="make_video_fries", file_params={"potato_one": VideoFile, "potato_two": VideoFile})
+
+srvc_fries_maker.add_endpoint(
+    endpoint_route="mixed_media",
+    query_params={
+        "anint2": int,
+        "astring": str,
+        "anint": int,
+        "a_base_model": dict
+    },
+    file_params={
+        "anyfile1": MediaFile,
+        "anyfile2": ImageFile,
+        "anyfile3": MediaFile,
+        "img": ImageFile,
+        "audio": AudioFile,
+        "video": VideoFile,
+        "anyfiles": List[MediaFile],
+        "anyImages": List[ImageFile],
+    }
+)
+
 

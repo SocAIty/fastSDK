@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Union, Optional, Any, Dict
+from typing import Any, Union
 
 from fastsdk.web.definitions.server_job_status import ServerJobStatus
 
 @dataclass
 class JobProgress:
     progress: float = 0.0
-    message: Optional[str] = None
+    message: Union[str, None] = None
 
 
 @dataclass
@@ -21,14 +21,14 @@ class FileResult:
 class BaseJobResponse:
     id: str
     status: ServerJobStatus
-    progress: Optional[JobProgress] = None
-    error: Optional[str] = None
+    progress: Union[JobProgress, None] = None
+    error: Union[str, None] = None
     result: Union[FileResult, Any, None] = None
-    refresh_job_url: Optional[str] = None
-    cancel_job_url: Optional[str] = None
-    endpoint_protocol: Optional[str] = None
+    refresh_job_url: Union[str, None] = None
+    cancel_job_url: Union[str, None] = None
+    endpoint_protocol: Union[str, None] = None
 
-    def update(self, other: Union['BaseJobResponse', Dict]):
+    def update(self, other: Union['BaseJobResponse', dict]):
         if isinstance(other, BaseJobResponse):
             other = other.__dict__
         for key, value in other.items():
@@ -38,9 +38,9 @@ class BaseJobResponse:
 
 @dataclass
 class SocaityJobResponse(BaseJobResponse):
-    created_at: Optional[str] = None
-    execution_started_at: Optional[str] = None
-    execution_finished_at: Optional[str] = None
+    created_at: Union[str, None] = None
+    execution_started_at: Union[str, None] = None
+    execution_finished_at: Union[str, None] = None
 
     def __post_init__(self):
         if not self.endpoint_protocol:
@@ -49,22 +49,22 @@ class SocaityJobResponse(BaseJobResponse):
 
 @dataclass
 class RunpodJobResponse(BaseJobResponse):
-    delayTime: Optional[int] = None
-    executionTime: Optional[int] = None
-    retries: Optional[int] = None
-    workerId: Optional[str] = None
+    delayTime: Union[int, None] = None
+    executionTime: Union[int, None] = None
+    retries: Union[int, None] = None
+    workerId: Union[str, None] = None
 
 
 @dataclass
 class ReplicateJobResponse(BaseJobResponse):
-    created_at: Optional[str] = None
-    execution_started_at: Optional[str] = None
-    execution_finished_at: Optional[str] = None
-    metrics: Optional[Dict[str, Any]] = None
-    stream_job_url: Optional[str] = None
-    version: Optional[str] = None
-    data_removed: Optional[bool] = None
-    logs: Optional[str] = None
+    created_at: Union[str, None] = None
+    execution_started_at: Union[str, None] = None
+    execution_finished_at: Union[str, None] = None
+    metrics: Union[dict[str, Any], None] = None
+    stream_job_url: Union[str, None] = None
+    version: Union[str, None] = None
+    data_removed: Union[bool, None] = None
+    logs: Union[str, None] = None
 
     def _replicate_time_to_datetime(self, time_str: str) -> datetime:
         if "Z" in time_str:

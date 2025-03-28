@@ -1,10 +1,10 @@
 import inspect
-from typing import Union, Any
+from typing import Any
 import os
 from collections.abc import Iterable
 import re
 
-from media_toolkit.utils.file_conversion import media_from_file_result
+from media_toolkit.utils.file_conversion import media_from_FileModel
 
 
 def is_valid_file_path(path: str):
@@ -17,10 +17,10 @@ def is_valid_file_path(path: str):
 
 def get_function_parameters_as_dict(
         func: callable,
-        exclude_param_names: Union[list, str] = None,
-        exclude_param_types: Union[list, Any] = None,
-        func_args: Union[list, tuple] = None,
-        func_kwargs: dict = None
+        exclude_param_names: list | str | None = None,
+        exclude_param_types: list | Any = None,
+        func_args: list | tuple | None = None,
+        func_kwargs: dict | None = None
 ):
     """
     Get the parameters of a function as a dict
@@ -64,7 +64,7 @@ def flatten_list(xs):
             yield x
 
 
-def normalize_name(name: str, preserve_paths: bool = False) -> Union[str, None]:
+def normalize_name(name: str, preserve_paths: bool = False) -> str | None:
     """
     Normalize a name to be openapi compatible and better searchable.
     Will remove any special characters. Transforms lowercase. Replaces spaces with hyphens.

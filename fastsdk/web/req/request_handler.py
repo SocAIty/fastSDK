@@ -1,8 +1,6 @@
-import json
-from typing import Union, Tuple
-
 import httpx
 from pydantic import BaseModel
+from typing import Optional, Union
 
 from fastCloud import FastCloud
 from fastCloud.core import BaseUploadAPI
@@ -10,50 +8,50 @@ from fastsdk.jobs.async_jobs.async_job import AsyncJob
 from fastsdk.jobs.async_jobs.async_job_manager import AsyncJobManager
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.service_adress import ServiceAddress, create_service_address
-from media_toolkit import MediaFile
+from media_toolkit import MediaDict
 
 
+class RequestData:
+    def __init__(self, query_params: dict = {}, body_params: dict = {}, file_params: dict = {}, headers: dict = {}, url: str = ""):
+        self.query_params = query_params
+        self.body_params = body_params
+        self.file_params = file_params
+        self.headers = headers
+        self.url = url
+
+            
 class RequestHandler:
     def __init__(
             self,
-            service_address: Union[str, ServiceAddress],
-            async_job_manager: AsyncJobManager = None,
-            api_key: str = None,
-            fast_cloud: FastCloud = None,
+            service_address: str | ServiceAddress,
+            async_job_manager: AsyncJobManager | None = None,
+            api_key: str | None = None,
+            fast_cloud: FastCloud | None = None,
             upload_to_cloud_threshold_mb: float = 3,
             max_upload_file_size_mb: float = 1000,
             *args, **kwargs
     ):
         """
-        :param service_address: The service_address or URL of the service.
-        :param async_job_manager: The async_jobs job manager to use.
-        :param fast_cloud:
-            If given: files are uploaded to the cloud provider
-                (azure, s3, replicate, socaity..) and the file is sent as uploaded_file_url to the endpoint
-            If None: send files as bytes or base64 to the endpoint.
-        :param upload_to_cloud_threshold_mb:
-            If the combined file size is greater than this limit, the file is uploaded to the cloud handler.
-        :param max_upload_file_size_mb: an upper limit for the upload. If > this limit the job will return immediately.
+        Initialize the RequestHandler with service configuration and file handling settings.
+        
+        Args:
+            service_address: URL or ServiceAddress object for the target service
+            async_job_manager: Optional AsyncJobManager for handling async operations
+            api_key: Optional API key for authentication
+            fast_cloud: Optional cloud storage handler for large file uploads
+            upload_to_cloud_threshold_mb: File size threshold (MB) for cloud upload
+            max_upload_file_size_mb: Maximum allowed file size (MB)
         """
-        if not isinstance(service_address, ServiceAddress):
-            service_address = create_service_address(service_address)
-
-        self.service_address = service_address
+        self.service_address = create_service_address(service_address) if not isinstance(service_address, ServiceAddress) else service_address
         self.api_key = api_key
-
-        self.validate_api_key()
-
-        # self.service_spec = determine_service_type(self.service_address)
-        # add the async_jobs job manager or create a new one
-        self.async_job_manager = async_job_manager if async_job_manager is not None else AsyncJobManager()
+        self.async_job_manager = async_job_manager or AsyncJobManager()
         self.httpx_client = httpx.AsyncClient()
-
+        
+        # File handling configuration
         self.fast_cloud = fast_cloud
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
         self.max_upload_file_size_mb = max_upload_file_size_mb
-
         self._attached_files_format = 'httpx'
-        self._attach_files_to = None
 
     def validate_api_key(self):
         """
@@ -62,9 +60,13 @@ class RequestHandler:
         """
         return True
 
-    def set_fast_cloud(self, fast_cloud: FastCloud,
-                       upload_to_cloud_threshold_mb: float = None,
-                       max_upload_file_size_mb: float = None):
+    def set_fast_cloud(
+        self,
+        fast_cloud: FastCloud,
+        upload_to_cloud_threshold_mb: Optional[float] = None,
+        max_upload_file_size_mb: Optional[float] = None
+    ):
+        """Update cloud storage configuration."""
         self.fast_cloud = fast_cloud
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
         self.max_upload_file_size_mb = max_upload_file_size_mb
@@ -72,15 +74,15 @@ class RequestHandler:
     @staticmethod
     def _format_params(p_def: Union[BaseModel, dict], *args, **kwargs) -> dict:
         """
-        Restructures the request parameters to be a well formed dict matching the definition in p_def.
-        Allows the request to be called arbitrary like request_endpoint(def, whatever1, whatever2, my_param1='value') ..
-        Therefore it feeds the values of args and kwargs into the dict.
-        If p_def is a BaseModel; the model_fields are filled and the model is validated.
-        In all other cases the dict is just created with all values given.
-        :param p_def:
-            The definition of the parameters. As dict {param_name: param_type} or as a pydantic model.
-        :param args: arbitrary values that are matched with the p_def
-        :param kwargs: arbitrary values that are matched with the p_def
+        Format request parameters according to the endpoint definition.
+        
+        Args:
+            p_def: Parameter definition (Pydantic model or dict)
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            Formatted parameter dictionary
         """
         if p_def is None:
             return {}
@@ -95,56 +97,33 @@ class RequestHandler:
             # return as dict
             return get_params.dict(exclude_unset=True)
 
-        _named_args = {k: v for k, v in zip(p_def, args)}
-        # update with kwargs (fill values)
-        _named_args.update(kwargs)
+        named_args = {k: v for k, v in zip(p_def, args)}
+        named_args.update(kwargs)
         # filter out the parameters that are not in the endpoint definition
-        return {k: v for k, v in _named_args.items() if k in p_def}
+        return {k: v for k, v in named_args.items() if k in p_def}
 
-    def _add_authorization_to_headers(self, headers: dict = None):
+    def _add_authorization_to_headers(self, headers: dict | None = None) -> dict | None:
+        """Add authorization header if API key is present."""
         headers = {} if headers is None else headers
-        if self.api_key is not None:
-            headers["Authorization"] = "Bearer " + self.api_key
-        if len(headers) == 0:
-            headers = None
-        return headers
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers if headers else None
 
-    async def _format_request_params(self, endpoint: EndPoint, *args, **kwargs) -> Tuple[dict, dict, dict, dict]:
-        """
-        Formats the request parameters to match the given endpoint definition.
-        after parameters will have structure { 'param_name': 'param_value' } for query, body, files, headers
-        files are not yet read or uploaded.
-        :param endpoint: The endpoint definition
-        :param args: arbitrary values that are matched with the endpoint def
-        :param kwargs: arbitrary values that are matched with the endpoint def
-        """
-        # Format the parameters
-        query_p = self._format_params(endpoint.query_params, *args, **kwargs)
-        body_p = self._format_params(endpoint.body_params, *args, **kwargs)
-        file_p = self._format_params(endpoint.file_params, *args, **kwargs)
+    async def _format_request_params(self, endpoint: EndPoint, *args, **kwargs) -> RequestData:
+        """Prepare all request parameters for the endpoint."""
+        query_params = self._format_params(endpoint.query_params, *args, **kwargs)
+        body_params = self._format_params(endpoint.body_params, *args, **kwargs)
+        file_params = self._format_params(endpoint.file_params, *args, **kwargs)
         headers = self._add_authorization_to_headers(endpoint.headers)
-        return query_p, body_p, file_p, headers
+            
+        return RequestData(
+            query_params=query_params,
+            body_params=body_params,
+            file_params=file_params,
+            headers=headers
+        )
 
-    @staticmethod
-    async def _read_files(files: dict) -> dict:
-        """
-        Reads the files to be uploaded into memory.
-        :returns dict in form { 'file_name': MediaFile }
-        """
-        # ToDo: Make an async version of MediaFile loading to be true async and to load multiple files much faster.
-        return {
-            k: MediaFile().from_any(v)
-            for k, v in files.items()
-        }
-
-    def _convert_files_to_attachable_format(self, files: dict) -> dict:
-        if self._attached_files_format == 'httpx':  # default for fasttaskapi
-            return {k: v.to_httpx_send_able_tuple() for k, v in files.items()}
-        elif self._attached_files_format == 'base64':  # used for example in replicate
-            return {k: v.to_base64() for k, v in files.items()}
-        return files
-
-    async def _upload_files(self, files: dict) -> Union[dict, None]:
+    async def _handle_file_upload(self, files: MediaDict) -> MediaDict | dict | None:
         """
         Uploads the files based on different upload strategies:
         (1) If the cloud handler is not set:
@@ -160,124 +139,94 @@ class RequestHandler:
             - dict: If files were uploaded. The dict is formatted as { file_name: download_url }.
             - dict: If files are attached. The dict contains the files in a format that can be sent with httpx.
         """
-        if files is None or len(files) == 0:
+        if not files or len(files) == 0:
+            return None
+
+        total_size = files.file_size('mb')
+        if self.max_upload_file_size_mb and total_size > self.max_upload_file_size_mb:
+            raise ValueError(f"File size exceeds limit of {self.max_upload_file_size_mb}MB")
+
+        if not self.fast_cloud or not self.upload_to_cloud_threshold_mb or total_size < self.upload_to_cloud_threshold_mb:
             return files
 
-        # filter out Nones
-        files = {k: v for k, v in files.items() if v is not None and isinstance(v, MediaFile)}
-        if len(files) == 0:
-            return files
+        if isinstance(self.fast_cloud, BaseUploadAPI):
+            return await self.fast_cloud.upload_async(files)
+        return self.fast_cloud.upload(files)
 
-        # determine combined file size
-        file_size = sum([v.file_size('mb') for v in files.values()])
-        if self.max_upload_file_size_mb is not None and file_size > self.max_upload_file_size_mb:
-            raise Exception(
-                f"The file you have provided exceed the max upload limit of {self.max_upload_file_size_mb}mb"
-            )
+    async def _prepare_files(self, files: MediaDict) -> tuple[dict, dict]:
+        """Prepare files for request based on configuration."""
+        if not files or len(files) == 0:
+            return {}, {}
 
-        if self.fast_cloud is None:
-            return self._convert_files_to_attachable_format(files) #self._upload_attach_files_to_request_params(body_params=body_params, files=files)
+        # Get URL files (from cloud uploads)
+        url_files = files.get_url_files()
+        body_params = url_files.to_dict()
 
-        # Case 1: Attach directly if size is below limit
-        if file_size < self.upload_to_cloud_threshold_mb:
-            return self._convert_files_to_attachable_format(files) #self._upload_attach_files_to_request_params(body_params, files)
+        # Process remaining files
+        processable_files = files.get_processable_files(raise_exception=False, silent=True)
+        
+        if self._attached_files_format == 'base64':
+            body_params.update(processable_files.to_base64())
+            file_params = {}
         else:
-            # upload async
-            if isinstance(self.fast_cloud, BaseUploadAPI):
-                uploaded_file_urls = await self.fast_cloud.upload_async(list(files.values()))
-            else:
-                uploaded_file_urls = self.fast_cloud.upload(list(files.values()))
+            file_params = processable_files.to_httpx_send_able_tuple()
+            
+        return body_params, file_params
 
-            uploaded_files = dict(zip(files.keys(), uploaded_file_urls))
+    def _build_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
+        """Build the complete request URL with query parameters."""
+        base_url = f"{self.service_address.url}/{endpoint.endpoint_route}"
+        if query_params:
+            query_string = "&".join(f"{k}={v}" for k, v in query_params.items())
+            return f"{base_url}?{query_string}"
+        return base_url
 
-            return uploaded_files
+    async def _prepare_request_params(self, endpoint: EndPoint, *args, **kwargs) -> RequestData:
+        """Prepare all request components."""
+        # According to the endpoint definition, the request parameters are formatted.
+        request_data = await self._format_request_params(endpoint, *args, **kwargs)
+        
+        # Process and prepare files
+        media_files = MediaDict(files=request_data.file_params, download_files=False, read_system_files=True)
 
-    async def _process_file_params(self, file_params: dict) -> dict:
-        """
-        Converts the file params to a format that can be sent with httpx.
-        if the total file size > 10 and cloud handler is given, upload the files to the cloud handler
-        - if files were uploaded, the file content is replaced with the file url
-        - if files are not uploaded, they are converted to a with httpx send able format.
-          In the latter case they are also attached to body_params because they are not treated explicitly by httpx.
-        - In case of file_params that are provided as "url" they are not read but attached directly to the body_params.
-        :param file_params: The file params to convert.
-        :return: converted file params
-        """
-        if not file_params or len(file_params) == 0:
-            return file_params
+        processed_files = await self._handle_file_upload(media_files)
+        if processed_files:
+            body_files, file_params = await self._prepare_files(processed_files)
+            request_data.body_params.update(body_files)
 
-        # separate files which are provided as "urls" from physical upload files
-        upload_file_params = {}
-        url_files = {}
-        for k, v in file_params.items():
-            if MediaFile._is_url(v):
-                url_files[k] = v
-            else:
-                upload_file_params[k] = v
+        request_data.url = self._build_request_url(endpoint, request_data.query_params)
+        return request_data
 
-        # read and upload files
-        file_params = await self._read_files(upload_file_params)
-        file_params = await self._upload_files(files=file_params)
 
-        # check which files where uploaded and attach the ones that where to the body_params
-        file_params.update(url_files)
+    async def _process_endpoint_request(self, endpoint: EndPoint, *args, **kwargs):
+        """Process a complete endpoint request."""
+        request_data = await self._prepare_request_params(endpoint, *args, **kwargs)
 
-        return file_params
-
-    def _prepare_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
-        return f"{self.service_address.url}/{endpoint.endpoint_route}"
-
-    async def _prepare_request(self, endpoint: EndPoint, *args, **kwargs):
-        query_p, body_p, file_p, headers = await self._format_request_params(endpoint, *args, **kwargs)
-        file_p = await self._process_file_params(file_p)
-
-        # add query parameters to the url like '/endpoint?param1=value1&param2=value2'
-        url = self._prepare_request_url(endpoint, query_params=query_p)
-        return url, query_p, body_p, file_p, headers
-
-    async def _request_endpoint(
-            self,
-            url: Union[str, None],
-            query_params: Union[dict, None],
-            body_params: Union[dict, None],
-            file_params: Union[dict, None],
-            headers: Union[dict, None],
-            timeout: float,
-            endpoint: EndPoint
-    ):
-        """
-        Please overwrite this method to handle specified requests in your service.
-        All params are already formatted and prepared.
-        Default implementation is a simple httpx post request.
-        """
         return await self.httpx_client.post(
-            url=url, params=query_params, data=body_params, files=file_params, headers=headers, timeout=timeout
+            url=request_data.url,
+            params=request_data.query_params,
+            data=request_data.body_params,
+            files=request_data.file_params,
+            headers=request_data.headers,
+            timeout=endpoint.timeout
         )
 
-    async def _req_ep(self, endpoint: EndPoint, *args, **kwargs):
-        url, query_params, body_params, file_p, headers = await self._prepare_request(endpoint, *args, **kwargs)
-        return await self._request_endpoint(
-            url=url,
-            query_params=query_params,
-            body_params=body_params,
-            file_params=file_p,
-            headers=headers,
-            timeout=endpoint.timeout,
-            endpoint=endpoint
-        )
 
     def request_endpoint(self, endpoint: EndPoint, callback: callable = None, *args, **kwargs) -> AsyncJob:
         """
-        Makes a request to the given endpoint with the parameters given in args and kwargs.
-        :param endpoint: The endpoint definition.
-        :param callback: The callback function to call when the request is done.
-        :param args: arbitrary values that are matched with the endpoint def
-        :param kwargs: arbitrary values that are matched with the endpoint def
-        :return: An AsyncJob object that can be used to get the result of the request.
+        Submit an endpoint request as an async job.
+        
+        Args:
+            endpoint: The endpoint definition
+            callback: Optional callback function
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            AsyncJob object for tracking the request
         """
-        req_coroutine = self._req_ep(endpoint, *args, **kwargs)
-        async_job = self.async_job_manager.submit(req_coroutine, callback=callback, delay=None)
-        return async_job
+        req_coroutine = self._process_endpoint_request(endpoint, *args, **kwargs)
+        return self.async_job_manager.submit(req_coroutine, callback=callback)
 
     def request_url(
             self,
@@ -287,33 +236,34 @@ class RequestHandler:
             callback: callable = None,
             delay: float = None,
             timeout: float = None,
-        ) -> AsyncJob:
+    ) -> AsyncJob:
         """
-        Makes a request to the given url.
-        Adds the authorization header if an api key is configured for the request handler.
-        :param url: The url to make the get request to. Can be a relative path.
-        :param method: The method of the request. GET or POST.
-        :param files: The files to send with the request formatted as httpx_send_able_tuple.
-        :param callback: The callback function to call when the request is done.
-        :param delay: The delay in seconds before the request is sent.
-        :param timeout: The timeout in seconds of the request.
-
-        :return: An AsyncJob object that can be used to get the result of the request.
+        Submit a direct URL request as an async job.
+        
+        Args:
+            url: Target URL
+            method: HTTP method
+            files: Optional files to upload
+            callback: Optional callback function
+            delay: Optional delay before execution
+            timeout: Request timeout
+            
+        Returns:
+            AsyncJob object for tracking the request
         """
-        # for relative paths
-        if "http" not in url:
-            url = url.lstrip("/")  # remove leading slash
-            url = f"{self.service_address.url}/{url}"
+        if not url.startswith(("http://", "https://")):
+            url = f"{self.service_address.url}/{url.lstrip('/')}"
 
         headers = self._add_authorization_to_headers()
 
-        if method.upper() == "GET":
+        method = method.upper()
+        if method == "GET":
             req_coroutine = self.httpx_client.get(url=url, headers=headers, timeout=timeout)
-        elif method.upper() == "POST":
+        elif method == "POST":
             req_coroutine = self.httpx_client.post(url=url, files=files, headers=headers, timeout=timeout)
-        elif method.upper() == "PUT":
+        elif method == "PUT":
             req_coroutine = self.httpx_client.put(url=url, files=files, headers=headers, timeout=timeout)
-        elif method.upper() == "DELETE":
+        elif method == "DELETE":
             req_coroutine = self.httpx_client.delete(url=url, headers=headers, timeout=timeout)
         else:
             req_coroutine = self.httpx_client.post(url=url, headers=headers, timeout=timeout)

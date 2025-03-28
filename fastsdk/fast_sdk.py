@@ -23,10 +23,10 @@ def fastSDK(
         @functools.wraps(cls)
         def new_init(
                 self,
-                service: str = None,
-                api_key:  str = None,
-                fast_cloud: FastCloud = None,
-                upload_to_cloud_threshold_mb: float = None,
+                service: str | None = None,  
+                api_key: str | None = None, 
+                fast_cloud: FastCloud | None = None,
+                upload_to_cloud_threshold_mb: float | None = None,
                 max_upload_file_size_mb: float = 1000,
                 *args, **kwargs
         ):

@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../media-toolkit"
+		},
+		{
+			"path": "../fastCloud"
+		}
+	],
+	"settings": {}
+}

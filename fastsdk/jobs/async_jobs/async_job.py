@@ -1,7 +1,7 @@
 import asyncio
 from concurrent.futures import Future
 from datetime import datetime
-
+import traceback
 
 class AsyncJob:
 
@@ -59,6 +59,8 @@ class AsyncJob:
             self._future.set_result(result)
         except Exception as e:
             result = None
+            #traceback.print_exc()
+            #print(e.__traceback__)
             self._future.set_exception(e)
 
         return result

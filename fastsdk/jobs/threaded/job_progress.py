@@ -1,5 +1,7 @@
+from typing import Optional
+
 class FastJobProgress:
-    def __init__(self, progress: float = 0, message: str = None):
+    def __init__(self, progress: float = 0, message: Optional[str] = None):
         """
         Used to display _progress of a job while executing.
         :param progress: value between 0 and 1.0
@@ -8,7 +10,7 @@ class FastJobProgress:
         self._progress = progress
         self._message = message
 
-    def set_progress(self, progress: float, message: str = None):
+    def set_progress(self, progress: float, message: Optional[str] = None):
         self._progress = progress
         self._message = message
 

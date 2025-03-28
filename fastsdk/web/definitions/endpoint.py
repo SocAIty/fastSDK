@@ -1,5 +1,4 @@
 from copy import copy
-from typing import Union
 from pydantic import BaseModel
 
 
@@ -10,10 +9,10 @@ class EndPoint:
     def __init__(
             self,
             endpoint_route: str,
-            query_params: Union[dict, BaseModel] = None,
-            body_params: Union[dict, BaseModel] = None,
-            file_params: dict = None,
-            header_params: dict = None,
+            query_params: dict | BaseModel | None = None,
+            body_params: dict | BaseModel | None = None,
+            file_params: dict | None = None,
+            header_params: dict | None = None,
             timeout: float = 3600,
             refresh_interval_s: float = 1.0
     ):

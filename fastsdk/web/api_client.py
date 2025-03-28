@@ -1,6 +1,6 @@
 import inspect
 import threading
-from typing import Union, Tuple
+from typing import Tuple, Any
 from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel
@@ -30,16 +30,16 @@ class APIClient:
     def __init__(
             self,
             # required information for execution
-            service_urls: Union[dict, str, list, ServiceAddress],
-            active_service: str = None,
+            service_urls: dict | str | list | ServiceAddress,
+            active_service: str | None = None,
             # optional information for documentation and services
-            service_name: str = None,
-            service_description: str = None,
-            model_description: AIModelDescription = None,
+            service_name: str | None = None,
+            service_description: str | None = None,
+            model_description: AIModelDescription | None = None,
             # optional args for s3 upload and co.
-            fast_cloud: FastCloud = None,
-            upload_to_cloud_threshold_mb: int = None,
-            api_keys: dict = None,
+            fast_cloud: FastCloud | None = None,
+            upload_to_cloud_threshold_mb: int | None = None,
+            api_keys: dict[str, str] | None = None,
             *args,
             **kwargs
     ):
@@ -64,8 +64,11 @@ class APIClient:
         self._default_service = active_service or next(iter(self.service_urls))
 
         # service metadata
-        normalized_name = normalize_name(service_name)
-        self.service_name = normalized_name if normalized_name is not None else self.service_urls.get(self._default_service)
+        if service_name:
+            normalized_name = normalize_name(service_name)
+            self.service_name = normalized_name if normalized_name is not None else self.service_urls.get(self._default_service)
+        else:
+            self.service_name = self.service_urls.get(self._default_service)
         self.service_description = service_description
         self.model_description = model_description
 
@@ -77,11 +80,13 @@ class APIClient:
         # If nothing is specified we use the default api keys defined by environment variables
         if api_keys is None:
             from fastsdk.settings import API_KEYS
-            api_keys = { name: val for name, val in API_KEYS.items() if val is not None } # copy the dict
+            # Filter out None values and ensure all keys and values are strings
+            self.api_keys = {str(name): str(val) for name, val in API_KEYS.items() if val is not None}
         elif isinstance(api_keys, str):
-            api_keys = { active_service: api_keys }
-
-        self.api_keys = api_keys or {}
+            self.api_keys = {str(active_service): str(api_keys)}
+        else:
+            # Ensure all keys and values are strings
+            self.api_keys = {str(name): str(val) for name, val in api_keys.items() if val is not None}
 
         # request handlers are shared between active services.
         # They get lazy initialized when a request is made to a not yet initialized service.
@@ -135,9 +140,13 @@ class APIClient:
         current_service = self.active_service
         # Lazy initialize request handler
         if current_service not in self.request_handlers:
+            service_address = self.service_urls.get(current_service)
+            if service_address is None:
+                raise ValueError(f"Service {current_service} not found in service URLs")
+
             # Create request handler
             self.request_handlers[current_service] = create_request_handler(
-                service_address=self.service_urls.get(current_service),
+                service_address=service_address,
                 api_key=self.api_keys.get(current_service),
                 fast_cloud=self.fast_cloud,
                 upload_to_cloud_threshold_mb=self.upload_to_cloud_threshold_mb
@@ -148,7 +157,7 @@ class APIClient:
     def add_service_url(self, service_name: str, service_url: str):
         self.service_urls[service_name] = create_service_address(service_url)
 
-    def add_api_key(self, service_name: str, key: str):
+    def add_api_key(self, service_name: str | None, key: str | None):
         """
         Add or update an API key for a service.
         If a request handler for the service exists, it will be recreated to use the new API key.
@@ -175,8 +184,8 @@ class APIClient:
     def set_fast_cloud(
             self,
             fast_cloud: FastCloud,
-            upload_to_cloud_threshold_mb: float = 3,
-            max_upload_file_size_mb: float = 1000
+            upload_to_cloud_threshold_mb: float | None = 3,
+            max_upload_file_size_mb: float | None = 1000
     ):
         """
         Set or update the cloud storage handler for all request_handlers.
@@ -190,7 +199,7 @@ class APIClient:
 
         if upload_to_cloud_threshold_mb is None:
             upload_to_cloud_threshold_mb = 3
-        self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
+        self.upload_to_cloud_threshold_mb = float(upload_to_cloud_threshold_mb)
 
         for service_name, handler in self.request_handlers.items():
             handler.set_fast_cloud(fast_cloud,
@@ -270,9 +279,9 @@ class APIClient:
     def add_endpoint(
             self,
             endpoint_route: str,
-            query_params: Union[dict, BaseModel] = None,
-            body_params: Union[dict, BaseModel] = None,
-            file_params: dict = None,
+            query_params: dict[str, Any] | BaseModel | None = None,
+            body_params: dict[str, Any] | BaseModel | None = None,
+            file_params: dict[str, Any] | None = None,
             timeout: int = 3600,
             refresh_interval_s: float = 0.5,
             normalize_route_name: bool = True
@@ -304,9 +313,9 @@ class APIClient:
 
         ep = EndPoint(
             endpoint_route=endpoint_route,
-            query_params=query_params,
-            body_params=body_params,
-            file_params=file_params,
+            query_params=query_params or {},
+            body_params=body_params or {},
+            file_params=file_params or {},
             timeout=timeout,
             refresh_interval_s=refresh_interval_s
         )
@@ -322,7 +331,7 @@ class APIClient:
         return self.endpoint_request_funcs
 
     @staticmethod
-    def _create_service_urls(service_urls: Union[dict, str, list]):
+    def _create_service_urls(service_urls: dict | str | list | ServiceAddress):
         # set service urls and fix them if necessary
         if isinstance(service_urls, str):
             service_urls = {"0": create_service_address(service_urls)}
@@ -346,8 +355,10 @@ class APIClient:
         :return: EndPointRequest object
         """
         # Get the endpoint
-        endpoint_route = normalize_name(endpoint_route, preserve_paths=True)
-        endpoint_route = endpoint_route.strip("/")
+        normalized_route = normalize_name(endpoint_route, preserve_paths=True)
+        if normalized_route is None:
+            raise ValueError(f"Invalid endpoint route: {endpoint_route}")
+        endpoint_route = normalized_route.strip("/")
 
         if call_async:
             endpoint_route = f"{endpoint_route}_async" if not endpoint_route.endswith("_async") else endpoint_route
@@ -369,10 +380,10 @@ class APIClient:
 
 
 def create_request_handler(
-        service_address: [str, ServiceAddress, SocaityServiceAddress, RunpodServiceAddress, ReplicateServiceAddress],
-        api_key: str = None,
-        fast_cloud: FastCloud = None,
-        upload_to_cloud_threshold_mb: int = None
+        service_address: str | ServiceAddress | SocaityServiceAddress | RunpodServiceAddress | ReplicateServiceAddress,
+        api_key: str | None = None,
+        fast_cloud: FastCloud | None = None,
+        upload_to_cloud_threshold_mb: float | None = None
 ) -> RequestHandler:
     """
     Create a request handler based on the service address.

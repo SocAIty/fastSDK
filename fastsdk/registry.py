@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, TYPE_CHECKING, Union
+from typing import Dict, TYPE_CHECKING, Union, Optional
 
 if TYPE_CHECKING:
     from fastsdk import APIClient
@@ -28,7 +28,7 @@ class Registry:
         elif isinstance(service, APIClient):
             self._services.pop(service.service_name)
 
-    def get_services(self, name_filter: str = None) -> Dict[str, APIClient]:
+    def get_services(self, name_filter: Optional[str] = None) -> Dict[str, APIClient]:
         if not name_filter:
             return self._services
 

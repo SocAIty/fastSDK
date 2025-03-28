@@ -101,7 +101,7 @@ class EndPointRequest:
         """
         Waits until the final server_response is available.
         It only returns the result of the socaity server_response not the meta information.
-        If the result is of type FileResult it will be converted into a media-toolkit MediaFile.
+        If the result is of type FileModel it will be converted into a media-toolkit MediaFile.
         """
         self.wait_until_finished()
         if self.server_response is None:
@@ -118,14 +118,14 @@ class EndPointRequest:
         #    try:
         #        return media_from_file_result(result, allow_reads_from_disk=False)
         #    except Exception as e:
-        #        print(f"Error in converting the FileResult of server_response: {self.server_response.id} "
+        #        print(f"Error in converting the FileModel of server_response: {self.server_response.id} "
         #              f"to MediaFile. Error: {e}")
         #        return result
 
         return result
 
     @property
-    def progress(self) -> JobProgress:
+    def progress(self) -> Union[JobProgress, None]:
         """
         Returns the progress of the job along with a message.
         """
@@ -287,7 +287,10 @@ class EndPointRequest:
                                   f" Host not resolvable. Check internet connection and service url. "
                                   f"Details: {async_job.error}")
                 else:
-                    self.error = f"Error on first request to {self._endpoint.endpoint_route}: {async_job.error}"
+                    error_msg = f"Error on first request to {self._endpoint.endpoint_route}: {async_job.error}"
+                    tb = traceback.TracebackException.from_exception(async_job.error)
+                    error_msg += "\n" + ''.join(tb.format())
+                    self.error = error_msg
                 return self
 
         # normal refresh

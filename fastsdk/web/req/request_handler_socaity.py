@@ -1,14 +1,16 @@
-from typing import Union
+from io import BytesIO
+from typing import Union, Tuple, Dict, Any
 
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.service_adress import SocaityServiceAddress
-from fastsdk.web.req.request_handler import RequestHandler
-from media_toolkit import MediaFile
+from fastsdk.web.req.request_handler import RequestHandler, RequestData
+from media_toolkit import MediaFile, MediaList, MediaDict
+
 
 class APIKeyError(Exception):
     """Custom exception for API key validation errors."""
     def __init__(self, message: str):
-        message = f"{message}\nPlease create an account at https://www.socaity.ai/ and get an API key."
+        message = f"{message}\nPlease create an account at https://www.socaity.ai/ and get an API key. Set the API key using environment variable SOCAITY_API_KEY."
         super().__init__(message)
 
 
@@ -28,25 +30,17 @@ class RequestHandlerSocaity(RequestHandler):
             raise APIKeyError("Invalid API key. It should look like 'sk_...'. ")
         return True
 
-    async def _request_endpoint(
-            self,
-            url: Union[str, None],
-            query_params: Union[dict, None],
-            body_params: Union[dict, None],
-            file_params: Union[dict, None],
-            headers: Union[dict, None],
-            timeout: float,
-            endpoint: EndPoint
-    ):
-        # Socaity expects all parameters except of files as query parameters.
-        # Only files go in the body.
-        url_files = {k: v for k, v in file_params.items() if MediaFile._is_url(v)}
-        body_params.update(url_files)
-        file_params = {k: v for k, v in file_params.items() if k not in url_files}
-        file_params = None if len(file_params) == 0 else file_params
+    async def _prepare_request_params(self, endpoint: EndPoint, *args, **kwargs) -> RequestData:
+        """Prepare request parameters for Socaity API."""
+        request_data = await super()._prepare_request_params(endpoint, *args, **kwargs)
+        
+        # Convert file_params to MediaDict if needed
+        if file_params and not isinstance(file_params, MediaDict):
+            request_data.file_params = MediaDict(request_data.file_params, download_files=False)
+            
+        # Process files using base handler logic
+        body_files, file_params = await self._prepare_files(request_data.file_params)
+        request_data.body_params.update(body_files)
 
-        return await self.httpx_client.post(
-            url=url, params=query_params, data=body_params, files=file_params, headers=headers,
-            timeout=endpoint.timeout
-        )
+        return request_data
 

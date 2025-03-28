@@ -1,11 +1,13 @@
 import json
-from typing import Union
+from typing import Union, Optional, Tuple, Dict, Any
 
 from fastCloud import FastCloud, ReplicateUploadAPI
 from fastsdk.jobs.async_jobs.async_job_manager import AsyncJobManager
 from fastsdk.web.definitions.endpoint import EndPoint
 from fastsdk.web.definitions.service_adress import ServiceAddress
-from fastsdk.web.req.request_handler import RequestHandler
+from fastsdk.web.req.request_handler import RequestHandler, RequestData
+from media_toolkit import MediaDict
+
 
 
 class RequestHandlerReplicate(RequestHandler):
@@ -14,11 +16,11 @@ class RequestHandlerReplicate(RequestHandler):
     """
     def __init__(
             self,
-            service_address: Union[str, ServiceAddress],
-            async_job_manager: AsyncJobManager = None,
-            api_key: str = None,
-            fast_cloud: Union[ReplicateUploadAPI, FastCloud] = None,
-            upload_to_cloud_threshold_mb: float = 3,
+            service_address: str | ServiceAddress | None,
+            async_job_manager: Optional[AsyncJobManager] = None,
+            api_key: Optional[str] = None,
+            fast_cloud: Optional[Union[ReplicateUploadAPI, FastCloud]] = None,
+            upload_to_cloud_threshold_mb: Optional[float] = 3,
             *args, **kwargs
         ):
 
@@ -44,44 +46,30 @@ class RequestHandlerReplicate(RequestHandler):
         self._attached_files_format = 'base64'
         self._attach_files_to = 'body'
 
-    def _prepare_request_url(self, endpoint: EndPoint, query_params: dict = None) -> str:
+    def _build_request_url(self, endpoint: EndPoint, query_params: dict | None = None) -> str:
         # Overwrites the default implementation, because /endpoint_route is not attached.
+        # Also query_parameters are added to body not to url.
         # (replicate always just has 1 endpoint)
         return self.service_address.url
 
-    async def _request_endpoint(
-            self,
-            url: Union[str, None],
-            query_params: Union[dict, None],
-            body_params: Union[dict, None],
-            file_params: Union[dict, None],
-            headers: Union[dict, None],
-            timeout: float,
-            endpoint: EndPoint
-    ):
-        # Strategy:
-        # Official models '/models/' -> Normal post request
-        # Deployment '/deployments/' -> Normal post request
-        # Community models '/predictions'/ -> Add version parameter and is get request
-        # Refresh call '/predictions?job_id=' -> Get request
-
-        # replicate wants file params attached to body as base64 or url
-        if file_params:
-            body_params.update(file_params)
-
+    async def _prepare_request_params(self, endpoint: EndPoint, *args, **kwargs) -> RequestData:
+        """Prepare request parameters for Replicate API."""
+        request_data = await super()._prepare_request_params(endpoint, *args, **kwargs)
+        
+        # Convert file_params to MediaDict if needed
+        if request_data.file_params and not isinstance(request_data.file_params, MediaDict):
+            request_data.file_params = MediaDict(request_data.file_params)
+        
         # replicates expects query params to be in body also
-        if query_params:
-            body_params.update(query_params)
+        if request_data.query_params:
+            request_data.body_params.update(request_data.query_params)
 
         # replicate formats the body as json with {"input": body_params, "version?": model_version}
-        body_params = {"input": body_params}
+        request_data.body_params = {"input": request_data.body_params}
         # Add version parameter for community models to get params to make predictions
         version = getattr(self.service_address, "version", None)
-        if "/predictions" in url and version:
-            body_params['version'] = version
+        if request_data.url and "/predictions" in request_data.url and version:
+            request_data.body_params['version'] = version
 
-        # replicate requires the data to be a json input parameter
-        data = json.dumps(body_params)
-        return await self.httpx_client.post(url=url, data=data, headers=headers, timeout=timeout)
-
+        return request_data
 

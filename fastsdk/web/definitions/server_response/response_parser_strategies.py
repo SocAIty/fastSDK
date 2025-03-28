@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from fastsdk.web.definitions.server_job_status import ServerJobStatus
 from fastsdk.web.definitions.server_response.base_response import BaseJobResponse, SocaityJobResponse, \
     RunpodJobResponse, ReplicateJobResponse, JobProgress
-from media_toolkit.utils.file_conversion import media_from_file_result
+from media_toolkit.utils.file_conversion import media_from_FileModel
 
 
 class ResponseParserStrategy(ABC):
@@ -14,14 +14,14 @@ class ResponseParserStrategy(ABC):
         pass
 
     @abstractmethod
-    def parse(self, data: Dict) -> BaseJobResponse:
+    def parse(self, data: Dict) -> BaseJobResponse | dict:
         """Parse the data into a BaseJobResponse object."""
         pass
 
     @staticmethod
     def parse_status_and_progress(data: Dict) -> tuple[ServerJobStatus, JobProgress]:
         """Parse status and progress from response data."""
-        status = ServerJobStatus.from_str(data.get("status"))
+        status = ServerJobStatus.from_str(data.get("status", "UNKNOWN"))
 
         # Extract progress data
         progress_value = data.get("progress", 0.0)
@@ -58,10 +58,10 @@ class SocaityResponseParser(ResponseParserStrategy):
         Method checks the results of the job, and converts file results to media-toolkit objects
         """
         if isinstance(result, dict):
-            return media_from_file_result(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
+            return media_from_FileModel(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
         elif isinstance(result, list):
             return [
-                media_from_file_result(r, allow_reads_from_disk=False, default_return_if_not_file_result=r)
+                media_from_FileModel(r, allow_reads_from_disk=False, default_return_if_not_file_result=r)
                 for r in result
             ]
         else:
@@ -93,7 +93,7 @@ class RunpodResponseParser(ResponseParserStrategy):
         return (
             "id" in data and
             "status" in data and
-            ServerJobStatus.map_runpod_status(data.get("status")) != ServerJobStatus.UNKNOWN
+            ServerJobStatus.map_runpod_status(data.get("status", "UNKNOWN")) != ServerJobStatus.UNKNOWN
         )
 
     def parse(self, data: Dict) -> RunpodJobResponse:
