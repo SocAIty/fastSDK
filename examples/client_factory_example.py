@@ -12,7 +12,7 @@ current_path = Path(__file__).parent.parent
 sys.path.append(str(current_path))
 
 # Now we can import from fastsdk
-from fastsdk.client_factory.api_client_factory import create_client  # noqa: E402
+from fastsdk.client_factory.api_client_factory import create_sdk  # noqa: E402
 from fastsdk.service_management import ServiceManager  # noqa: E402
 from fastsdk.service_management.service_definition import (  # noqa: E402
     ServiceDefinition, EndpointDefinition, EndpointParameter,
@@ -97,7 +97,7 @@ def main():
     
     # Create a client for this service
     output_dir = Path(__file__).parent / "generated_clients"
-    client_path = create_client(
+    client_path = create_sdk(
         service_definition=service,
         save_path=str(output_dir),
         class_name="ExampleService"

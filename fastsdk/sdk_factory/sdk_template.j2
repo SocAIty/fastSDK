@@ -1,4 +1,4 @@
-from fastsdk.APISDK import BaseAPISDK
+from fastsdk.fastSDK import FastSDK
 from fastsdk.service_management import ServiceManager
 {%- if imports_typing %}
 from typing import {{ imports_typing }}
@@ -7,7 +7,7 @@ from typing import {{ imports_typing }}
 from media_toolkit import {{ imports_media_toolkit }}
 {% endif %}
 
-class {{ class_name }}(BaseAPISDK):
+class {{ class_name }}(FastSDK):
     """
     {{ service.description or service.short_desc or "Generated client for " + service.display_name }}
     """

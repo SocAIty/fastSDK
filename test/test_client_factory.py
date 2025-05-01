@@ -1,10 +1,10 @@
-from fastsdk.client_factory import create_client
+from fastsdk.client_factory import create_sdk
 import sys
 import os
 
 
 def test_create_client():
-    saved_client_path, class_name = create_client("test/test_files/face2face.json", save_path="test/output/face2face.py")
+    saved_client_path, class_name = create_sdk("test/test_files/face2face.json", save_path="test/output/face2face.py")
     # create dynamic import of the new file 
     import importlib.util
     

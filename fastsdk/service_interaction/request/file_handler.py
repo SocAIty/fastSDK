@@ -110,4 +110,4 @@ class FileHandler:
             return MediaList(download_files=True, read_system_files=False).from_any(response)
 
         # Return original response if no file processing is needed
-        return response 
+        return response

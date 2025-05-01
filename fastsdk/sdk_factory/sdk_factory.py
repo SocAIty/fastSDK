@@ -297,7 +297,7 @@ def _normalize_class_name(display_name: str) -> str:
     return class_name
 
 
-def create_client(
+def create_sdk(
     service_definition: Union[str, ServiceDefinition],
     save_path: Optional[str] = None, 
     class_name: Optional[str] = None,

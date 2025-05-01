@@ -7,12 +7,12 @@ from meseex.control_flow import polling_task, PollAgain
 
 from fastsdk.service_interaction.request.file_handler import FileHandler
 import fastsdk.service_interaction.request.request_builder as request_builder
-
+from fastCloud import SocaityUploadAPI, ReplicateUploadAPI
 
 from fastsdk.service_interaction.response.response_parser import ResponseParser
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
 
-from fastsdk.service_interaction.request.api_client import APIClient
+from fastsdk.service_interaction.request import APIClient, APIClientReplicate, APIClientRunpod, APIClientSocaity
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 
 
@@ -53,9 +53,39 @@ class _ApiJobManager:
             service_def = ServiceManager.get_service(service_id)
             if not service_def:
                 raise ValueError(f"Service {service_id} not found")
-            self.api_clients[service_id] = APIClient(service_def=service_def, api_key=api_key)
+            
+            api_client = None
+            if service_def.specification == "runpod":
+                api_client = APIClientRunpod(service_def=service_def, api_key=api_key)
+            elif service_def.specification in ["fasttaskapi", "socaity"]:
+                api_client = APIClientSocaity(service_def=service_def, api_key=api_key)
+            elif service_def.specification == "replicate":
+                api_client = APIClientReplicate(service_def=service_def, api_key=api_key)
+            else:
+                api_client = APIClient(service_def=service_def, api_key=api_key)
 
-    def add_file_handler(self, service_id: str, file_handler: FileHandler):
+            self.api_clients[service_id] = api_client
+
+    def add_file_handler(self, service_id: str, file_handler: FileHandler = None):
+        """
+        Adds a file handler to the job manager.
+        If no file handler is provided, the job manager will create a default one based on the service definition.
+        """
+        if file_handler is not None:
+            self.file_handlers[service_id] = file_handler
+
+        service_def = ServiceManager.get_service(service_id)
+        if service_def.specification == "runpod":
+            file_handler = FileHandler(attached_files_format="base64", max_upload_file_size_mb=300)
+        elif service_def.specification == "socaity":
+            fast_cloud = SocaityUploadAPI(api_key=service_def.api_key)
+            file_handler = FileHandler(fast_cloud=fast_cloud, attached_files_format="httpx", upload_to_cloud_threshold_mb=3, max_upload_file_size_mb=3000)
+        elif service_def.specification == "replicate":
+            fast_cloud = ReplicateUploadAPI(api_key=service_def.api_key)
+            file_handler = FileHandler(fast_cloud=fast_cloud, attached_files_format="base64", upload_to_cloud_threshold_mb=10, max_upload_file_size_mb=300)
+        else:
+            file_handler = FileHandler()
+
         self.file_handlers[service_id] = file_handler
     
     async def _prepare_request(self, job: APISeex) -> request_builder.RequestData:

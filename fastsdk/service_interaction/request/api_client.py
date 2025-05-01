@@ -5,6 +5,13 @@ from fastsdk.service_management.service_definition import ServiceDefinition, End
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
 
 
+class APIKeyError(Exception):
+    """Custom exception for API key validation errors."""
+    def __init__(self, message: str, service_name: str, signup_url: str):
+        message = f"{message}\nPlease create an account at {signup_url} and get an API key. Set the API key using environment variable {service_name.upper()}_API_KEY."
+        super().__init__(message)
+
+
 class RequestData:
     def __init__(self, query_params: dict = {}, body_params: dict = {}, file_params: Union[dict, Any, None] = {}, headers: dict = {}, url: str = ""):
         self.query_params = query_params or {}
@@ -21,14 +28,23 @@ class APIClient:
     """
     def __init__(self, service_def: ServiceDefinition, api_key: str = None):
         self.__client = None
-        self.api_key = api_key
         self.service_def = service_def
-
+        self.api_key = api_key
+        self.validate_api_key()
+        
     @property
     def client(self) -> httpx.AsyncClient:
         if self.__client is None:
             self.__client = httpx.AsyncClient()
         return self.__client
+    
+    def validate_api_key(self) -> bool:
+        """
+        Override this method to validate the API key for specific providers.
+        Returns True if the API key is valid.
+        Raises APIKeyError if the API key is invalid.
+        """
+        return True
 
     def _add_authorization_to_headers(self, headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """
@@ -133,7 +149,7 @@ class APIClient:
         Submit a direct URL request.
         
         Args:
-            service_def: Service definition
+            service_def: Service definition 
             url: Target URL
             method: HTTP method
             files: Optional files to upload
