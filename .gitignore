@@ -168,3 +168,4 @@ test/output
 
 # vscode
 .vscode/
+.vscode
