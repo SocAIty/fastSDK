@@ -23,10 +23,12 @@ def test_simple_rpc():
     easy_job = fries_maker.make_fries(f"super_chilli_fries {count}", count)
     return easy_job
 
+
 def test_upload_file():
     file_jobs = fries_maker.make_file_fries(img_potato_one, img_potato_two)
     result = file_jobs.wait_for_finished()
     return result
+
 
 """
 Images: tests upload of standard file types

@@ -1,0 +1,34 @@
+from fastsdk.APISDK import BaseAPISDK
+from fastsdk.service_management import ServiceManager
+{%- if imports_typing %}
+from typing import {{ imports_typing }}
+{% endif %}
+{%- if imports_media_toolkit %}
+from media_toolkit import {{ imports_media_toolkit }}
+{% endif %}
+
+class {{ class_name }}(BaseAPISDK):
+    """
+    {{ service.description or service.short_desc or "Generated client for " + service.display_name }}
+    """
+    def __init__(self, api_key: str = None):
+        super().__init__(service_name_or_id="{{ service_id }}", api_key=api_key)
+    {% for endpoint in endpoints %}
+    def {{ endpoint.method_name }}(self, {% for param in endpoint.parameters %}{{ param.name }}{% if param.default_value %}: {{ param.type_hint }} = {{ param.default_value }}{% else %}: {{ param.type_hint }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if endpoint.parameters %}, {% endif %}**kwargs):
+        """
+        {{ endpoint.description }}
+        {% if endpoint.parameters and not endpoint.description_contains_args %}
+        
+        Args:
+            {% for param in endpoint.parameters -%}
+            {{ param.name }}: {{ param.description or "No description available." }}{% if param.default_value %} Defaults to {{ param.default_value }}.{% endif %}{% if not loop.last %}{{ "\n            " }}{% endif %}
+            {% endfor -%}
+        {% endif %}
+        {% if endpoint.returns %}
+
+        Returns:
+            {{ endpoint.returns }}
+        {%- endif -%}
+        """
+        return self.submit_job("{{ endpoint.path }}", {% for param in endpoint.parameters %}{{ param.name }}={{ param.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% if endpoint.parameters %}, {% endif %}**kwargs)
+    {% endfor %} 

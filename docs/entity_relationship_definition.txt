@@ -1,0 +1,49 @@
++------------------+       +----------------+       +------------------+
+| ServiceCategory  |       | ModelDefinition|       | ServiceFamily    |
+|------------------|       |----------------|       |------------------|
+| id (PK)         |       | id (PK)        |       | id (PK)          |
+| display_name    |       | display_name   |       | display_name     |
+| input_domain    |       | author         |       | description      |
+| output_domain   |       | license        |       | short_desc       |
+| description     |       | paper_url      |       |                  |
++------------------+       +----------------+       +------------------+
+         |                            |                       |        
+         |                            |                       |        
+         |                            |                       |        
+         |                            |       +------------------------+
+         |                            |       | ServiceDefinition       |
+         |                            |       |------------------------|
+         |                            +------>| id (PK)                 |
+         |                                    | display_name            |
+         |                                    | description             |
+         +----------------------------------->| specification           |
+         |                                    | schemas                 |
+         |                                    | family (FK)             |
+         |                                    | category (FK)           |
+         |                                    | used_models (FK)        |
+         |                                    +------------------------+
+         |                                         |                    
+         |                                         |                    
+         |                                         v                    
+         |                                +--------------------+       
+         |                                | EndpointDefinition |       
+         |                                |--------------------|       
+         +------------------------------>| id (PK)           |       
+                                          | path              |       
+                                          | responses         |       
+                                          | timeout_s         |       
+                                          +--------------------+       
+                                                       |                    
+                                                       |                    
+                                                       v                    
+                                           +-------------------------+       
+                                           | EndpointParameter       |       
+                                           |-------------------------|       
+                                           | name                    |       
+                                           | location                |       
+                                           | required                |       
+                                           | type                    |       
+                                           | default                 |       
+                                           | enum                    |       
+                                           | schema                  |       
+                                           +-------------------------+       

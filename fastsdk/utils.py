@@ -1,17 +1,16 @@
 import inspect
-from typing import Any
+from typing import Any, Optional
 import os
 from collections.abc import Iterable
 import re
-
-from media_toolkit.utils.file_conversion import media_from_FileModel
+import unicodedata
 
 
 def is_valid_file_path(path: str):
     try:
         is_file = os.path.isfile(path)
         return is_file
-    except:
+    except OSError:
         return False
 
 
@@ -64,36 +63,69 @@ def flatten_list(xs):
             yield x
 
 
-def normalize_name(name: str, preserve_paths: bool = False) -> str | None:
+def normalize_name(name: str, preserve_paths: bool = False) -> Optional[str]:
     """
-    Normalize a name to be openapi compatible and better searchable.
-    Will remove any special characters. Transforms lowercase. Replaces spaces with hyphens.
-    :param name: The service name to normalize
-    :param preserve_paths: If True, preserves forward slashes (/) for path segments
-    :return: Normalized service name
+    Normalizes a string for use as a Python identifier or path component.
+    - Converts to lowercase.
+    - Removes leading/trailing whitespace.
+    - Replaces spaces, underscores, and invalid characters with hyphens.
+    - Removes accents from characters.
+    - Collapses multiple consecutive hyphens into one.
+    - Optionally preserves forward slashes for path normalization.
+
+    Args:
+        name: The string to normalize.
+        preserve_paths: If True, forward slashes ('/') are kept.
+
+    Returns:
+        The normalized string, or None if the input is None or empty after normalization.
     """
-    if name is None or not isinstance(name, str):
+    if not name or not isinstance(name, str):
         return None
 
-    def normalize_segment(text: str) -> str:
-        """Helper function to normalize a single segment of text"""
-        text = text.lower()
-        text = ' '.join(text.split())  # Replace multiple spaces with single space
-        text = text.replace("\\", "/")  # Replace backslashes with forward slashes
-        text = text.replace(' ', '-').replace("_", '-')   # Replace spaces and _ with hyphens
-        text = re.sub(r'[^a-z0-9-]', '', text)  # Keep only alphanumeric and hyphens
-        text = re.sub(r'-+', '-', text)  # Replace multiple hyphens with single hyphen
-        return text.strip('-')  # Remove leading/trailing hyphens
+    # Remove accents and convert to lowercase
+    nfkd_form = unicodedata.normalize('NFKD', name.lower())
+    normalized = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
+    # Keep only alphanumeric, hyphens, and optionally slashes
     if preserve_paths:
-        # Normalize each non-empty path segment
-        result = '/'.join(
-            segment for segment in
-            (normalize_segment(s) for s in name.split('/'))
-            if segment
-        )
-    else:
-        result = normalize_segment(name)
+        # Allow slashes, replace other invalid chars with hyphen
+        normalized = re.sub(r'[^a-z0-9\-/]', '-', normalized) # Keep alphanumeric, hyphen, slash
+        # Collapse multiple hyphens, but not around slashes
+        normalized = re.sub(r'-+', '-', normalized)
+        # Remove leading/trailing hyphens unless it's the only character or next to a slash
+        normalized = re.sub(r'(?<!/)-$', '', normalized) # Trailing hyphen unless after slash
+        normalized = re.sub(r'^-(?!/)', '', normalized) # Leading hyphen unless before slash
 
-    return result if result else None
+    else:
+        # Replace disallowed characters (anything not alphanumeric) with hyphens
+        normalized = re.sub(r'[^a-z0-9]+', '-', normalized)
+        # Collapse multiple hyphens
+        normalized = re.sub(r'-+', '-', normalized)
+        # Remove leading/trailing hyphens
+        normalized = normalized.strip('-')
+
+    return normalized if normalized else None 
+
+
+def get_unique_id(base_id: str, existing_ids: set) -> str:
+    """
+    Generate a unique ID based on a base ID and a set of existing IDs.
+    Appends a number to the base ID if it already exists.
+    
+    Args:
+        base_id: Base ID to make unique
+        existing_ids: Set of existing IDs to check against
+        
+    Returns:
+        Unique ID string
+    """
+    if base_id not in existing_ids:
+        return base_id
+    
+    counter = 1
+    while f"{base_id}_{counter}" in existing_ids:
+        counter += 1
+    
+    return f"{base_id}_{counter}"
 

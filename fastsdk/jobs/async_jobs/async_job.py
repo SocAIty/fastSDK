@@ -1,7 +1,7 @@
 import asyncio
 from concurrent.futures import Future
-from datetime import datetime
-import traceback
+from datetime import datetime, timezone
+
 
 class AsyncJob:
 
@@ -17,7 +17,7 @@ class AsyncJob:
         self.coro_timeout = coro_timeout
         self.delay = delay
 
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
         self.future_result_received_at = None
         self.coroutine_executed_at = None
 
@@ -35,7 +35,7 @@ class AsyncJob:
         if self.error is not None:
             return None
 
-        self.future_result_received_at = datetime.utcnow()
+        self.future_result_received_at = datetime.now(timezone.utc)
         future_result = self._future.result()
 
         return future_result
@@ -50,17 +50,17 @@ class AsyncJob:
 
     async def run(self):
         try:
-            self.coroutine_executed_at = datetime.utcnow()
+            self.coroutine_executed_at = datetime.now(timezone.utc)
             if self.delay is not None:
                 await asyncio.sleep(self.delay)
 
             result = await self._coro
-            self.future_result_received_at = datetime.utcnow()
+            self.future_result_received_at = datetime.now(timezone.utc)
             self._future.set_result(result)
         except Exception as e:
             result = None
-            #traceback.print_exc()
-            #print(e.__traceback__)
+            # traceback.print_exc()
+            # print(e.__traceback__)
             self._future.set_exception(e)
 
         return result
@@ -71,6 +71,6 @@ class AsyncJob:
         """
         # still running
         if self.future_result_received_at is None:
-            return datetime.utcnow() - self.created_at
+            return datetime.now(timezone.utc) - self.created_at
 
         return self.future_result_received_at - self.created_at

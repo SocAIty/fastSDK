@@ -1,17 +1,35 @@
 {
     "python.analysis.extraPaths": [
         "${workspaceFolder}",
+        "${workspaceFolder}/../fastsdk",
         "${workspaceFolder}/../fastCloud",
-        "${workspaceFolder}/../media-toolkit"
+        "${workspaceFolder}/../media-toolkit",
+        "${workspaceFolder}/../meseex"
     ],
-    "flake8.args": [
-        "--max-line-length=120",
-        "--ignore=E203,W503,E501"
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.indexing": true,
+    "python.analysis.packageIndexDepths": [
+        {
+            "name": "fastsdk",
+            "depth": 5
+        },
+        {
+            "name": "fastcloud",
+            "depth": 5
+        },
+        {
+            "name": "media_toolkit",
+            "depth": 5
+        },
+        {
+            "name": "meseex",
+            "depth": 5
+        }
     ],
     "python.analysis.diagnosticMode": "workspace",
     "python.analysis.autoSearchPaths": true,
-    "python.analysis.include": [
-        "${workspaceFolder}/**/*.py",
-        "${workspaceFolder}/../**/*.py"
+    "flake8.args": [
+        "--max-line-length=120",
+        "--ignore=E203,W503,E501,E261,W293"
     ]
 } 

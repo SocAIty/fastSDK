@@ -2,7 +2,7 @@ from typing import List
 
 from fastsdk.definitions.ai_model import AIModelDescription
 from fastsdk.definitions.enums import ModelDomainTag
-from fastsdk.web.api_client import APIClient
+from fastsdk.client.api_client import APIClient
 from fastsdk import MediaFile, ImageFile, AudioFile, VideoFile
 
 

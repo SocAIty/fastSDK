@@ -10,7 +10,7 @@ from tqdm import tqdm
 from fastsdk.jobs.threaded.internal_job_manager import InternalJobManager
 from fastsdk.jobs.threaded.job_status import JOB_STATUS
 from fastsdk.jobs.threaded.job_progress import FastJobProgress
-from fastsdk.web.req.endpoint_request import EndPointRequest
+from fastsdk.client.req.endpoint_request import EndPointRequest
 
 
 class InternalJob:

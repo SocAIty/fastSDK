@@ -163,8 +163,8 @@ cython_debug/
 .idea/
 
 # other
-test/test_cloud_handler.py
-test/test_files/text2img
+fastsdk/test/output/
+test/output
 
 # vscode
 .vscode/

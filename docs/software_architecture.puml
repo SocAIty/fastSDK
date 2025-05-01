@@ -1,0 +1,113 @@
+@startuml FastSDK_Architecture
+
+title FastSDK - Software Architecture Overview
+
+' Define styling for clarity
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor White
+    ArrowColor Black
+    BorderColor Black
+}
+
+' =========================
+' JOB MANAGEMENT
+' =========================
+package "Job Management" {
+
+    class JobStore {
+        .. Central registry for all jobs and their phases ..
+    }
+
+    class Job {
+        .. Represents a job with all state, service and result info ..
+        + id
+        + state
+        + service_id
+        + endpoint_definition
+        + request_params
+        + inbetween_results
+        + job_result
+    }
+
+    class ProgressBar {
+        .. Singleton progress display using tqdm ..
+    }
+
+    class JobOrchestrator {
+        .. Manages job lifecycles using SAGA pattern ..
+        + start()
+        + submit_job()
+    }
+
+    class AsyncJobManager {
+        .. Runs asyncio event loop in a thread for async job execution ..
+        + run_async()
+    }
+
+    class AsyncJob {
+        .. Wraps coroutines/futures into manageable objects ..
+        + await_result()
+    }
+
+    JobOrchestrator --> JobStore : organizes jobs
+    JobOrchestrator --> Job : tracks metadata
+    JobOrchestrator --> ProgressBar : updates progress
+    JobOrchestrator --> AsyncJobManager : submits work
+    AsyncJobManager --> AsyncJob : executes
+}
+
+' =========================
+' SERVICE INTERACTION
+' =========================
+package "Service Interaction" {
+
+    class APIClient {
+        .. Communicates with services using definitions ..
+        + send_request()
+        + poll()
+    }
+
+    class RequestBuilder {
+        .. Stateless, sends httpx requests, uploads via fast-cloud ..
+        + prepare_request()
+        + send_request()
+    }
+
+    APIClient --> RequestBuilder : delegates HTTP
+    APIClient --> fastCloud : uploads data
+}
+
+' =========================
+' SERVICE MANAGEMENT
+' =========================
+package "Service Management" {
+
+    class ServiceDefinition {
+        .. Pydantic model of OpenAPI service/endpoint ..
+    }
+
+    class ServiceManager {
+        .. Loads and manages ServiceDefinitions ..
+    }
+
+    class OpenAPIParser {
+        .. Converts openapi.json -> ServiceDefinition ..
+        + parse()
+    }
+
+    class ClientGenerator {
+        .. Creates APIClient from definitions ..
+    }
+
+    ServiceManager --> ServiceDefinition
+    OpenAPIParser --> ServiceDefinition
+    ClientGenerator --> APIClient
+    ClientGenerator --> ServiceDefinition
+}
+
+' Cross-domain connections
+Job --> ServiceDefinition
+JobOrchestrator --> APIClient
+
+@enduml

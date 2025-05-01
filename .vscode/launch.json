@@ -2,36 +2,25 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Fries Maker Client API",
+            "name": "Run test",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/test/fries_maker/fries_maker_client_api.py",
+            "program": "${workspaceFolder}/test/test_manual_sdk.py",
             "console": "integratedTerminal",
-            "justMyCode": true,
+            "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex"
             }
         },
         {
-            "name": "Python: FastSDK",
+            "name": "Run test client factory",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/fastsdk",
+            "program": "${workspaceFolder}/test/test_client_factory.py",
             "console": "integratedTerminal",
-            "justMyCode": true,
+            "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit"
-            }
-        },
-        {
-            "name": "Python: Tests",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/test",
-            "console": "integratedTerminal",
-            "justMyCode": true,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex"
             }
         }
     ]
