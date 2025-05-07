@@ -5,6 +5,10 @@ from fastsdk.service_management.service_definition import EndpointDefinition
 
 
 class APIClientReplicate(APIClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.poll_method = "GET"
+        
     def validate_api_key(self):
         if self.api_key is None:
             raise APIKeyError("API key is required for Replicate API.", "replicate", "https://www.replicate.com/")

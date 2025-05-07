@@ -68,7 +68,10 @@ class _ServiceManager:
         self,
         spec_source: Union[str, Path, Dict[str, Any]],
         service_id: Optional[str] = None,
-        service_address: Optional[str] = None
+        service_address: Optional[str] = None,
+        category: Union[str, List[str]] = None,
+        family_id: str = None,
+        used_models: Union[ModelDefinition, List[ModelDefinition]] = None
     ) -> ServiceDefinition:
         """
         Add a new service definition from an OpenAPI specification source using OpenAPIParser.
@@ -78,6 +81,9 @@ class _ServiceManager:
             spec_source: Optional explicit ID to assign to the service,
                 overriding any ID found in the spec or generated.
             service_address: Optional address to use for the service. If not provided and spec_sources is an url, the url will be used.
+            category: Optional category to assign to the service.
+            family_id: Optional family to assign to the service.
+            used_models: Optional models to assign to the service.
         Returns:
             The added ServiceDefinition object.
             
@@ -118,6 +124,13 @@ class _ServiceManager:
                 print(f"Service name '{service_def.display_name}' (normalized: '{normalized}') conflicts with existing service ID '{self._service_names[normalized]}'. Overwriting mapping.")
             self._service_names[normalized] = service_def.id
 
+        if category:
+            service_def.category = [category] if isinstance(category, str) else category
+        if family_id:
+            service_def.family_id = family_id
+        if used_models:
+            service_def.used_models = [used_models] if isinstance(used_models, ModelDefinition) else used_models
+
         # Store the service definition and its original spec source
         self._services[service_def.id] = service_def
         self._spec_sources[service_def.id] = spec_source
@@ -142,7 +155,7 @@ class _ServiceManager:
                     # Option: Create placeholder category or log warning?
                     # Creating placeholder for now to maintain consistency
                     # print(f"Warning: Category ID '{category_id}' referenced by service '{service_def.id}' not found. Creating placeholder.")
-                    self._categories[category_id] = ServiceCategory(id=category_id, display_name=f"Category {category_id}")
+                    self._categories[category_id] = ServiceCategory(id=category_id)
                     # Add name mapping for placeholder
                     self._category_names[self.normalize_name(f"Category {category_id}")] = category_id
 
@@ -649,7 +662,7 @@ class _ServiceManager:
 
 
 # Expose the singleton instance
-ServiceManager: _ServiceManager = _ServiceManager()
+ServiceManager = _ServiceManager()
 
 
 if __name__ == "__main__":

@@ -11,8 +11,8 @@ class APIClientRunpod(APIClient):
         
         if self.api_key is None:
             raise APIKeyError("API key is required for Runpod API.", "runpod", "https://www.runpod.io/")
-        if not self.api_key.startswith("r8_"):
-            raise APIKeyError("Invalid API key. It should look like 'r8_...'. ", "runpod", "https://www.runpod.io/")
+        if not self.api_key.startswith("rpa_"):
+            raise APIKeyError("Invalid API key. It should look like 'rpa_...'. ", "runpod", "https://www.runpod.io/")
         return True
 
     def _build_request_url(self, endpoint: EndpointDefinition, query_params: dict | None = None) -> str:

@@ -1,18 +1,18 @@
 from typing import Any, Dict
-from fastsdk.service_management.service_definition import ServiceDefinition, EndpointDefinition
+from fastsdk.service_management import ServiceDefinition, EndpointDefinition
+from fastsdk.service_management import ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress
 
 from fastsdk.service_management import ServiceManager
 from meseex import MeseexBox, MrMeseex
 from meseex.control_flow import polling_task, PollAgain
 
 from fastsdk.service_interaction.request.file_handler import FileHandler
-import fastsdk.service_interaction.request.request_builder as request_builder
 from fastCloud import SocaityUploadAPI, ReplicateUploadAPI
 
 from fastsdk.service_interaction.response.response_parser import ResponseParser
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
 
-from fastsdk.service_interaction.request import APIClient, APIClientReplicate, APIClientRunpod, APIClientSocaity
+from fastsdk.service_interaction.request import APIClient, APIClientReplicate, APIClientRunpod, APIClientSocaity, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 
 
@@ -22,6 +22,16 @@ class APISeex(MrMeseex):
         super().__init__(tasks, data, name)
         self.service_def = service_def
         self.endpoint_def = endpoint_def
+
+    @property
+    def response(self) -> BaseJobResponse:
+        """
+        Returns the latest parsed response from the API.
+        """
+        resp = self.get_task_output("Polling")
+        if resp is not None:
+            return resp
+        return self.get_task_output("Sending request")
 
 
 class _ApiJobManager:
@@ -55,12 +65,14 @@ class _ApiJobManager:
                 raise ValueError(f"Service {service_id} not found")
             
             api_client = None
-            if service_def.specification == "runpod":
+            if isinstance(service_def.service_address, RunpodServiceAddress):
                 api_client = APIClientRunpod(service_def=service_def, api_key=api_key)
-            elif service_def.specification in ["fasttaskapi", "socaity"]:
+            elif isinstance(service_def.service_address, SocaityServiceAddress):
                 api_client = APIClientSocaity(service_def=service_def, api_key=api_key)
-            elif service_def.specification == "replicate":
+            elif isinstance(service_def.service_address, ReplicateServiceAddress):
                 api_client = APIClientReplicate(service_def=service_def, api_key=api_key)
+            elif isinstance(service_def.service_address, ServiceAddress) and service_def.specification == "fasttaskapi":
+                api_client = APIClientSocaity(service_def=service_def, api_key=api_key)
             else:
                 api_client = APIClient(service_def=service_def, api_key=api_key)
 
@@ -75,20 +87,20 @@ class _ApiJobManager:
             self.file_handlers[service_id] = file_handler
 
         service_def = ServiceManager.get_service(service_id)
-        if service_def.specification == "runpod":
-            file_handler = FileHandler(attached_files_format="base64", max_upload_file_size_mb=300)
-        elif service_def.specification == "socaity":
+        if isinstance(service_def.service_address, RunpodServiceAddress):
+            file_handler = FileHandler(file_format="base64", max_upload_file_size_mb=300)
+        elif isinstance(service_def.service_address, SocaityServiceAddress):
             fast_cloud = SocaityUploadAPI(api_key=service_def.api_key)
-            file_handler = FileHandler(fast_cloud=fast_cloud, attached_files_format="httpx", upload_to_cloud_threshold_mb=3, max_upload_file_size_mb=3000)
-        elif service_def.specification == "replicate":
+            file_handler = FileHandler(fast_cloud=fast_cloud, file_format="httpx", upload_to_cloud_threshold_mb=3, max_upload_file_size_mb=3000)
+        elif isinstance(service_def.service_address, ReplicateServiceAddress):
             fast_cloud = ReplicateUploadAPI(api_key=service_def.api_key)
-            file_handler = FileHandler(fast_cloud=fast_cloud, attached_files_format="base64", upload_to_cloud_threshold_mb=10, max_upload_file_size_mb=300)
+            file_handler = FileHandler(fast_cloud=fast_cloud, file_format="base64", upload_to_cloud_threshold_mb=10, max_upload_file_size_mb=300)
         else:
             file_handler = FileHandler()
 
         self.file_handlers[service_id] = file_handler
     
-    async def _prepare_request(self, job: APISeex) -> request_builder.RequestData:
+    async def _prepare_request(self, job: APISeex) -> RequestData:
         api_client = self.api_clients[job.service_def.id]
         return api_client.format_request_params(job.endpoint_def, job.input)
      

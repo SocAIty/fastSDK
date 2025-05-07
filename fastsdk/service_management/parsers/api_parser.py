@@ -89,10 +89,10 @@ class OpenAPIParser:
         # Check for combined patterns from legacy code
         if "fast-task-api" in info_text and "runpod" in info_text:
             return "runpod"
-        if 'socaity' in info_text:
-            return "socaity"
         if 'fast-task-api' in info_text or 'fasttaskapi' in info_text:
             return "fasttaskapi"
+        if 'socaity' in info_text:
+            return "socaity"
         if 'openai' in info_title:
             return "openai"
         if 'replicate' in info_title:
@@ -254,7 +254,7 @@ class OpenAPIParser:
 
         # 2. Handle strings that might be media file types
         if param_type == 'string' and schema.get('format') in ['binary', 'byte']:  # starlette upload file
-            return 'file'
+            return ['file', 'string', 'bytes']
 
         # 3. Handle direct types
         if param_type in ParameterType.__args__:
@@ -262,27 +262,27 @@ class OpenAPIParser:
 
         # 3. Check 'anyOf' for specific model references (FastTaskAPI style)
         if 'anyOf' in schema:
-            file_formats = []
+            file_formats = set()
             for option in schema.get('anyOf', []):
                 if '$ref' in option:
                     ref_path = option['$ref']
                     ref_name = ref_path.split('/')[-1].lower()
                     if 'imagefilemodel' in ref_name:
-                        file_formats.append('image')
+                        file_formats.add('image')
                     elif 'videofilemodel' in ref_name:
-                        file_formats.append('video')
+                        file_formats.add('video')
                     elif 'audiofilemodel' in ref_name:
-                        file_formats.append('audio')
+                        file_formats.add('audio')
                     elif 'filemodel' in ref_name:
-                        file_formats.append('file')
+                        file_formats.add('file')
                     # Check for format: binary within anyOf
                 elif option.get('type') == 'string' and option.get('format') == 'binary':
-                    file_formats.append('file')
+                    file_formats.add('file')
 
             if len(file_formats) == 1:
-                return file_formats[0]
+                return [file_formats.pop(), 'string', 'bytes']
             elif file_formats:
-                return file_formats
+                return [*file_formats, 'string', 'bytes']
 
         # 4. Handle object references
         if '$ref' in schema:

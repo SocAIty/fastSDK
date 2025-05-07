@@ -37,7 +37,7 @@ class SocaityJobResponse(BaseJobResponse):
     created_at: Optional[str] = Field(default=None)
     execution_started_at: Optional[str] = Field(default=None)
     execution_finished_at: Optional[str] = Field(default=None)
-    endpoint_protocol: str = Field(default="socaity")
+    endpoint_protocol: str = Field(default="socaity")  # is used to differ in parsing strategies between socaity and runpod
 
 
 class RunpodJobResponse(BaseJobResponse):

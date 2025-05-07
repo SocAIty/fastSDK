@@ -29,7 +29,7 @@ STANDARD_TYPE_MAPPING = {
 
 SKIPPED_ENDPOINT_KEYWORDS = ["/status", "/health"]
 ALLOWED_PARAM_LOCATIONS = ["body", "query"]
-DEFAULT_TEMPLATE_NAME = 'api_client_template.j2'
+DEFAULT_TEMPLATE_NAME = 'sdk_template.j2'
 
 
 def _get_template(custom_template_path: Optional[str] = None) -> Template:

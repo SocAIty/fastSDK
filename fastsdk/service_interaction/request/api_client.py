@@ -31,6 +31,7 @@ class APIClient:
         self.service_def = service_def
         self.api_key = api_key
         self.validate_api_key()
+        self.poll_method = "POST"
         
     @property
     def client(self) -> httpx.AsyncClient:
@@ -89,7 +90,9 @@ class APIClient:
         Puts the parameters from data into the right location RequestData object.
         """
         if not data:
-            return RequestData()
+            rq = RequestData()
+            rq.headers = self._add_authorization_to_headers()
+            return rq
         
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
@@ -105,7 +108,7 @@ class APIClient:
                 ptype = param.type if isinstance(param.type, list) else [param.type]
                 if any(t in ["file", "image", "video", "audio"] for t in ptype):
                     rq.file_params[param.name] = param_value
-                continue
+                    continue
                 
             if param.location == "query":
                 rq.query_params[param.name] = param_value
@@ -113,7 +116,7 @@ class APIClient:
                 rq.body_params[param.name] = param_value
 
         rq.url = self._build_request_url(endpoint, rq.query_params)
-
+        rq.headers = self._add_authorization_to_headers(rq.headers)
         return rq
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
@@ -128,6 +131,7 @@ class APIClient:
         Returns:
             The API response
         """
+        
         return await self.client.post(
             url=request_data.url,
             params=request_data.query_params,
@@ -177,7 +181,7 @@ class APIClient:
         else:
             return await self.client.post(url=url, headers=headers, timeout=timeout, **kwargs)
             
-    async def poll_status(self, response: Union[BaseJobResponse, Any]) -> httpx.Response:
+    async def poll_status(self, response: Union[BaseJobResponse, Any], method: str = "POST") -> httpx.Response:
         """
         Poll for job completion.
         
@@ -192,12 +196,9 @@ class APIClient:
         if not isinstance(response, BaseJobResponse):
             return response
             
-        # Determine request method based on endpoint protocol
-        method = "POST" if response.endpoint_protocol in ["socaity", "runpod"] else "GET"
-        
         # Request updated status
         return await self.request_url(
             url=response.refresh_job_url,
-            method=method
+            method=self.poll_method
         )
         

@@ -1,16 +1,9 @@
 
 from fastsdk.api_job_manager import ApiJobManager
-from fastsdk.service_management import ServiceManager
+from fastsdk.service_management import ServiceManager, SocaityServiceAddress, RunpodServiceAddress, ReplicateServiceAddress
 from fastsdk.service_interaction.request.file_handler import FileHandler
 
-import os 
-
-
-class APIKeyError(Exception):
-    """Custom exception for API key validation errors."""
-    def __init__(self, message: str, service_name: str, signup_url: str):
-        message = f"{message}\nPlease create an account at {signup_url} and get an API key. Set the API key using environment variable {service_name.upper()}_API_KEY."
-        super().__init__(message)
+import os
 
 
 class FastSDK:
@@ -30,8 +23,13 @@ class FastSDK:
         
     def _get_api_key(self):
         # for global services
-        if self.service_definition.specification in ["socaity", "runpod", "replicate"]:
-            return os.getenv(self.service_definition.specification.upper() + "_API_KEY", None)
+        if isinstance(self.service_definition.service_address, SocaityServiceAddress):
+            return os.getenv("SOCAITY_API_KEY", None)
+        elif isinstance(self.service_definition.service_address, RunpodServiceAddress):
+            return os.getenv("RUNPOD_API_KEY", None)
+        elif isinstance(self.service_definition.service_address, ReplicateServiceAddress):
+            return os.getenv("REPLICATE_API_KEY", None)
+            
         # for locals try by service_id
         return os.getenv(self.service_definition.id.upper() + "_API_KEY", None)
 

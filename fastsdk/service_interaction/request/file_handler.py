@@ -8,7 +8,7 @@ from fastsdk.service_interaction.response.base_response import FileModel
 
 
 class FileHandler:
-    def __init__(self, fast_cloud: FastCloud = None, upload_to_cloud_threshold_mb: float = None, max_upload_file_size_mb: float = None):  
+    def __init__(self, fast_cloud: FastCloud = None, upload_to_cloud_threshold_mb: float = None, max_upload_file_size_mb: float = None, file_format: str = 'httpx'):  
         """
         Initialize the FileHandler with optional FastCloud instance and upload thresholds.
         If not provided, the file handler will just return the files as MediaDict.
@@ -16,7 +16,7 @@ class FileHandler:
         self.fast_cloud = fast_cloud
         self.upload_to_cloud_threshold_mb = upload_to_cloud_threshold_mb
         self.max_upload_file_size_mb = max_upload_file_size_mb
-        self._attached_files_format = 'httpx'
+        self._attached_files_format = file_format or 'httpx'
 
     async def load_files_from_disk(self, file_params: dict) -> Union[MediaDict, dict]:
         """Load files from disk but ignore files that are provided as URLs"""

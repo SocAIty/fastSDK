@@ -57,10 +57,10 @@ class EndpointParameter(BaseModel):
 
 
 class Meta(BaseModel):
-    id: Optional[str]
-    display_name: Optional[str]
-    description: Optional[str]
-    short_desc: Optional[str]
+    id: Optional[str] = Field(default=None)
+    display_name: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    short_desc: Optional[str] = Field(default=None)
 
 
 class EndpointDefinition(Meta):
@@ -92,7 +92,7 @@ class ServiceFamily(Meta):
 class ServiceDefinition(Meta):
     endpoints: List[EndpointDefinition] = Field(default_factory=list)
     specification: ServiceSpecification = "other"  # Default specification
-    used_models: Optional[List[ModelDefinition]] = None
+    used_models: Optional[List[ModelDefinition]] = None  # base models .pth like llama4
     category: Optional[List[str]]  # references to service categories
     family_id: Optional[str]  # id of the service family this service belongs to
     service_address: Union[ServiceAddress, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress] = None  # if 

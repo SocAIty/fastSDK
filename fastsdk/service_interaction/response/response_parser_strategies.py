@@ -117,8 +117,7 @@ class RunpodResponseParser(ResponseParserStrategy):
             delayTime=data.get("delayTime", None),
             executionTime=data.get("executionTime", None),
             retries=data.get("retries", None),
-            workerId=data.get("workerId", None),
-            endpoint_protocol=data.get("endpoint_protocol", None)
+            workerId=data.get("workerId", None)
         )
 
 
