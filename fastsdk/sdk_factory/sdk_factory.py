@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from fastsdk.service_management import ServiceManager
+from fastsdk.settings import Global
 from fastsdk.service_management.service_definition import (
     ServiceDefinition, EndpointDefinition, EndpointParameter
 )
@@ -137,22 +137,41 @@ def _format_default_value(param: EndpointParameter) -> Optional[str]:
         return None
     
     param_types = param.type if isinstance(param.type, list) else [param.type]
-    first_type = param_types[0]
     
-    if first_type == "string":
-        return f'"{param.default}"'
-    elif first_type == "boolean":
-        # Use Python's True/False for boolean values
-        if isinstance(param.default, bool):
-            return str(param.default)
-        elif param.default in ["true", "True"]:
-            return "True"
-        elif param.default in ["false", "False"]:
-            return "False"
-        else:
-            return str(param.default).lower()
-    else:
-        return str(param.default)
+    # Try to find the most appropriate type for the default value
+    for p_type in param_types:
+        if p_type == "string":
+            # Ensure proper string formatting for Jinja2
+            escaped_value = str(param.default).replace('"', '\\"')
+            return f'"{escaped_value}"'
+        elif p_type == "boolean":
+            # Use Python's True/False for boolean values
+            if isinstance(param.default, bool):
+                return str(param.default)
+            elif str(param.default).lower() in ["true", "1", "yes"]:
+                return "True"
+            elif str(param.default).lower() in ["false", "0", "no"]:
+                return "False"
+        elif p_type == "integer":
+            try:
+                return str(int(param.default))
+            except (ValueError, TypeError):
+                continue
+        elif p_type == "number":
+            try:
+                return str(float(param.default))
+            except (ValueError, TypeError):
+                continue
+        elif p_type == "array":
+            if isinstance(param.default, (list, tuple)):
+                return str(param.default)
+        elif p_type == "object":
+            if isinstance(param.default, dict):
+                return str(param.default)
+    
+    # If no type matched or conversion failed, return as string
+    escaped_value = str(param.default).replace('"', '\\"')
+    return f'"{escaped_value}"'
 
 
 def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, Any]]:
@@ -256,7 +275,7 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
         
     Returns:
         Path object for the file
-    """
+    """        
     if not save_path:
         save_path = os.getcwd()
     save_path = Path(save_path)
@@ -274,7 +293,7 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
     return file_path
 
 
-def _normalize_class_name(display_name: str) -> str:
+def normalize_class_name(display_name: str) -> str:
     """
     Convert a display name to a valid Python class name.
     
@@ -284,25 +303,27 @@ def _normalize_class_name(display_name: str) -> str:
     Returns:
         A valid PascalCase Python class name
     """
-    # First capitalize each word
-    class_name = "".join(word.capitalize() for word in display_name.split())
-    # Remove any non-alphanumeric characters
-    class_name = "".join(c for c in class_name if c.isalnum())
+
+    class_name = display_name.lower()
+    # don't allow any special characters
+    class_name = re.sub(r'[^a-zA-Z0-9]', '', class_name)
+    # don't allow any numbers at the beginning
+    class_name = re.sub(r'^[0-9]', '', class_name)
     # Ensure it's a valid class name
     if not class_name:
-        return "ApiClient"
+        return "no_name_"
     if class_name[0].isdigit():
-        class_name = f"Api{class_name}"
+        class_name = f"sdk_{class_name}"
     
     return class_name
 
-
+                
 def create_sdk(
     service_definition: Union[str, ServiceDefinition],
     save_path: Optional[str] = None, 
     class_name: Optional[str] = None,
     template: Optional[str] = None
-) -> tuple[str, str]:
+) -> tuple[str, str, ServiceDefinition]:
     """
     Creates a .py file for a given service definition in the given save_path.
     
@@ -310,8 +331,8 @@ def create_sdk(
         service_definition:
             If string - adds a service definition from url or file.
             If ServiceDefinition object - uses the given service definition.
-        save_path: Path where to save the generated file. Can be either:
-            - A directory path: File will be saved as {class_name.lower()}.py in this directory
+        save_path: Path where to save the generated file(s). Can be either:
+            - A directory path: File will be saved as {class_name.lower()}.py + {class_name.lower()}.json in this directory
             - A file path: File will be saved with this exact path
             Defaults to current directory.
         class_name: Name for the generated class. Defaults to the service name.
@@ -320,7 +341,8 @@ def create_sdk(
     Returns:
         Tuple containing:
             - Path to the generated Python file
-            - Name of the generated class
+            - Name of the generated class (needed for import)
+            - ServiceDefinition object of the created service (if you want use the service with the ServiceManager)
         
     Raises:
         ValueError: If service_definition is not valid
@@ -329,14 +351,14 @@ def create_sdk(
     """
     # Get service definition
     if isinstance(service_definition, str):
-        service_def = ServiceManager.add_service(spec_source=service_definition)
+        service_def = Global.service_manager.add_service(spec_source=service_definition)
     else:
         service_def = service_definition
     
     # Determine class name if not provided
     if not class_name:
-        class_name = _normalize_class_name(service_def.display_name)
-    
+        class_name = normalize_class_name(service_def.display_name)
+
     # Get file path
     file_path = _get_file_path(save_path, class_name)
     
@@ -375,8 +397,8 @@ def create_sdk(
         # Save the rendered file
         with open(file_path, "w") as f:
             f.write(rendered)
-        
-        return str(file_path), class_name
+
+        return str(file_path), class_name, service_def
     except FileNotFoundError:
         raise FileNotFoundError(f"Template file not found: {template}")
     except IOError as e:

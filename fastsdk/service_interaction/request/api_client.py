@@ -3,6 +3,7 @@ import httpx
 
 from fastsdk.service_management.service_definition import ServiceDefinition, EndpointDefinition
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
+from media_toolkit import MediaFile
 
 
 class APIKeyError(Exception):
@@ -35,7 +36,7 @@ class APIClient:
         
     @property
     def client(self) -> httpx.AsyncClient:
-        if self.__client is None:
+        if self.__client is None or self.__client.is_closed:
             self.__client = httpx.AsyncClient()
         return self.__client
     
@@ -104,6 +105,10 @@ class APIClient:
                 raise ValueError(f"Required parameter '{param.name}' is missing")
             
             # if is file type put it into file_params
+            if isinstance(param_value, MediaFile):
+                rq.file_params[param.name] = param_value
+                continue
+
             if hasattr(param, "type") and param.type is not None:
                 ptype = param.type if isinstance(param.type, list) else [param.type]
                 if any(t in ["file", "image", "video", "audio"] for t in ptype):
@@ -131,7 +136,6 @@ class APIClient:
         Returns:
             The API response
         """
-        
         return await self.client.post(
             url=request_data.url,
             params=request_data.query_params,

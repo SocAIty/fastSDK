@@ -1,8 +1,8 @@
 from typing import Any, Dict
+
 from fastsdk.service_management import ServiceDefinition, EndpointDefinition
 from fastsdk.service_management import ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress
 
-from fastsdk.service_management import ServiceManager
 from meseex import MeseexBox, MrMeseex
 from meseex.control_flow import polling_task, PollAgain
 
@@ -14,6 +14,10 @@ from fastsdk.service_interaction.response.base_response import BaseJobResponse
 
 from fastsdk.service_interaction.request import APIClient, APIClientReplicate, APIClientRunpod, APIClientSocaity, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from fastsdk.settings import ServiceManager
 
 
 class APISeex(MrMeseex):
@@ -34,14 +38,13 @@ class APISeex(MrMeseex):
         return self.get_task_output("Sending request")
 
 
-class _ApiJobManager:
+class ApiJobManager:
     """
     Manages the lifecycle of asynchronous API jobs by orchestrating services.
     Delegates implementation details
     """
-    def __init__(self):
-        # ToDo: find correct place or building pattern for this.. (bild on demand.)
-        # One method would be to store really all settings in the APISeex instance; and then derive from there
+    def __init__(self, service_manager: 'ServiceManager'):
+        self.service_manager = service_manager
         self.api_clients: Dict[str, APIClient] = {}  # dict of service_id -> APIClient
         self.file_handlers: Dict[str, FileHandler] = {}  # dict of service_id -> FileHandler
         self.response_parser = ResponseParser()
@@ -60,10 +63,13 @@ class _ApiJobManager:
 
     def add_api_client(self, service_id: str, api_key: str):
         if service_id not in self.api_clients:
-            service_def = ServiceManager.get_service(service_id)
+            service_def = self.service_manager.get_service(service_id)
             if not service_def:
                 raise ValueError(f"Service {service_id} not found")
             
+            if not hasattr(service_def, "service_address") or service_def.service_address is None:
+                raise ValueError(f"Service {service_id} has no service address. Add a service address to the service definition first with ServiceManager.update_service(service_id, service_address=...)")
+
             api_client = None
             if isinstance(service_def.service_address, RunpodServiceAddress):
                 api_client = APIClientRunpod(service_def=service_def, api_key=api_key)
@@ -78,7 +84,7 @@ class _ApiJobManager:
 
             self.api_clients[service_id] = api_client
 
-    def add_file_handler(self, service_id: str, file_handler: FileHandler = None):
+    def add_file_handler(self, service_id: str, api_key: str = None, file_handler: FileHandler = None):
         """
         Adds a file handler to the job manager.
         If no file handler is provided, the job manager will create a default one based on the service definition.
@@ -86,19 +92,28 @@ class _ApiJobManager:
         if file_handler is not None:
             self.file_handlers[service_id] = file_handler
 
-        service_def = ServiceManager.get_service(service_id)
+        service_def = self.service_manager.get_service(service_id)
         if isinstance(service_def.service_address, RunpodServiceAddress):
             file_handler = FileHandler(file_format="base64", max_upload_file_size_mb=300)
         elif isinstance(service_def.service_address, SocaityServiceAddress):
-            fast_cloud = SocaityUploadAPI(api_key=service_def.api_key)
+            fast_cloud = SocaityUploadAPI(api_key=api_key)
             file_handler = FileHandler(fast_cloud=fast_cloud, file_format="httpx", upload_to_cloud_threshold_mb=3, max_upload_file_size_mb=3000)
         elif isinstance(service_def.service_address, ReplicateServiceAddress):
-            fast_cloud = ReplicateUploadAPI(api_key=service_def.api_key)
+            fast_cloud = ReplicateUploadAPI(api_key=api_key)
             file_handler = FileHandler(fast_cloud=fast_cloud, file_format="base64", upload_to_cloud_threshold_mb=10, max_upload_file_size_mb=300)
         else:
             file_handler = FileHandler()
 
         self.file_handlers[service_id] = file_handler
+    
+    def load_api_client(self, service_name_or_id: str, api_key: str = None):
+        service_def = self.service_manager.get_service(service_name_or_id)
+        if not service_def:
+            raise ValueError(f"Service {service_name_or_id} not found")
+        
+        self.add_api_client(service_def.id, api_key)
+        self.add_file_handler(service_def.id, api_key)
+        return service_def
     
     async def _prepare_request(self, job: APISeex) -> RequestData:
         api_client = self.api_clients[job.service_def.id]
@@ -142,7 +157,7 @@ class _ApiJobManager:
         # Check for HTTP errors
         error = self.response_parser.check_response_status(response)
         if error:
-            raise ValueError(f"API request failed: {error}")
+            raise Exception(error)
             
         # Parse the response
         parsed_response = self.response_parser.parse_response(response)
@@ -227,11 +242,11 @@ class _ApiJobManager:
             MrMeseex task that can be awaited for the result
         """
         # Get service and endpoint definitions
-        service_def = ServiceManager.get_service(service_id)
+        service_def = self.service_manager.get_service(service_id)
         if not service_def:
             raise ValueError(f"Service {service_id} not found")
 
-        endpoint_def = ServiceManager.get_endpoint(service_id, endpoint_id)
+        endpoint_def = self.service_manager.get_endpoint(service_id, endpoint_id)
         if not endpoint_def:
             raise ValueError(f"Endpoint {endpoint_id} not found in service {service_id}")
 
@@ -275,6 +290,3 @@ class _ApiJobManager:
         
         # Submit the job to the MeseexBox for execution
         return self.meseex_box.summon_meseex(job)
-
-
-ApiJobManager = _ApiJobManager()

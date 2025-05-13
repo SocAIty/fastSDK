@@ -1,4 +1,7 @@
 from typing import Dict, Any, Optional, List, Union
+import hashlib
+import json
+
 from fastsdk.service_management.parsers.spec_loader import load_spec
 from fastsdk.service_management.parsers.factory import (
     create_service_definition,
@@ -40,16 +43,18 @@ class OpenAPIParser:
         # Extract basic service information
         info = self.spec.get('info', {})
         specification = self._determine_specification(info)
+        version = self.create_version_hash()
 
         # Use the factory function to create a ServiceDefinition
+        # note the id is not set here so a random uuid is created. Best practice overwrite it when adding to service manager.
         self.service_definition = create_service_definition(
-            id=info.get('x-service-id'),  # Socaity specific extension?
             display_name=info.get('title'),
             description=info.get('description'),
             short_desc=info.get('summary'),
             specification=specification,
             source_identifier=self.spec_source if isinstance(self.spec_source, str) else None,
-            schemas=self._schemas  # Store schemas directly in the definition
+            schemas=self._schemas,  # Store schemas directly in the definition
+            version=version
         )
 
         # Parse paths and endpoints
@@ -68,6 +73,10 @@ class OpenAPIParser:
                     self.service_definition.endpoints.append(endpoint)
 
         return self.service_definition
+
+    def create_version_hash(self) -> str:
+        """Create a version hash of the OpenAPI specification."""
+        return hashlib.sha1(json.dumps(self.spec).encode('utf-8')).hexdigest()
 
     def _determine_specification(self, info: Dict[str, Any]) -> ServiceSpecification:
         """Determine the service specification type based on the OpenAPI info and content."""
@@ -237,7 +246,7 @@ class OpenAPIParser:
                     schema = {}  # Cannot proceed without schema
 
             return self._create_param_from_schema(name, schema, required, location, description)
-        except Exception as e:
+        except Exception:
             return None
 
     def _get_parameter_type_from_schema(self, schema: Dict[str, Any]) -> Union[ParameterType, List[ParameterType]]:

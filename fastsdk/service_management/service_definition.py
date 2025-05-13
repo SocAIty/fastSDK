@@ -95,4 +95,6 @@ class ServiceDefinition(Meta):
     used_models: Optional[List[ModelDefinition]] = None  # base models .pth like llama4
     category: Optional[List[str]]  # references to service categories
     family_id: Optional[str]  # id of the service family this service belongs to
-    service_address: Union[ServiceAddress, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress] = None  # if 
+    service_address: Union[ServiceAddress, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress] = None
+    created_at: Optional[str] = None  # date and time of creation in utc timezone
+    version: Optional[str] = None  # hash of the openapi specification

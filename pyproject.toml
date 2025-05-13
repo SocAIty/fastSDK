@@ -27,5 +27,5 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/SocAIty/socaity"
+Repository = "https://github.com/SocAIty/fastsdk"
 Homepage = "https://www.socaity.ai"

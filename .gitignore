@@ -164,7 +164,7 @@ cython_debug/
 
 # other
 fastsdk/test/output/
-test/output
+test/output/*
 
 # vscode
 .vscode/

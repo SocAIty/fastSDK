@@ -4,18 +4,21 @@ from pathlib import Path
 from fastsdk.service_management.service_definition import (
     ServiceDefinition, ModelDefinition, ServiceCategory, ServiceFamily, EndpointDefinition
 )
-from fastsdk.service_management.parsers.api_parser import OpenAPIParser
+from fastsdk.service_management.parsers import parse_service_definition
 from fastsdk.service_management.parsers.service_adress_parser import create_service_address
+from fastsdk.service_management.service_store.IServiceStore import IServiceStore
 import uuid
+    
 
-
-class _ServiceManager:
+class ServiceManager:
     """
     Central manager for all service-related entities.
     Manages ServiceDefinitions, ServiceCategories, ServiceFamilies, and ModelDefinitions.
     Maintains relationships between these entities.
     """
-    def __init__(self):
+    def __init__(self, service_store: IServiceStore = None):
+        self.service_store = service_store
+
         self._services: Dict[str, ServiceDefinition] = {}
         self._categories: Dict[str, ServiceCategory] = {}
         self._families: Dict[str, ServiceFamily] = {}
@@ -26,10 +29,15 @@ class _ServiceManager:
         self._category_names: Dict[str, str] = {}
         self._family_names: Dict[str, str] = {}
         self._model_names: Dict[str, str] = {}
-        
-        # Spec sources for reloading
-        self._spec_sources: Dict[str, Union[str, Path, Dict[str, Any]]] = {}
-    
+
+        # Load services from store if available
+        if self.service_store:
+            for service in self.service_store.list_services():
+                self._services[service.id] = service
+                if service.display_name:
+                    normalized = self.normalize_name(service.display_name)
+                    self._service_names[normalized] = service.id
+
     @staticmethod
     def normalize_name(name: str, preserve_paths: bool = False) -> Union[str, None]:
         """
@@ -66,9 +74,10 @@ class _ServiceManager:
 
     def add_service(
         self,
-        spec_source: Union[str, Path, Dict[str, Any]],
+        spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         service_id: Optional[str] = None,
         service_address: Optional[str] = None,
+        service_name: Optional[str] = None,
         category: Union[str, List[str]] = None,
         family_id: str = None,
         used_models: Union[ModelDefinition, List[ModelDefinition]] = None
@@ -77,13 +86,14 @@ class _ServiceManager:
         Add a new service definition from an OpenAPI specification source using OpenAPIParser.
         
         Args:
-            spec_source: Path, URL to OpenAPI JSON, or loaded JSON dictionary.
-            spec_source: Optional explicit ID to assign to the service,
+            spec_source: Path, URL to OpenAPI JSON, service definition file or loaded JSON dictionary.
+            service_id: Optional explicit ID to assign to the service,
                 overriding any ID found in the spec or generated.
             service_address: Optional address to use for the service. If not provided and spec_sources is an url, the url will be used.
-            category: Optional category to assign to the service.
-            family_id: Optional family to assign to the service.
-            used_models: Optional models to assign to the service.
+            service_name: Optional name to assign to the service. Overrides any name found in the spec.
+            category: Optional category to assign to the service. Overrides any category found in the spec.
+            family_id: Optional family to assign to the service. Overrides any family found in the spec.
+            used_models: Optional models to assign to the service. Overrides any models found in the spec.
         Returns:
             The added ServiceDefinition object.
             
@@ -91,38 +101,35 @@ class _ServiceManager:
             ValueError: If the service ID (either provided or parsed) is already registered,
                         or if the spec cannot be parsed.
         """
-        # Parse the OpenAPI spec using the new parser
         try:
-            parser = OpenAPIParser(spec_source)
-            service_def = parser.parse()
+            service_def = parse_service_definition(spec_source)
         except ValueError as e:
             # Propagate errors from spec loading or parsing
             raise ValueError(f"Error parsing service specification from {spec_source}: {e}")
 
         if service_id is not None:
             service_def.id = service_id
-
+    
         if not service_def.id:
-            # generate one from the display_name
-            name = self.normalize_name(service_def.display_name)
-            service_def.id = f"{name}-{str(uuid.uuid4())[:8]}"
+            service_def.id = "gen-" + str(uuid.uuid4())
+            
+        if service_name:
+            service_def.display_name = service_name
 
-        # Ensure the final ID is set
-        if not service_def.id:
-            service_def.id = service_id  # Should be set by factory, but ensure
+        if not service_name and not service_def.display_name:
+            service_def.display_name = "unnamed_service_" + service_def.id
+
+        # Add normalized name mapping using display_name from the parsed definition
+        normalized = self.normalize_name(service_def.display_name)
+        # Check for potential name conflicts before adding
+        if normalized in self._service_names and self._service_names[normalized] != service_def.id:
+            print(f"Service name '{service_def.display_name}' (normalized: '{normalized}') conflicts with existing service ID '{self._service_names[normalized]}'. Overwriting mapping.")
+        self._service_names[normalized] = service_def.id
 
         if service_address is not None and isinstance(service_address, str):
             service_def.service_address = create_service_address(service_address)
         elif service_address is None and isinstance(spec_source, str) and spec_source.startswith(('http://', 'https://')):
             service_def.service_address = create_service_address(spec_source)
-
-        # Add normalized name mapping using display_name from the parsed definition
-        if service_def.display_name:
-            normalized = self.normalize_name(service_def.display_name)
-            # Check for potential name conflicts before adding
-            if normalized in self._service_names and self._service_names[normalized] != service_def.id:
-                print(f"Service name '{service_def.display_name}' (normalized: '{normalized}') conflicts with existing service ID '{self._service_names[normalized]}'. Overwriting mapping.")
-            self._service_names[normalized] = service_def.id
 
         if category:
             service_def.category = [category] if isinstance(category, str) else category
@@ -131,12 +138,14 @@ class _ServiceManager:
         if used_models:
             service_def.used_models = [used_models] if isinstance(used_models, ModelDefinition) else used_models
 
-        # Store the service definition and its original spec source
+        # Store the service definition
         self._services[service_def.id] = service_def
-        self._spec_sources[service_def.id] = spec_source
+
+        # Save to store if available
+        if self.service_store:
+            self.service_store.save_service(service_def)
 
         # Link to family, categories, and models based on IDs parsed
-        # (This assumes the parser populates these IDs correctly)
         self._link_service_dependencies(service_def)
 
         return service_def
@@ -177,7 +186,9 @@ class _ServiceManager:
 
     def get_service(self, id_or_name: str) -> Optional[ServiceDefinition]:
         """
-        Get a service definition by its ID or display name.
+        Get a service definition by its ID or display name. 
+        Precondition: the service must have been added to the ServiceManager/ServiceStore previously.
+        First checks the in-memory cache, then falls back to the ServiceStore if available.
         
         Args:
             id_or_name: Service ID or display name
@@ -185,21 +196,34 @@ class _ServiceManager:
         Returns:
             ServiceDefinition if found, None otherwise
         """
-        # Direct ID lookup
+        # Direct ID lookup in cache
         if id_or_name in self._services:
             return self._services[id_or_name]
         
-        # Normalized name lookup
+        # Normalized name lookup in cache
         normalized = self.normalize_name(id_or_name)
         if normalized in self._service_names:
             service_id = self._service_names[normalized]
             return self._services[service_id]
+        
+        # If not found in cache and service store is available, try loading from service store
+        if self.service_store:
+            service = self.service_store.load_service(id_or_name)
+            if service:
+                return self.add_service(service)
+
+            # Try loading by normalized name if direct ID lookup failed
+            if normalized != id_or_name:
+                service = self.service_store.load_service(normalized)
+                if service:
+                    return self.add_service(service)
         
         return None
     
     def update_service(
         self,
         id_or_name: str,
+        persist_changes: bool = True,
         **kwargs
     ) -> Optional[ServiceDefinition]:
         """
@@ -207,6 +231,7 @@ class _ServiceManager:
         
         Args:
             id_or_name: Service ID or display name
+            persist_changes: If True, the changes will be saved to the service store.
             **kwargs: Attributes to update
             
         Returns:
@@ -216,23 +241,26 @@ class _ServiceManager:
         if not service:
             return None
         
-        # Handle display_name update specifically to update the name mapping
-        if 'display_name' in kwargs and kwargs['display_name'] != service.display_name:
-            # Remove old normalized name mapping
-            if service.display_name:
-                old_normalized = self.normalize_name(service.display_name)
-                self._service_names.pop(old_normalized, None)
-            
-            # Add new normalized name mapping
-            if kwargs['display_name']:
-                new_normalized = self.normalize_name(kwargs['display_name'])
-                self._service_names[new_normalized] = service.id
-        
         # Update attributes
         for key, value in kwargs.items():
             if hasattr(service, key):
-                setattr(service, key, value)
+                if key == 'service_address':
+                    service.service_address = create_service_address(value)
+                elif key == 'display_name':
+                    # Remove old normalized name mapping
+                    if service.display_name:
+                        oldnormalized = self.normalize_name(service.display_name)
+                        self._service_names.pop(oldnormalized, None)
+                    # Add new normalized name mapping
+                    normalized = self.normalize_name(value)
+                    self._service_names[normalized] = service.id
+                else:
+                    setattr(service, key, value)
         
+        self._services[service.id] = service
+        if persist_changes and self.service_store:
+            self.service_store.save_service(service)
+
         return service
     
     def remove_service(self, id_or_name: str) -> bool:
@@ -251,39 +279,16 @@ class _ServiceManager:
         
         # Remove from mappings
         self._services.pop(service.id)
-        self._spec_sources.pop(service.id, None)
+        
+        # Remove from store if available
+        if self.service_store:
+            self.service_store.delete_service(service.id)
         
         if service.display_name:
             normalized = self.normalize_name(service.display_name)
             self._service_names.pop(normalized, None)
         
         return True
-    
-    def reload_service(self, id_or_name: Optional[str] = None) -> Optional[ServiceDefinition]:
-        """
-        Reload a service definition from its specification source.
-        If no service ID is provided, reload all services.
-        
-        Args:
-            id_or_name: Optional service ID or display name
-            
-        Returns:
-            Updated ServiceDefinition if reloading a single service, None otherwise
-        """
-        if id_or_name is not None:
-            service = self.get_service(id_or_name)
-            if not service or service.id not in self._spec_sources:
-                raise ValueError(f"Service '{id_or_name}' is not registered or has no spec source")
-            
-            spec_source = self._spec_sources[service.id]
-            return self.add_service(service.id, spec_source)
-        else:
-            # Reload all services
-            service_ids = list(self._services.keys())
-            for service_id in service_ids:
-                if service_id in self._spec_sources:
-                    self.add_service(service_id, self._spec_sources[service_id])
-            return None
     
     def list_services(self) -> List[ServiceDefinition]:
         """List all service definitions."""
@@ -614,7 +619,10 @@ class _ServiceManager:
         
         # Remove from mappings
         self._services.pop(service.id)
-        self._spec_sources.pop(service.id, None)
+        
+        # Remove from store if available
+        if self.service_store:
+            self.service_store.delete_service(service.id)
         
         if service.display_name:
             normalized = self.normalize_name(service.display_name)
@@ -659,10 +667,6 @@ class _ServiceManager:
         # Use json dumps for pretty printing
         from json import dumps
         return dumps(result, indent=indent, sort_keys=True)
-
-
-# Expose the singleton instance
-ServiceManager = _ServiceManager()
 
 
 if __name__ == "__main__":

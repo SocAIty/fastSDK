@@ -11,6 +11,7 @@ from fastsdk.service_management.service_definition import (
     ServiceDefinition, EndpointDefinition, EndpointParameter,
     ServiceSpecification, ParameterType, ParameterLocation
 )
+from datetime import datetime, timezone
 import uuid
 
 
@@ -25,7 +26,8 @@ def create_service_definition(
     category: Optional[List[str]] = None,
     family_id: Optional[str] = None,
     schemas: Optional[Dict[str, Any]] = None,  # Store raw schemas
-    source_identifier: Optional[str] = None  # Store original source (URL/path)
+    source_identifier: Optional[str] = None,  # Store original source (URL/path)
+    version: Optional[str] = None  # should be the hash of the openapi specification
 ) -> ServiceDefinition:
     """Factory function to create a ServiceDefinition instance."""
     if id is None:
@@ -41,7 +43,9 @@ def create_service_definition(
         category=category,
         family_id=family_id,
         schemas=schemas or {},
-        source_identifier=source_identifier
+        source_identifier=source_identifier,
+        created_at=datetime.now(timezone.utc).isoformat(),
+        version=version
     )
 
 
