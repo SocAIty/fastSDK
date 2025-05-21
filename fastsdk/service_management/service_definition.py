@@ -8,10 +8,11 @@ ModelDomain = Literal["text", "audio", "image", "video", "other"]
 
 # Literals for service specifications
 ServiceSpecification = Literal[
-    "socaity",      # all socaity.ai endpoints that support socaity protocol
-    "fasttaskapi",  # all servers that support socaity protocol with job queues
+    "socaity",      # all socaity.ai endpoints that support fasttaskapi protocol
+    "fasttaskapi",  # all servers that support fasttaskapi protocol with job queues
     "runpod",       # for example runpod servers
-    "replicate",
+    "cog",         # is a service protocol used by replicate.ai
+    "replicate",   # a cog service becomes a replicate service when deployed on replicate.ai
     "openai",      # openai endpoints. Specification of chatgpt, etc.
     "openapi",     # servers that support openapi specification
     "other"        # other servers
@@ -46,13 +47,12 @@ class SocaityServiceAddress(ServiceAddress):
     pass
 
 
-class EndpointParameter(BaseModel):    
+class EndpointParameter(BaseModel):
     name: str
     type: Union[ParameterType, Any]
     required: bool = False
     default: Optional[Any] = None
     location: ParameterLocation
-    description: Optional[str] = None
     param_schema: Optional[Dict[str, Any]] = None  # contains something like minLength, maxLength, etc.
 
 

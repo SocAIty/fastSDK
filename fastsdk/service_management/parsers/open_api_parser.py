@@ -104,8 +104,8 @@ class OpenAPIParser:
             return "socaity"
         if 'openai' in info_title:
             return "openai"
-        if 'replicate' in info_title:
-            return "replicate"
+        if 'cog' in info_title:
+            return "cog"
         if 'runpod' in info_title:
             return "runpod"
 
