@@ -101,11 +101,7 @@ class ServiceManager:
             ValueError: If the service ID (either provided or parsed) is already registered,
                         or if the spec cannot be parsed.
         """
-        try:
-            service_def = parse_service_definition(spec_source)
-        except ValueError as e:
-            # Propagate errors from spec loading or parsing
-            raise ValueError(f"Error parsing service specification from {spec_source}: {e}")
+        service_def = parse_service_definition(spec_source)
 
         if service_id is not None:
             service_def.id = service_id

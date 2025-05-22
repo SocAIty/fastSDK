@@ -27,7 +27,8 @@ STANDARD_TYPE_MAPPING = {
     "array": "List[Any]",
 }
 
-SKIPPED_ENDPOINT_KEYWORDS = ["/status", "/health"]
+SKIPPED_ENDPOINTS_FASTTASKAPI = ["/status", "/health"]
+SKIPPED_ENDPOINTS_REPLICATE = ["/", "/cancel", "/shutdown", "/health-check", "/predictions/{prediction_id}", "/predictions/{prediction_id}/cancel"]
 ALLOWED_PARAM_LOCATIONS = ["body", "query"]
 DEFAULT_TEMPLATE_NAME = 'sdk_template.j2'
 
@@ -184,22 +185,33 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
     Returns:
         A dictionary with processed endpoint data or None if endpoint should be skipped
     """
-    # Skip status/health endpoints
-    if any(keyword in endpoint.path.lower() for keyword in SKIPPED_ENDPOINT_KEYWORDS):
-        return None
-
     # Process parameters
-    parameters = [
-        {
+    parameters = []
+    for param in endpoint.parameters:
+        if param.location not in ALLOWED_PARAM_LOCATIONS:
+            continue
+            
+        default_value = _format_default_value(param)
+        
+        # A parameter is optional if:
+        # 1. It's not required in the API definition, AND
+        # 2. It doesn't have a default value already specified
+        is_optional = not param.required and default_value is None
+        
+        parameters.append({
             "name": param.name,
-            "description": param.description, 
             "type_hint": _get_type_hint(param),
-            "default_value": _format_default_value(param) if not param.required else None,
-            "required": param.required
-        }
-        for param in endpoint.parameters
-        if param.location in ALLOWED_PARAM_LOCATIONS
-    ]
+            "default_value": default_value,
+            "required": param.required,
+            "optional": is_optional,
+            "description": param.description
+        })
+
+    # Sort parameters:
+    # 1. Required parameters first
+    # 2. Optional parameters with default values next
+    # 3. Optional parameters without default values last
+    parameters.sort(key=lambda x: (not x["required"], x["optional"]))
 
     # Get return type from 200 response if available
     returns = None
@@ -210,14 +222,16 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
 
     # Format description with proper indentation
     description = endpoint.description
+    description_contains_args = False
     if description:
         description = "\n        ".join(line for line in description.split("\n"))
+        description_contains_args = "Args:" in description or ":param" in description
 
     return {
         "path": endpoint.path,
         "method_name": _sanitize_method_name(endpoint.path),
         "description": description,
-        "description_contains_args": "Args:" in description or ":param" in description,
+        "description_contains_args": description_contains_args,
         "parameters": parameters,
         "returns": returns,
         "raises": "ValueError: If the API request fails"
@@ -242,8 +256,17 @@ def _detect_required_imports(endpoints_data: List[Dict[str, Any]]) -> tuple[Set[
         "Union[": "Union",
         "List[": "List",
         "Dict[": "Dict",
-        "Any": "Any"
+        "Any": "Any",
+        "Optional[": "Optional"
     }
+    
+    # Always include Optional for non-required parameters without defaults
+    has_optional_params = any(
+        any(param.get("optional", False) for param in endpoint.get("parameters", []))
+        for endpoint in endpoints_data
+    )
+    if has_optional_params:
+        typing_imports.add("Optional")
     
     # Media type patterns to look for
     media_patterns = ["ImageFile", "VideoFile", "AudioFile", "MediaFile", "MediaList"]
@@ -362,9 +385,22 @@ def create_sdk(
     # Get file path
     file_path = _get_file_path(save_path, class_name)
     
+    # filter out enpdoints
+    skip_endpoints = []
+    if service_def.specification == "fasttaskapi":
+        skip_endpoints = SKIPPED_ENDPOINTS_FASTTASKAPI
+    elif service_def.specification in ['cog', 'replicate']:
+        skip_endpoints = SKIPPED_ENDPOINTS_REPLICATE
+
     # Prepare endpoint data
     endpoints_data = []
     for endpoint in service_def.endpoints:
+        if endpoint.path.lower() in skip_endpoints:
+            continue
+
+        if service_def.specification in ['cog', 'replicate'] and endpoint.path.lower() == "/predictions":
+            endpoint.path = "/predict"
+
         endpoint_data = _prepare_endpoint_data(endpoint)
         if endpoint_data:
             endpoints_data.append(endpoint_data)

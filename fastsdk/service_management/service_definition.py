@@ -54,6 +54,7 @@ class EndpointParameter(BaseModel):
     default: Optional[Any] = None
     location: ParameterLocation
     param_schema: Optional[Dict[str, Any]] = None  # contains something like minLength, maxLength, etc.
+    description: Optional[str] = None
 
 
 class Meta(BaseModel):

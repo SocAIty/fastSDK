@@ -86,6 +86,11 @@ def create_endpoint_parameter(
     param_schema: Optional[Dict[str, Any]] = None
 ) -> EndpointParameter:
     """Factory function to create an EndpointParameter instance."""
+
+    valid_locations = ParameterLocation.__args__
+    if location not in valid_locations:
+        location = 'query' # Fallback, though ideally this shouldn't be hit.
+
     return EndpointParameter(
         name=name,
         type=type,

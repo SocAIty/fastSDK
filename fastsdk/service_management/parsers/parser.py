@@ -23,7 +23,7 @@ def parse_service_definition(spec_source: Union[str, Path, Dict[str, Any], Servi
     try:
         return ServiceDefinition(**data)
     except Exception:
-        try:
-            return OpenAPIParser(data).parse()
-        except Exception as e:
-            raise ValueError(f"Failed to parse as ServiceDefinition or OpenAPI: {e}")
+        #try:
+        return OpenAPIParser(data).parse()
+        #except Exception as e:
+        #    raise ValueError(f"Failed to parse as ServiceDefinition or OpenAPI: {e}")
