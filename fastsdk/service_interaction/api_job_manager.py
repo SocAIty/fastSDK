@@ -124,6 +124,7 @@ class ApiJobManager:
         request_data = job.prev_task_output
         if not request_data.file_params or len(request_data.file_params) == 0:
             return request_data
+
         fh = self.file_handlers.get(job.service_def.id)
         request_data.file_params = await fh.load_files_from_disk(request_data.file_params)
         return request_data
@@ -194,7 +195,7 @@ class ApiJobManager:
             raise ValueError(parsed_response.error or f"Job failed with status: {parsed_response.status.name}")
  
         # Update progress based on job status
-        if isinstance(parsed_response, BaseJobResponse): 
+        if isinstance(parsed_response, BaseJobResponse):
             if parsed_response.progress is None:
                 job.set_task_progress(
                     None,

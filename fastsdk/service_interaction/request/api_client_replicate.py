@@ -22,18 +22,7 @@ class APIClientReplicate(APIClient):
         # Overwrites the default implementation, because /endpoint_route is not attached.
         # Also query_parameters are added to body not to url.
         # (replicate always just has 1 endpoint)
-        return self.service_address.url
-    
-    def format_request_params(self, endpoint: EndpointDefinition, *args, **kwargs) -> RequestData:
-        """Prepare request parameters for Replicate API."""
-        request_data = super().format_request_params(endpoint, *args, **kwargs)
-
-        # Add version parameter for community models to get params to make predictions
-        version = getattr(self.service_def.service_address, "version", None)
-        if request_data.url and "/predictions" in request_data.url and version:
-            request_data.body_params['version'] = version
-
-        return request_data
+        return self.service_def.service_address.url
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
         # replicates expects query params to be in body also
@@ -43,6 +32,13 @@ class APIClientReplicate(APIClient):
         request_data.file_params = {}
 
         # replicate formats the body as json with {"input": body_params, "version?": model_version}
-        request_data.body_params = json.dumps({"input": request_data.body_params})
+        body = {"input": request_data.body_params}
+        # Add version parameter for community models to get params to make predictions
+        if request_data.url and "/predictions" in request_data.url:
+            version = getattr(self.service_def.service_address, "version", None)
+            if version:
+                body['version'] = version
+
+        request_data.body_params = json.dumps(body)
 
         return await super().send_request(request_data, timeout_s)

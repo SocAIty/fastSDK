@@ -7,7 +7,15 @@ def _url_sanitize(url: str):
     """
     Add http:// if not present and remove trailing slash
     """
+    if not url:
+        return url
+
     url = url.strip("/")  # remove prefix and suffix slashes
+
+    # looks like something else!
+    if "/" not in url and "www." not in url and "http" not in url:
+        return url
+
     if not url.startswith("http") and not url.startswith("https"):
         url = f"http://{url}"
     return url
@@ -122,11 +130,16 @@ def determine_service_type(service_url: str) -> ServiceSpecification:
     return "other"
 
 
-def create_service_address(address: Union[str, dict, ServiceAddress]) -> Union[ServiceAddress, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress]:
+def create_service_address(address: Union[str, dict, ServiceAddress], provider: str = None) -> Union[ServiceAddress, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress]:
     """
     Creates the appropriate service address object based on the address provided.
     Returns instances of the BaseModel classes from service_definition module.
+    :param address: The address to create the service address from. The type of the service address (provider) will be determined by the structure of the service address.property
+    :param provider: Optional provider to guide the service manager additionally in resolving service adresses. Can be 'replicate', 'runpod' or 'socaity'.
     """
+    if not address:
+        return None
+        
     if isinstance(address, ServiceAddress):
         return address
 
@@ -139,7 +152,7 @@ def create_service_address(address: Union[str, dict, ServiceAddress]) -> Union[S
             # Create ReplicateServiceAddress from service_definition
             url, parsed_model_name, parsed_version = parse_replicate_url(model_name or version or adr)
             return ReplicateServiceAddress(
-                url=_url_sanitize(url), 
+                url=_url_sanitize(url),
                 model_name=model_name or parsed_model_name,
                 version=version or parsed_version
             )
@@ -147,7 +160,7 @@ def create_service_address(address: Union[str, dict, ServiceAddress]) -> Union[S
         return create_service_address(adr)
 
     if isinstance(address, str):
-        st = determine_service_type(address)
+        st = provider or determine_service_type(address)
         if st == "socaity":
             # Create SocaityServiceAddress from service_definition
             return SocaityServiceAddress(url=_url_sanitize(address))

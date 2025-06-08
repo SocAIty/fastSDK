@@ -126,7 +126,7 @@ class ReplicateResponseParser(ResponseParserStrategy):
         urls = data.get("urls", {})
         return urls and "api.replicate.com" in urls.get("get", "")
 
-    def parse(self, data: Dict) -> ReplicateJobResponse:
+    def parse(self, data: Dict, parse_media: bool = False) -> ReplicateJobResponse:
         status, progress = self.parse_status_and_progress(data)
 
         # Handle Replicate-specific status edge case

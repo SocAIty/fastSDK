@@ -32,6 +32,16 @@ class BaseSchemaParser:
             flat = [t for typ in types for t in (typ if isinstance(typ, list) else [typ])]
             return list(flat) if len(flat) > 1 else flat.pop()
 
+        if "allOf" in schema:
+            types = [self._get_type(s) for s in schema["allOf"]]
+            flat = [t for typ in types for t in (typ if isinstance(typ, list) else [typ])]
+            return list(flat) if len(flat) > 1 else flat.pop()
+
+        if "oneOf" in schema:
+            types = [self._get_type(s) for s in schema["oneOf"]]
+            flat = [t for typ in types for t in (typ if isinstance(typ, list) else [typ])]
+            return list(flat) if len(flat) > 1 else flat.pop()
+
         return "object"
 
     def _make_param(

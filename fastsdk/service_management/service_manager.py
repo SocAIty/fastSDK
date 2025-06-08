@@ -1,5 +1,4 @@
 from typing import Dict, Optional, Union, Any, List, Iterator
-import re
 from pathlib import Path
 from fastsdk.service_management.service_definition import (
     ServiceDefinition, ModelDefinition, ServiceCategory, ServiceFamily, EndpointDefinition
@@ -8,6 +7,7 @@ from fastsdk.service_management.parsers import parse_service_definition
 from fastsdk.service_management.parsers.service_adress_parser import create_service_address
 from fastsdk.service_management.service_store.IServiceStore import IServiceStore
 import uuid
+from fastsdk.utils import normalize_name_for_py
     
 
 class ServiceManager:
@@ -35,42 +35,8 @@ class ServiceManager:
             for service in self.service_store.list_services():
                 self._services[service.id] = service
                 if service.display_name:
-                    normalized = self.normalize_name(service.display_name)
+                    normalized = normalize_name_for_py(service.display_name)
                     self._service_names[normalized] = service.id
-
-    @staticmethod
-    def normalize_name(name: str, preserve_paths: bool = False) -> Union[str, None]:
-        """
-        Normalize a name to be openapi compatible and better searchable.
-        Will remove any special characters. Transforms lowercase. Replaces spaces with hyphens.
-        :param name: The service name to normalize
-        :param preserve_paths: If True, preserves forward slashes (/) for path segments
-        :return: Normalized service name
-        """
-        if name is None or not isinstance(name, str):
-            return None
-
-        def normalize_segment(text: str) -> str:
-            """Helper function to normalize a single segment of text"""
-            text = text.lower()
-            text = ' '.join(text.split())  # Replace multiple spaces with single space
-            text = text.replace("\\", "/")  # Replace backslashes with forward slashes
-            text = text.replace(' ', '-').replace("_", '-')   # Replace spaces and _ with hyphens
-            text = re.sub(r'[^a-z0-9-]', '', text)  # Keep only alphanumeric and hyphens
-            text = re.sub(r'-+', '-', text)  # Replace multiple hyphens with single hyphen
-            return text.strip('-')  # Remove leading/trailing hyphens
-
-        if preserve_paths:
-            # Normalize each non-empty path segment
-            result = '/'.join(
-                segment for segment in
-                (normalize_segment(s) for s in name.split('/'))
-                if segment
-            )
-        else:
-            result = normalize_segment(name)
-
-        return result if result else None
 
     def add_service(
         self,
@@ -80,7 +46,8 @@ class ServiceManager:
         service_name: Optional[str] = None,
         category: Union[str, List[str]] = None,
         family_id: str = None,
-        used_models: Union[ModelDefinition, List[ModelDefinition]] = None
+        used_models: Union[ModelDefinition, List[ModelDefinition]] = None,
+        specification: str = None
     ) -> ServiceDefinition:
         """
         Add a new service definition from an OpenAPI specification source using OpenAPIParser.
@@ -94,6 +61,7 @@ class ServiceManager:
             category: Optional category to assign to the service. Overrides any category found in the spec.
             family_id: Optional family to assign to the service. Overrides any family found in the spec.
             used_models: Optional models to assign to the service. Overrides any models found in the spec.
+            specification: Optional to guide the service manager additionally in resolving service adresses. Overrides any specification determined by the spec.
         Returns:
             The added ServiceDefinition object.
             
@@ -116,16 +84,19 @@ class ServiceManager:
             service_def.display_name = "unnamed_service_" + service_def.id
 
         # Add normalized name mapping using display_name from the parsed definition
-        normalized = self.normalize_name(service_def.display_name)
+        normalized = normalize_name_for_py(service_def.display_name)
         # Check for potential name conflicts before adding
         if normalized in self._service_names and self._service_names[normalized] != service_def.id:
             print(f"Service name '{service_def.display_name}' (normalized: '{normalized}') conflicts with existing service ID '{self._service_names[normalized]}'. Overwriting mapping.")
         self._service_names[normalized] = service_def.id
 
+        if specification and isinstance(specification, str):
+            service_def.specification = specification.lower()
+
         if service_address is not None and isinstance(service_address, str):
-            service_def.service_address = create_service_address(service_address)
+            service_def.service_address = create_service_address(service_address, service_def.specification)
         elif service_address is None and isinstance(spec_source, str) and spec_source.startswith(('http://', 'https://')):
-            service_def.service_address = create_service_address(spec_source)
+            service_def.service_address = create_service_address(spec_source, service_def.specification)
 
         if category:
             service_def.category = [category] if isinstance(category, str) else category
@@ -162,7 +133,7 @@ class ServiceManager:
                     # print(f"Warning: Category ID '{category_id}' referenced by service '{service_def.id}' not found. Creating placeholder.")
                     self._categories[category_id] = ServiceCategory(id=category_id)
                     # Add name mapping for placeholder
-                    self._category_names[self.normalize_name(f"Category {category_id}")] = category_id
+                    self._category_names[normalize_name_for_py(f"Category {category_id}")] = category_id
 
         # Register models used by the service if they aren't already known
         # The parser doesn't create ModelDefinition objects yet, needs update there or here.
@@ -178,7 +149,7 @@ class ServiceManager:
                     model_def = ModelDefinition(id=model_id, display_name=model_name or f"Model {model_id}")
                     self._models[model_id] = model_def
                     if model_def.display_name:
-                        self._model_names[self.normalize_name(model_def.display_name)] = model_id
+                        self._model_names[normalize_name_for_py(model_def.display_name)] = model_id
 
     def get_service(self, id_or_name: str) -> Optional[ServiceDefinition]:
         """
@@ -197,7 +168,7 @@ class ServiceManager:
             return self._services[id_or_name]
         
         # Normalized name lookup in cache
-        normalized = self.normalize_name(id_or_name)
+        normalized = normalize_name_for_py(id_or_name)
         if normalized in self._service_names:
             service_id = self._service_names[normalized]
             return self._services[service_id]
@@ -245,10 +216,10 @@ class ServiceManager:
                 elif key == 'display_name':
                     # Remove old normalized name mapping
                     if service.display_name:
-                        oldnormalized = self.normalize_name(service.display_name)
+                        oldnormalized = normalize_name_for_py(service.display_name)
                         self._service_names.pop(oldnormalized, None)
                     # Add new normalized name mapping
-                    normalized = self.normalize_name(value)
+                    normalized = normalize_name_for_py(value)
                     self._service_names[normalized] = service.id
                 else:
                     setattr(service, key, value)
@@ -281,7 +252,7 @@ class ServiceManager:
             self.service_store.delete_service(service.id)
         
         if service.display_name:
-            normalized = self.normalize_name(service.display_name)
+            normalized = normalize_name_for_py(service.display_name)
             self._service_names.pop(normalized, None)
         
         return True
@@ -374,7 +345,7 @@ class ServiceManager:
         self._categories[category.id] = category
         
         if category.display_name:
-            normalized = self.normalize_name(category.display_name)
+            normalized = normalize_name_for_py(category.display_name)
             self._category_names[normalized] = category.id
         
         return category
@@ -394,7 +365,7 @@ class ServiceManager:
             return self._categories[id_or_name]
         
         # Normalized name lookup
-        normalized = self.normalize_name(id_or_name)
+        normalized = normalize_name_for_py(id_or_name)
         if normalized in self._category_names:
             category_id = self._category_names[normalized]
             return self._categories[category_id]
@@ -429,7 +400,7 @@ class ServiceManager:
         self._families[family.id] = family
         
         if family.display_name:
-            normalized = self.normalize_name(family.display_name)
+            normalized = normalize_name_for_py(family.display_name)
             self._family_names[normalized] = family.id
         
         return family
@@ -449,7 +420,7 @@ class ServiceManager:
             return self._families[id_or_name]
         
         # Normalized name lookup
-        normalized = self.normalize_name(id_or_name)
+        normalized = normalize_name_for_py(id_or_name)
         if normalized in self._family_names:
             family_id = self._family_names[normalized]
             return self._families[family_id]
@@ -484,7 +455,7 @@ class ServiceManager:
         self._models[model.id] = model
         
         if model.display_name:
-            normalized = self.normalize_name(model.display_name)
+            normalized = normalize_name_for_py(model.display_name)
             self._model_names[normalized] = model.id
         
         return model
@@ -520,7 +491,7 @@ class ServiceManager:
             return self._models[id_or_name]
         
         # Normalized name lookup
-        normalized = self.normalize_name(id_or_name)
+        normalized = normalize_name_for_py(id_or_name)
         if normalized in self._model_names:
             model_id = self._model_names[normalized]
             return self._models[model_id]
@@ -570,7 +541,7 @@ class ServiceManager:
             if value.id not in self._services:
                 self._services[value.id] = value
                 if value.display_name:
-                    normalized = self.normalize_name(value.display_name)
+                    normalized = normalize_name_for_py(value.display_name)
                     self._service_names[normalized] = value.id
             else:
                 raise ValueError(f"Service '{value.id}' is already registered")
@@ -621,7 +592,7 @@ class ServiceManager:
             self.service_store.delete_service(service.id)
         
         if service.display_name:
-            normalized = self.normalize_name(service.display_name)
+            normalized = normalize_name_for_py(service.display_name)
             self._service_names.pop(normalized, None)
         
         return service

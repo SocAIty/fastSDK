@@ -8,8 +8,8 @@ This example shows how to:
 """
 
 from fastsdk.service_management.service_manager import ServiceManager
-from fastsdk.definitions.service_definition import (
-    ServiceFamily, ServiceCategory, ModelDefinition, ModelDomainTag
+from fastsdk.service_management.service_definition import (
+    ServiceFamily, ServiceCategory, ModelDefinition, ServiceDefinition
 )
 
 
@@ -21,8 +21,8 @@ def main():
     image_category = ServiceCategory(
         id="img_generation",
         display_name="Image Generation",
-        input_domain=[ModelDomainTag.TEXT],
-        output_domain=[ModelDomainTag.IMAGE],
+        input_domain="text",
+        output_domain="image",
         description="Services that generate images from text prompts"
     )
     manager.add_category(image_category)
@@ -30,8 +30,8 @@ def main():
     text_category = ServiceCategory(
         id="text_generation",
         display_name="Text Generation",
-        input_domain=[ModelDomainTag.TEXT],
-        output_domain=[ModelDomainTag.TEXT],
+        input_domain="text",
+        output_domain="text",
         description="Services that generate text from text prompts"
     )
     manager.add_category(text_category)
@@ -86,15 +86,12 @@ def main():
         # We're using a dummy URL, so this will likely fail
         print(f"Could not add service: {e}")
         
-        # Manual service creation for demonstration
-        from fastsdk.definitions.service_definition import ServiceDefinition, ServiceSpecification
-        
         # Create a ServiceDefinition manually for demo purposes
         sd_service = ServiceDefinition(
             id="sd_service",
             display_name="Stable Diffusion API",
             description="API for generating images with Stable Diffusion",
-            specification=ServiceSpecification.SOCAITY,
+            specification="socaity",
             category=["img_generation"],  # Reference to category ID
             family_id="stable_diffusion",  # Reference to family ID
             used_models=[sd_model]  # Reference to model
@@ -106,7 +103,7 @@ def main():
             id="llama_service",
             display_name="Llama API",
             description="API for generating text with Llama models",
-            specification=ServiceSpecification.SOCAITY,
+            specification="socaity",
             category=["text_generation"],  # Reference to category ID
             family_id="llama",  # Reference to family ID
             used_models=[llama_model]  # Reference to model

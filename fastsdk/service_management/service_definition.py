@@ -34,8 +34,8 @@ class ServiceAddress(BaseModel):
 
 
 class ReplicateServiceAddress(ServiceAddress):
-    model_name: str
-    version: str
+    model_name: Optional[str] = Field(default=None)
+    version: Optional[str] = Field(default=None)
 
 
 class RunpodServiceAddress(ServiceAddress):

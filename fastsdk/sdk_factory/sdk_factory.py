@@ -1,6 +1,5 @@
 from pathlib import Path
 import os
-import re
 from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
@@ -9,6 +8,7 @@ from fastsdk.settings import Global
 from fastsdk.service_management.service_definition import (
     ServiceDefinition, EndpointDefinition, EndpointParameter
 )
+from fastsdk.utils import normalize_name_for_py
 
 # Constants for improved maintainability
 MEDIA_TYPES = {
@@ -54,29 +54,6 @@ def _get_template(custom_template_path: Optional[str] = None) -> Template:
     template_dir = Path(__file__).parent
     env = Environment(loader=FileSystemLoader(template_dir))
     return env.get_template(DEFAULT_TEMPLATE_NAME)
-
-
-def _sanitize_method_name(path: str) -> str:
-    """
-    Converts an endpoint path to a valid Python method name.
-    
-    Args:
-        path: The endpoint path (e.g., '/swap-img-to-img')
-        
-    Returns:
-        A valid Python method name (e.g., 'swap_img_to_img')
-    """
-    # Remove leading and trailing slashes
-    clean_path = path.strip('/')
-    
-    # Replace hyphens with underscores and handle other special characters
-    method_name = re.sub(r'[^a-zA-Z0-9_]', '_', clean_path)
-    
-    # Ensure it doesn't start with a number
-    if method_name and method_name[0].isdigit():
-        method_name = f"op_{method_name}"
-        
-    return method_name
 
 
 def _get_type_hint(param: EndpointParameter) -> str:
@@ -229,7 +206,7 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
 
     return {
         "path": endpoint.path,
-        "method_name": _sanitize_method_name(endpoint.path),
+        "method_name": normalize_name_for_py(endpoint.path),
         "description": description,
         "description_contains_args": description_contains_args,
         "parameters": parameters,
@@ -315,31 +292,6 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
     
     return file_path
 
-
-def normalize_class_name(display_name: str) -> str:
-    """
-    Convert a display name to a valid Python class name.
-    
-    Args:
-        display_name: The display name to convert
-        
-    Returns:
-        A valid PascalCase Python class name
-    """
-
-    class_name = display_name.lower()
-    # don't allow any special characters
-    class_name = re.sub(r'[^a-zA-Z0-9]', '', class_name)
-    # don't allow any numbers at the beginning
-    class_name = re.sub(r'^[0-9]', '', class_name)
-    # Ensure it's a valid class name
-    if not class_name:
-        return "no_name_"
-    if class_name[0].isdigit():
-        class_name = f"sdk_{class_name}"
-    
-    return class_name
-
                 
 def create_sdk(
     service_definition: Union[str, ServiceDefinition],
@@ -380,7 +332,7 @@ def create_sdk(
     
     # Determine class name if not provided
     if not class_name:
-        class_name = normalize_class_name(service_def.display_name)
+        class_name = normalize_name_for_py(service_def.display_name)
 
     # Get file path
     file_path = _get_file_path(save_path, class_name)
@@ -431,7 +383,7 @@ def create_sdk(
         rendered = jinja_template.render(**template_data)
         
         # Save the rendered file
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write(rendered)
 
         return str(file_path), class_name, service_def
