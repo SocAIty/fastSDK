@@ -119,9 +119,8 @@ def _format_default_value(param: EndpointParameter) -> Optional[str]:
     # Try to find the most appropriate type for the default value
     for p_type in param_types:
         if p_type == "string":
-            # Ensure proper string formatting for Jinja2
-            escaped_value = str(param.default).replace('"', '\\"')
-            return f'"{escaped_value}"'
+            # Use repr() to safely escape the string for Python literals
+            return repr(str(param.default))
         elif p_type == "boolean":
             # Use Python's True/False for boolean values
             if isinstance(param.default, bool):
@@ -142,14 +141,33 @@ def _format_default_value(param: EndpointParameter) -> Optional[str]:
                 continue
         elif p_type == "array":
             if isinstance(param.default, (list, tuple)):
-                return str(param.default)
+                return repr(param.default)
         elif p_type == "object":
             if isinstance(param.default, dict):
-                return str(param.default)
+                return repr(param.default)
     
-    # If no type matched or conversion failed, return as string
-    escaped_value = str(param.default).replace('"', '\\"')
-    return f'"{escaped_value}"'
+    # If no type matched or conversion failed, return as safely escaped string
+    return repr(str(param.default))
+
+
+def _safe_escape_description(description: Optional[str]) -> Optional[str]:
+    """
+    Safely escape a description string for use in Python docstrings.
+    
+    Args:
+        description: The description string to escape
+        
+    Returns:
+        The safely escaped description or None if input is None
+    """
+    if not description:
+        return description
+    
+    # Only escape triple quotes to prevent docstring termination
+    escaped = description.replace('"""', '\\"\\"\\"')
+    escaped = escaped.replace("'''", "\\'\\'\\'")
+    
+    return escaped
 
 
 def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, Any]]:
@@ -175,13 +193,16 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
         # 2. It doesn't have a default value already specified
         is_optional = not param.required and default_value is None
         
+        # Safely escape the parameter description
+        safe_description = _safe_escape_description(param.description)
+        
         parameters.append({
-            "name": param.name,
+            "name": normalize_name_for_py(param.name, lower_case=False),
             "type_hint": _get_type_hint(param),
             "default_value": default_value,
             "required": param.required,
             "optional": is_optional,
-            "description": param.description
+            "description": safe_description
         })
 
     # Sort parameters:
@@ -197,11 +218,14 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
     if json_schema.get("type") == "object" and "properties" in json_schema:
         returns = "Dict[str, Any]"
 
-    # Format description with proper indentation
+    # Format description with proper indentation and escaping
     description = endpoint.description
     description_contains_args = False
     if description:
-        description = "\n        ".join(line for line in description.split("\n"))
+        # First escape the description safely
+        safe_description = _safe_escape_description(description)
+        # Then format with proper indentation
+        description = "\n        ".join(line for line in safe_description.split("\n"))
         description_contains_args = "Args:" in description or ":param" in description
 
     return {

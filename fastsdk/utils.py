@@ -5,7 +5,8 @@ def normalize_identifier(
     original: str,
     replacement_char: str,
     allowed_non_alphanum: str,
-    trim_chars: str
+    trim_chars: str,
+    lower_case: bool = True
 ) -> str:
     """
     Generalized identifier normalization utility.
@@ -20,18 +21,21 @@ def normalize_identifier(
         str: A normalized, lowercase identifier with enforced formatting rules.
     """
     # Convert to lowercase
-    normalized = original.lower()
+    if lower_case:
+        normalized = original.lower()
+    else:
+        normalized = original
 
-    # Optional: Convert backslashes to slashes for web names
-    if replacement_char == "-":
-        normalized = normalized.replace("\\", "/")
+    # Replace backslashes with slashes
+    normalized = normalized.replace("\\", "/")
 
     # Replace all characters that are not a-z, 0-9, or explicitly allowed
     allowed = f"a-z0-9{re.escape(allowed_non_alphanum)}"
     normalized = re.sub(f"[^{allowed}]+", replacement_char, normalized)
 
-    # Replace multiple consecutive replacement characters with one
-    normalized = re.sub(f"{re.escape(replacement_char)}+", replacement_char, normalized)
+    # Collapse multiple instances of allowed non-alphanum characters (like '//' or '__')
+    for ch in set(allowed_non_alphanum + replacement_char):
+        normalized = re.sub(f"{re.escape(ch)}+", ch, normalized)
 
     # Trim unwanted leading/trailing characters
     normalized = normalized.strip(trim_chars + replacement_char)
@@ -43,7 +47,7 @@ def normalize_identifier(
     return normalized
 
             
-def normalize_name_for_py(name: str) -> str:
+def normalize_name_for_py(name: str, lower_case: bool = True) -> str:
     """
     Normalizes a string to be used as a Python module, method or class name by:
     - Replacing all special characters with underscores
@@ -61,7 +65,8 @@ def normalize_name_for_py(name: str) -> str:
         original=name,
         replacement_char='_',
         allowed_non_alphanum='',
-        trim_chars='_'
+        trim_chars='_',
+        lower_case=lower_case
     )
     if len(name) == 0:
         return "no_name"
