@@ -14,6 +14,7 @@ from fastsdk.service_interaction.response.base_response import BaseJobResponse
 
 from fastsdk.service_interaction.request import APIClient, APIClientReplicate, APIClientRunpod, APIClientSocaity, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
+from media_toolkit.core.MediaDict import MediaDict
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -146,8 +147,10 @@ class ApiJobManager:
         request_data = job.prev_task_output
         api_client = self.api_clients[job.service_def.id]
 
-        url_files = request_data.file_params.get_url_files()
-        if url_files:
+        url_files = {}
+        if isinstance(request_data.file_params, MediaDict):
+            url_files = request_data.file_params.get_url_files()
+        if url_files and len(url_files) > 0:
             request_data.body_params.update(url_files)
 
         fh = self.file_handlers.get(job.service_def.id)

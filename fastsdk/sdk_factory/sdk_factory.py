@@ -170,12 +170,13 @@ def _safe_escape_description(description: Optional[str]) -> Optional[str]:
     return escaped
 
 
-def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, Any]]:
+def _prepare_endpoint_data(endpoint: EndpointDefinition, specification: str = None) -> Optional[Dict[str, Any]]:
     """
     Prepare data for an endpoint template.
     
     Args:
         endpoint: The endpoint definition
+        specification: The service specification (for path mapping)
         
     Returns:
         A dictionary with processed endpoint data or None if endpoint should be skipped
@@ -211,6 +212,13 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
     # 3. Optional parameters without default values last
     parameters.sort(key=lambda x: (not x["required"], x["optional"]))
 
+    # Handle path mapping for replicate models - use original path for request, mapped path for method name
+    request_path = endpoint.path
+    method_path = endpoint.path
+    
+    if specification in ['cog', 'replicate'] and endpoint.path.lower() == "/predictions":
+        method_path = "/predict"  # Use for method name generation only
+
     # Get return type from 200 response if available
     returns = None
     response_200 = endpoint.responses.get("200", {})
@@ -223,14 +231,14 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
     description_contains_args = False
     if description:
         # First escape the description safely
-        safe_description = _safe_escape_description(description)
+        safe_description = _safe_escape_description(description)  
         # Then format with proper indentation
         description = "\n        ".join(line for line in safe_description.split("\n"))
         description_contains_args = "Args:" in description or ":param" in description
 
     return {
-        "path": endpoint.path,
-        "method_name": normalize_name_for_py(endpoint.path),
+        "path": request_path,  # Original path for API requests
+        "method_name": normalize_name_for_py(method_path),  # Mapped path for method name
         "description": description,
         "description_contains_args": description_contains_args,
         "parameters": parameters,
@@ -238,7 +246,7 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition) -> Optional[Dict[str, A
         "raises": "ValueError: If the API request fails"
     }
 
-
+        
 def _detect_required_imports(endpoints_data: List[Dict[str, Any]]) -> tuple[Set[str], Set[str]]:
     """
     Analyze endpoint data to detect required imports.
@@ -374,10 +382,7 @@ def create_sdk(
         if endpoint.path.lower() in skip_endpoints:
             continue
 
-        if service_def.specification in ['cog', 'replicate'] and endpoint.path.lower() == "/predictions":
-            endpoint.path = "/predict"
-
-        endpoint_data = _prepare_endpoint_data(endpoint)
+        endpoint_data = _prepare_endpoint_data(endpoint, service_def.specification)
         if endpoint_data:
             endpoints_data.append(endpoint_data)
     

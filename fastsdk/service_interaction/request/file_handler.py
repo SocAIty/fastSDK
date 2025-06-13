@@ -20,10 +20,6 @@ class FileHandler:
 
     async def load_files_from_disk(self, file_params: dict) -> Union[MediaDict, dict]:
         """Load files from disk but ignore files that are provided as URLs"""
-        if not file_params or len(file_params) == 0:
-            return file_params
-
-        # Ignore files that are provided as URLs
         media_files = MediaDict(files=file_params, download_files=False, read_system_files=True)
         return media_files
 
@@ -61,6 +57,12 @@ class FileHandler:
         return self.fast_cloud.upload(files)
 
     def _get_non_url_files(self, files: MediaDict) -> MediaDict:
+        if not files or len(files) == 0:
+            return files
+        
+        if not isinstance(files, MediaDict):
+            files = MediaDict(files=files, download_files=False, read_system_files=True)
+
         prevdownload_set = files.download_files
         files.download_files = False # could cause an infinite loop if it is true.
         sendable_files = files.get_processable_files(raise_exception=False, silent=True)
@@ -75,6 +77,8 @@ class FileHandler:
         return files
         
     async def prepare_files_for_send(self, files: MediaDict) -> Optional[MediaDict | dict]:
+        if not files or len(files) == 0:
+            return files
         # get all files to be sent
         sendable_files = self._get_non_url_files(files)
 
