@@ -44,9 +44,34 @@ class FileSystemStore(IServiceStore):
         self.save_index()
 
     def save_index(self):
-        with open(os.path.join(self.base_path, "version_index.json"), "w") as f:
-            json.dump(self._index, f)
-        
+        try:
+            if not os.path.exists(self.base_path):
+                os.makedirs(self.base_path, exist_ok=True)
+            
+            index_path = os.path.join(self.base_path, "version_index.json")
+            index_path = os.path.normpath(index_path)
+            
+            # Use a temporary file to ensure atomic writes
+            temp_path = f"{index_path}.tmp"
+            with open(temp_path, "w") as f:
+                json.dump(self._index, f)
+            
+            # Atomic rename operation
+            if os.path.exists(index_path):
+                os.replace(temp_path, index_path)
+            else:
+                os.rename(temp_path, index_path)
+                
+        except (IOError, OSError) as e:
+            # Log the error but don't crash
+            print(f"Warning: Failed to save index file: {str(e)}")
+            # Ensure the temporary file is cleaned up if it exists
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except (IOError, OSError):
+                    pass
+
     def get_version_index(self) -> Dict[str, str]:
         if not self._index:
             index_fp = os.path.join(self.base_path, "version_index.json")
