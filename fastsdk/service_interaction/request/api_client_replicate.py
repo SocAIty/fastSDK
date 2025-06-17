@@ -39,6 +39,6 @@ class APIClientReplicate(APIClient):
             if version:
                 body['version'] = version
 
-        request_data.body_params = json.dumps(body)
+        request_data.body_params = body  # json.dumps(body)
 
         return await super().send_request(request_data, timeout_s)

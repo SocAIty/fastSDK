@@ -178,7 +178,18 @@ class ApiJobManager:
             return parsed_response
 
         api_client = self.api_clients[job.service_def.id]
-        http_response = await api_client.poll_status(parsed_response)
+        
+        try:
+            http_response = await api_client.poll_status(parsed_response)
+        except Exception as e:
+            n_polling_errors = 0
+            if job.has_task_data("number_of_polling_errors"):
+                n_polling_errors = job.get_task_data()["number_of_polling_errors"]
+            
+            if n_polling_errors > 3:
+                raise e
+            job.set_task_data({"number_of_polling_errors": n_polling_errors + 1})
+            return PollAgain(f"Job status polling failed: {e}")
 
         # Check for HTTP errors
         error = self.response_parser.check_response_status(http_response)
@@ -222,14 +233,15 @@ class ApiJobManager:
         """Task method that processes the result by delegating to FileService"""
 
         result = job.prev_task_output
-        if isinstance(result, BaseJobResponse):
-            result = result.result
+        if not isinstance(result, BaseJobResponse):
+            return result
             
-        # Process file responses
-        fh = self.file_handlers.get(job.service_def.id)
-        processed_result = await fh.process_file_response(result)
-        
-        return processed_result
+        # Process file responses if they are media-type likely
+        result = await self.response_parser.parse_media_result(result)
+        if result is None:
+            return result
+
+        return result.result
 
     def submit_job(self, service_id: str, endpoint_id: str, data: dict) -> MrMeseex:
         """

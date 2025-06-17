@@ -2,12 +2,8 @@ from typing import Optional, Union
 import json
 import httpx
 
-from fastsdk.service_interaction.response.base_response import BaseJobResponse, RunpodJobResponse
-from fastsdk.service_interaction.response.response_parser_strategies import (
-    SocaityResponseParser,
-    RunpodResponseParser,
-    ReplicateResponseParser
-)
+from fastsdk.service_interaction.response.base_response import BaseJobResponse, RunpodJobResponse, SocaityJobResponse, ReplicateJobResponse
+from fastsdk.service_interaction.response.response_parser_strategies import SocaityResponseParser, RunpodResponseParser, ReplicateResponseParser
 
 
 class ResponseParser:
@@ -50,6 +46,21 @@ class ResponseParser:
 
         except json.JSONDecodeError:
             return response.content
+
+    async def parse_media_result(self, parsed_response: BaseJobResponse) -> BaseJobResponse:
+        """
+        Given a previously parsed response (with parse_media=False) this method can be used to parse the media result.
+        """
+        if not parsed_response or not isinstance(parsed_response, BaseJobResponse):
+            return None
+
+        if isinstance(parsed_response, SocaityJobResponse):
+            parsed_response.result = SocaityResponseParser()._parse_media_result(parsed_response.result)
+        
+        if isinstance(parsed_response, ReplicateJobResponse):
+            parsed_response.result = ReplicateResponseParser()._parse_media_result(parsed_response.result)
+
+        return parsed_response
 
     @staticmethod
     def check_response_status(response: httpx.Response) -> Optional[str]:

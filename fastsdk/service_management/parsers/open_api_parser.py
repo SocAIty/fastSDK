@@ -122,4 +122,3 @@ class OpenAPIParser:
 
     def _create_version_hash(self) -> str:
         return hashlib.sha1(json.dumps(self.spec, sort_keys=True).encode()).hexdigest()
-

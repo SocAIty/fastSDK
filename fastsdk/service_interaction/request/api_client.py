@@ -136,15 +136,27 @@ class APIClient:
         Returns:
             The API response
         """
+        # Use json parameter for JSON requests, data for form requests
+        if request_data.file_params:
+            # If there are files, use multipart/form-data
+            return await self.client.post(
+                url=request_data.url,
+                params=request_data.query_params,
+                data=request_data.body_params,
+                files=request_data.file_params,
+                headers=request_data.headers,
+                timeout=timeout_s
+            )
+
+        # If no files, send as JSON. Important, if no files are present; this must be sent like this.
         return await self.client.post(
             url=request_data.url,
             params=request_data.query_params,
-            data=request_data.body_params,
-            files=request_data.file_params,
+            json=request_data.body_params,  # Use json parameter instead of data
             headers=request_data.headers,
             timeout=timeout_s
         )
-    
+
     async def request_url(
         self,
         url: str,

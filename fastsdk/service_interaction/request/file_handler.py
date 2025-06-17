@@ -1,10 +1,7 @@
-from typing import Optional, Union, Any
-from pydantic import BaseModel
+from typing import Optional, Union
 from fastCloud import FastCloud
 from fastCloud.core import BaseUploadAPI
-from media_toolkit import MediaDict, MediaFile, MediaList
-from media_toolkit.utils.file_conversion import media_from_FileModel
-from fastsdk.service_interaction.response.base_response import FileModel
+from media_toolkit import MediaDict
 
 
 class FileHandler:
@@ -90,28 +87,3 @@ class FileHandler:
         
         return sendable_files
 
-    async def process_file_response(self, response: Any) -> Union[MediaFile, MediaDict, MediaList]:
-        """
-        Process file data from API responses.
-        
-        Args:
-            response: The API response containing file data
-            
-        Returns:
-            Processed response with files converted to appropriate format
-        """
-        if isinstance(response, FileModel):
-            return media_from_FileModel(dict(response), allow_reads_from_disk=False)
-
-        if isinstance(response, BaseModel):
-            response = dict(response)
-
-        if MediaFile._is_file_model(response):
-            return media_from_FileModel(response, allow_reads_from_disk=False)
-        elif isinstance(response, dict):
-            return MediaDict(download_files=True, read_system_files=False).from_any(response)
-        elif isinstance(response, list):
-            return MediaList(download_files=True, read_system_files=False).from_any(response)
-
-        # Return original response if no file processing is needed
-        return response

@@ -6,7 +6,7 @@ from fastsdk.service_interaction.response.base_response import (
     BaseJobResponse, SocaityJobResponse,
     RunpodJobResponse, ReplicateJobResponse, JobProgress
 )
-from media_toolkit.utils.file_conversion import media_from_FileModel
+from media_toolkit import MediaFile, media_from_FileModel
 
 
 class ResponseParserStrategy(ABC):
@@ -62,6 +62,7 @@ class SocaityResponseParser(ResponseParserStrategy):
         if isinstance(result, dict):
             return media_from_FileModel(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
         elif isinstance(result, list):
+            # for files socaity always returns a list of file-models
             return [
                 media_from_FileModel(r, allow_reads_from_disk=False, default_return_if_not_file_result=r)
                 for r in result
@@ -103,7 +104,7 @@ class RunpodResponseParser(ResponseParserStrategy):
     def parse(self, data: Dict, parse_media: bool = True) -> RunpodJobResponse:
         status, progress = self.parse_status_and_progress(data)
         result = data.get("output")
-        # if parse_media:
+        #if parse_media:
         #    result = self._parse_media_result(data.get("output"))
 
         return RunpodJobResponse(
@@ -126,6 +127,17 @@ class ReplicateResponseParser(ResponseParserStrategy):
         urls = data.get("urls", {})
         return urls and "api.replicate.com" in urls.get("get", "")
 
+    def _parse_media_result(self, result):
+        """
+        Method checks the results of the job, and converts file results to media-toolkit objects
+        """
+        if isinstance(result, str) and "https://replicate.delivery" in result:
+            return MediaFile().from_url(result)
+        elif isinstance(result, list):
+            return [self._parse_media_result(m) for m in result]
+        else:
+            return result
+
     def parse(self, data: Dict, parse_media: bool = False) -> ReplicateJobResponse:
         status, progress = self.parse_status_and_progress(data)
 
@@ -137,12 +149,16 @@ class ReplicateResponseParser(ResponseParserStrategy):
         urls = data.get("urls", {})
         job_id = data.get("id", "")
 
+        result = data.get("output")
+        if parse_media:
+            result = self._parse_media_result(data.get("output"))
+
         return ReplicateJobResponse(
             id=job_id,
             status=status,
             error=data.get("error"),
             progress=progress,
-            result=data.get("output"),
+            result=result,
             refresh_job_url=urls.get("get", f"v1/predictions/{job_id}"),
             cancel_job_url=urls.get("cancel", f"v1/predictions/{job_id}/cancel"),
             stream_job_url=urls.get("stream"),

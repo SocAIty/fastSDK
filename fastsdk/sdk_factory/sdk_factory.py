@@ -216,8 +216,7 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition, specification: str = No
     request_path = endpoint.path
     method_path = endpoint.path
     
-    if specification in ['cog', 'replicate'] and endpoint.path.lower() == "/predictions":
-        method_path = "/predict"  # Use for method name generation only
+ 
 
     # Get return type from 200 response if available
     returns = None
