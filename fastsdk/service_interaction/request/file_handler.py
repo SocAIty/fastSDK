@@ -17,7 +17,7 @@ class FileHandler:
 
     async def load_files_from_disk(self, file_params: dict) -> Union[MediaDict, dict]:
         """Load files from disk but ignore files that are provided as URLs"""
-        media_files = MediaDict(files=file_params, download_files=False, read_system_files=True)
+        media_files = MediaDict(files=file_params, download_files=False, read_system_files=True)    
         return media_files
 
     async def _handle_file_upload(self, files: MediaDict) -> Optional[MediaDict | dict]:

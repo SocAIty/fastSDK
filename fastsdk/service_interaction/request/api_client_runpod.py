@@ -1,4 +1,3 @@
-import json
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
 from fastsdk.service_management.service_definition import EndpointDefinition, RunpodServiceAddress
@@ -42,7 +41,7 @@ class APIClientRunpod(APIClient):
 
         request_data.file_params = {}
         request_data.query_params = {}
-        request_data.body_params = json.dumps({"input": all_params})
+        request_data.body_params = {"input": all_params} # json.dumps({"input": all_params})
 
         return await super().send_request(request_data, timeout_s)
 

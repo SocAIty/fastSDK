@@ -27,8 +27,6 @@ STANDARD_TYPE_MAPPING = {
     "array": "List[Any]",
 }
 
-SKIPPED_ENDPOINTS_FASTTASKAPI = ["/status", "/health"]
-SKIPPED_ENDPOINTS_REPLICATE = ["/", "/cancel", "/shutdown", "/health-check", "/predictions/{prediction_id}", "/predictions/{prediction_id}/cancel"]
 ALLOWED_PARAM_LOCATIONS = ["body", "query"]
 DEFAULT_TEMPLATE_NAME = 'sdk_template.j2'
 
@@ -368,19 +366,9 @@ def create_sdk(
     # Get file path
     file_path = _get_file_path(save_path, class_name)
     
-    # filter out enpdoints
-    skip_endpoints = []
-    if service_def.specification == "fasttaskapi":
-        skip_endpoints = SKIPPED_ENDPOINTS_FASTTASKAPI
-    elif service_def.specification in ['cog', 'replicate']:
-        skip_endpoints = SKIPPED_ENDPOINTS_REPLICATE
-
     # Prepare endpoint data
     endpoints_data = []
     for endpoint in service_def.endpoints:
-        if endpoint.path.lower() in skip_endpoints:
-            continue
-
         endpoint_data = _prepare_endpoint_data(endpoint, service_def.specification)
         if endpoint_data:
             endpoints_data.append(endpoint_data)

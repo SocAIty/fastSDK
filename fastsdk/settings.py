@@ -32,5 +32,5 @@ class _Global:
 
 
 Global = _Global()
-ServiceManager = Global.service_manager
-ApiJobManager = Global.api_job_manager
+ServiceManager: sm = Global.service_manager
+ApiJobManager: ajm = Global.api_job_manager

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from fastsdk.service_interaction.response.base_response import (
     BaseJobResponse, SocaityJobResponse,
-    RunpodJobResponse, ReplicateJobResponse, JobProgress
+    RunpodJobResponse, ReplicateJobResponse, JobProgress, FileModel
 )
 from media_toolkit import MediaFile, media_from_FileModel
 
@@ -59,7 +59,7 @@ class SocaityResponseParser(ResponseParserStrategy):
         """
         Method checks the results of the job, and converts file results to media-toolkit objects
         """
-        if isinstance(result, dict):
+        if isinstance(result, dict) or isinstance(result, FileModel):
             return media_from_FileModel(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
         elif isinstance(result, list):
             # for files socaity always returns a list of file-models
