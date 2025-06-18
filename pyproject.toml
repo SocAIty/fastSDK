@@ -13,7 +13,7 @@ authors = [
 license = {file = "LICENSE"}
 readme = "README.md"
 dependencies = [
-    "httpx"
+    "httpx",
     "tqdm",
     "pydantic>=pydantic-2.11.3",
     "meseex",
