@@ -15,8 +15,8 @@ readme = "README.md"
 dependencies = [
     "httpx",
     "tqdm",
-    "pydantic>=pydantic-2.11.3",
-    "meseex",
+    "pydantic>=2.11.3",
+    "meseex>=0.0.2",
     "media-toolkit[VideoFile]>=00.02.02",
     "singleton_decorator==1.0.0"
 ]
