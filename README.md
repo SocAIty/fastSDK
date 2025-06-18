@@ -56,17 +56,11 @@ This version includes all features needed to conveniently wrap your API into an 
 ```bash
 pip install fastsdk
 ```
-Including cloud storage providers: This allows you to upload bigger filed to common cloud storage providers.
-```bash
-pip install fastsdk[full] #  full feature support
-pip install fastsdk[azure]  # only azure blob storage support
-pip install fastsdk[s3] #only  s3 upload
-```
-
 
 # Get started
 
-First get your openapi.json file from your service.
+First get your openapi.json file from your service usully under:  [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json).
+You can use an example openapi.json from our face2face service located in this repos under [/test/test_files/face2face.json](/test/test_files/face2face.json)
 
 ```python
 # create a full working client stub 
@@ -82,6 +76,8 @@ Let's say you have created your SDK (client) with ```@fastSDK``` and named it fa
 Then you can init it with arguments. In this moment you can pass the api key.
 ```python
 f2f = face2face(api_key="my_api_key")
+api_job = f2f.swap_img_to_img(source_img="my_face_1.jpg", target_img="my_face_2.jpg")
+swapped_img = api_job.get_result()
 ```
 Alternatively you can set the api_keys in the settings and give them names like "runpod".
 Add this at the beginning of your script.
@@ -90,9 +86,7 @@ Add this at the beginning of your script.
 import os
 import settings
 settings.api_keys["runpod"] = os.getenv("my_api_key")
-# Then you can init the service client without the api_key argument at any place.
-f2f = face2face(service_name="runpod")
-```
+``` 
 
 API keys can be set in environment variables, when creating the Service Client or when initializing your SDK.
 In settings.py the default environment variables are set.
