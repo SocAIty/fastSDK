@@ -1,7 +1,7 @@
 from typing import Any, Dict
 
 from fastsdk.service_management import ServiceDefinition, EndpointDefinition
-from fastsdk.service_management import ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress
+from fastsdk.service_management import ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
 
 from meseex import MeseexBox, MrMeseex
 from meseex.control_flow import polling_task, PollAgain
@@ -62,6 +62,30 @@ class ApiJobManager:
         # Create Meseex task orchestrator
         self.meseex_box = MeseexBox(task_methods=self.tasks)
 
+    def _determine_service_type(self, service_def: ServiceDefinition) -> ServiceSpecification:
+        """
+        Helper method to determine the service type based on service address and specification.
+        Needs to be done seperately because of intented changes in different dependencies for changing runtime behavior.
+        Args:
+            service_def: The service definition containing address and specification info
+            
+        Returns:
+            ServiceSpecification literal indicating the service type
+        """
+        if isinstance(service_def.service_address, RunpodServiceAddress):
+            return "runpod"
+        elif isinstance(service_def.service_address, SocaityServiceAddress):
+            return "socaity"
+        elif isinstance(service_def.service_address, ReplicateServiceAddress):
+            return "replicate"
+        elif isinstance(service_def.service_address, ServiceAddress):
+            if service_def.specification == "fasttaskapi":
+                return "socaity"
+            elif service_def.specification == "runpod":
+                return "runpod"
+        
+        return "other"
+
     def add_api_client(self, service_id: str, api_key: str):
         if service_id not in self.api_clients:
             service_def = self.service_manager.get_service(service_id)
@@ -71,16 +95,15 @@ class ApiJobManager:
             if not hasattr(service_def, "service_address") or service_def.service_address is None:
                 raise ValueError(f"Service {service_id} has no service address. Add a service address to the service definition first with ServiceManager.update_service(service_id, service_address=...)")
 
-            api_client = None
-            if isinstance(service_def.service_address, RunpodServiceAddress):
+            service_type = self._determine_service_type(service_def)
+            
+            if service_type == "runpod":
                 api_client = APIClientRunpod(service_def=service_def, api_key=api_key)
-            elif isinstance(service_def.service_address, SocaityServiceAddress):
+            elif service_type == "socaity":
                 api_client = APIClientSocaity(service_def=service_def, api_key=api_key)
-            elif isinstance(service_def.service_address, ReplicateServiceAddress):
+            elif service_type in "replicate":
                 api_client = APIClientReplicate(service_def=service_def, api_key=api_key)
-            elif isinstance(service_def.service_address, ServiceAddress) and service_def.specification == "fasttaskapi":
-                api_client = APIClientSocaity(service_def=service_def, api_key=api_key)
-            else:
+            else:  # "other" or any other default case
                 api_client = APIClient(service_def=service_def, api_key=api_key)
 
             self.api_clients[service_id] = api_client
@@ -92,17 +115,20 @@ class ApiJobManager:
         """
         if file_handler is not None:
             self.file_handlers[service_id] = file_handler
+            return
 
         service_def = self.service_manager.get_service(service_id)
-        if isinstance(service_def.service_address, RunpodServiceAddress):
+        service_type = self._determine_service_type(service_def)
+        
+        if service_type == "runpod":
             file_handler = FileHandler(file_format="base64", max_upload_file_size_mb=300)
-        elif isinstance(service_def.service_address, SocaityServiceAddress):
+        elif service_type == "socaity":
             fast_cloud = SocaityUploadAPI(api_key=api_key)
             file_handler = FileHandler(fast_cloud=fast_cloud, file_format="httpx", upload_to_cloud_threshold_mb=3, max_upload_file_size_mb=3000)
-        elif isinstance(service_def.service_address, ReplicateServiceAddress):
+        elif service_type == "replicate":
             fast_cloud = ReplicateUploadAPI(api_key=api_key)
             file_handler = FileHandler(fast_cloud=fast_cloud, file_format="base64", upload_to_cloud_threshold_mb=10, max_upload_file_size_mb=300)
-        else:
+        else:  # "other" or any other default case
             file_handler = FileHandler()
 
         self.file_handlers[service_id] = file_handler
@@ -168,7 +194,7 @@ class ApiJobManager:
         
         return parsed_response
 
-    @polling_task(poll_interval_seconds=1.0, timeout_seconds=300)
+    @polling_task(poll_interval_seconds=1.0, timeout_seconds=3600)
     async def _poll_status(self, job: APISeex) -> Any:
         """Task method that polls for job completion by delegating to ApiService"""
         parsed_response = job.prev_task_output

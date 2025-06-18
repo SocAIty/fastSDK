@@ -1,4 +1,5 @@
 import httpx
+import json
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
 from fastsdk.service_management.service_definition import EndpointDefinition, RunpodServiceAddress
 
@@ -16,13 +17,14 @@ class APIClientRunpod(APIClient):
 
     def _build_request_url(self, endpoint: EndpointDefinition, query_params: dict | None = None) -> str:
         # Overwrites the default implementation, because query parameters are not added to the url but to the body
-        return f"{self.service_def.service_address.url}/run"
+        url = self.service_def.service_address.url.strip("/").strip("/run")  # in case was defined including 'run'
+        return f"{url}/run"
 
     def format_request_params(self, endpoint: EndpointDefinition, *args, **kwargs) -> RequestData:
         """Prepare request parameters for Runpod API."""
         request_data = super().format_request_params(endpoint, *args, **kwargs)
 
-        # adding path to the body for runpod fasttaskapi services 
+        # adding path to the body for runpod fasttaskapi services
         if endpoint.path:
             request_data.body_params["path"] = endpoint.path
 
@@ -41,7 +43,13 @@ class APIClientRunpod(APIClient):
 
         request_data.file_params = {}
         request_data.query_params = {}
-        request_data.body_params = {"input": all_params} # json.dumps({"input": all_params})
+        request_data.body_params = json.dumps({"input": all_params})
 
-        return await super().send_request(request_data, timeout_s)
-
+        # before switching to super().send_request() consider the following:
+        # we have no file params but a body 
+        return await self.client.post(
+            url=request_data.url,
+            data=request_data.body_params,
+            headers=request_data.headers,
+            timeout=timeout_s
+        )

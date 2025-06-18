@@ -8,7 +8,8 @@
 
 
 Ever wanted to use web APIs as if they are any other python function?
-It was never easier to build an SDK for your hosted services, than it is with socaity-client.
+It was never easier to build an SDK for your hosted services, than it is with fastSDK.
+FastSDK creates a full functioning client for any openapi service.
 
 ### Why?
 
@@ -27,10 +28,15 @@ It works hand-in-hand with [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI)
 
 Out of the box works with following services:
 - Services created with [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) which return a job object.
+- [Runpod](https://github.com/runpod/runpod-python) services
+- [Cog](https://github.com/replicate/cog) services
 - OpenAPI 3.0 / RestAPIs
   - [fastAPI](https://github.com/tiangolo/fastapi)
   - [Flask](https://flask.palletsprojects.com/en/2.0.x/)
-- [Runpod](https://github.com/runpod/runpod-python) services
+
+Can be used together with
+- [Socaity.ai](https://www.socaity.ai) services 
+- [Replicate.ai](https://www.replicate.com) services
 
 ### Features:
 - Easy file upload, download thanks to [media-toolkit](https://github.com/SocAIty/media-toolkit). 
@@ -60,107 +66,22 @@ pip install fastsdk[s3] #only  s3 upload
 
 # Get started
 
-To build your SDK for a web API follow these steps:
-1. Create a ```ServiceClient``` with the base url of the service and the endpoint routes.
-2. Use the ```@fastSDK``` and ```@fastJob``` decorators around the service client to create your SDK.
-
-Create the service client - the object that sends the requests to the server.
+First get your openapi.json file from your service.
 
 ```python
-from fastsdk import APIClient, ImageFile
+# create a full working client stub 
+create_sdk("openapi.json", save_path="my_service.py")
 
-# 1. create a service client
-srvc_face2face = APIClient(service_url="localhost:8020/api")
-# on a request the module will try to cast the parameters to the specified types
-srvc_face2face.add_endpoint(
-  endpoint_route="add_face",
-  body_params={"face_name": str},
-  file_params={"img": ImageFile}
-)
-```
-Based on the service we create the SDK by using the smart decorators ```@fastSDK``` and ```@fastJob```.
-The ```@fastSDK``` decorator will create a class with the service client as a class attribute.
-
-The ```@fastJob``` decorator allows your functions to:
-- be called asynchronously and in a separate thread.
-- be called with a *job* object which can be used to send requests to the service endpoint.
-
-Let's create the SDK for the service client.
-````python
-from fastsdk import fastSDK, fastJob
-@fastSDK(service_client=srvc_face2face)
-class face2face:
-  @fastJob
-  def _add_face(self, job: InternalJob, face_name: str, source_img: bytes, save: bool = True):
-        # send the request to the service endpoint using the provided job object
-        endpoint_request = job.request("add_reference_face", face_name, source_img, save)
-        # wait until server finished the job
-        result = endpoint_request.get_result() 
-        return result
-````
-Add this point your SDK is ready and now you can work with it as follows
-```python
-f2f = face2face()
-# start the request in a seperate thread
-# Note that the job object is not passed to the kwargs. The wrapper will handle this for us.
-ref_face_v_job = f2f.add_face(face_name="potter", image="path/to/image/of/harry")
-# do something else... this works becauce ref_face_v_job will start a thread
-ref_face_vector = ref_face_v_job.get_result() # wait for the server and thread to finish the job
-```
-
-
-## Cloud storage providers and file uploads
-
-The SDK comes with a built-in support for cloud storage providers like Amazon S3 and Azure Blob Storage.
-To directly up and download files to the cloud storage provider, you can use the following code snippets.
-```python 
-from fastsdk import AzureBlobStorage
-# Create container and upload file
-container = AzureBlobStorage(sas_access_token)
-file_url = container.upload(file="path/to/file")
-# Use media-toolkit to download file
-file = MediaFile.from_url(container.download(file_id))
-```
-
-
-### File size limited file uploads
-Let's say you built an SDK for a service which works with files > 10mb.
-In a usual workflow the client will upload the file to a storage provider and then send the file id to the service.
-Instead of implementing this from hand, you can use the SDK to handle the file uploads for you.
-
-```python
-from fastsdk import create_cloud_storage, APIClient
-
-cs = create_cloud_storage(azure_sas_access_token=AZURE_SAS_ACCESS_TOKEN,
-                          azure_connection_string=AZURE_SAS_CONNECTION_STRING)
-srvc_face2face = APIClient(fast_cloud=cs, upload_to_cloud_threshold_mb=10)
-```
-In this case every file > 10mb will be uploaded to the cloud storage provider. 
-Then instead of the file, the file_url will be send to the service.
-If the file size is smaller than 10mb, the file will be send directly to the service as bytes.
-The MediaToolkit knows how to handle the file_url and will download the file for you in the service.
-
-Recommendation: Use environment variables to store the cloud storage access tokens.
-
-## ServiceClient in detail
-The purpose of a service client is to send request and retrieve responses from the server.
-  ```python
-from socaity_client import ServiceClient, FastSDK
-
-srvc_face2face = ServiceClient(
-    service_url="localhost:8020/api",
-    model_name="face2face",
-    model_domain_tags=[ModelDomainTag.IMAGE, ModelDomainTag.AUDIO],
-    model_tags=[ModelTag.FACE2FACE, ModelTag.IMAGE2IMAGE]
-)
-
+# Import the client. It will have a method for each of your service endpoints including all parameters and its default values.
+from my_service import awesome_client
+awesome_client.my_method(...)
 ```
 
 ### Authorization
-Let's say you have created your SDK with ```@fastSDK``` and named it face2face
+Let's say you have created your SDK (client) with ```@fastSDK``` and named it face2face
 Then you can init it with arguments. In this moment you can pass the api key.
 ```python
-f2f = face2face(service_name="runpod", api_key="my_api_key")
+f2f = face2face(api_key="my_api_key")
 ```
 Alternatively you can set the api_keys in the settings and give them names like "runpod".
 Add this at the beginning of your script.
