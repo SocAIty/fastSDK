@@ -12,6 +12,7 @@ ServiceSpecification = Literal[
     "fasttaskapi",  # all servers that support fasttaskapi protocol with job queues
     "runpod",       # for example runpod servers
     "cog",         # is a service protocol used by replicate.ai
+    "cog2",        # new cog format with Input/Output schemas
     "replicate",   # a cog service becomes a replicate service when deployed on replicate.ai
     "openai",      # openai endpoints. Specification of chatgpt, etc.
     "openapi",     # servers that support openapi specification
@@ -99,3 +100,4 @@ class ServiceDefinition(Meta):
     service_address: Union[ServiceAddress, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress] = None
     created_at: Optional[str] = None  # date and time of creation in utc timezone
     version: Optional[str] = None  # hash of the openapi specification
+    schemas: Optional[Dict[str, Any]] = None  # raw OpenAPI schemas

@@ -6,7 +6,7 @@ from fastsdk.service_interaction.response.base_response import (
     BaseJobResponse, SocaityJobResponse,
     RunpodJobResponse, ReplicateJobResponse, JobProgress, FileModel
 )
-from media_toolkit import MediaFile, media_from_FileModel
+from media_toolkit import media_from_FileModel, media_from_any
 
 
 class ResponseParserStrategy(ABC):
@@ -51,8 +51,8 @@ class SocaityResponseParser(ResponseParserStrategy):
     def can_parse(self, data: Dict) -> bool:
         if not isinstance(data, dict):
             return False
-        return (data.get("endpoint_protocol") == "socaity" and
-                "id" in data and "status" in data)
+        return (data.get("endpoint_protocol") == "socaity"
+                and "id" in data and "status" in data)
 
     @staticmethod
     def _parse_media_result(result):
@@ -132,7 +132,7 @@ class ReplicateResponseParser(ResponseParserStrategy):
         Method checks the results of the job, and converts file results to media-toolkit objects
         """
         if isinstance(result, str) and "https://replicate.delivery" in result:
-            return MediaFile().from_url(result)
+            return media_from_any(result)
         elif isinstance(result, list):
             return [self._parse_media_result(m) for m in result]
         else:

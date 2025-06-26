@@ -47,7 +47,8 @@ class ServiceManager:
         category: Union[str, List[str]] = None,
         family_id: str = None,
         used_models: Union[ModelDefinition, List[ModelDefinition]] = None,
-        specification: str = None
+        specification: str = None,
+        description: str = None
     ) -> ServiceDefinition:
         """
         Add a new service definition from an OpenAPI specification source using OpenAPIParser.
@@ -104,6 +105,8 @@ class ServiceManager:
             service_def.family_id = family_id
         if used_models:
             service_def.used_models = [used_models] if isinstance(used_models, ModelDefinition) else used_models
+        if description:
+            service_def.description = description
 
         # Store the service definition
         self._services[service_def.id] = service_def
