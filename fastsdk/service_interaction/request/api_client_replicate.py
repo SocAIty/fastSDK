@@ -40,4 +40,11 @@ class APIClientReplicate(APIClient):
 
         request_data.body_params = body  # json.dumps(body)
 
-        return await super().send_request(request_data, timeout_s)
+        # Replicate expects the body to be a json object.
+        return await self.client.post(
+            url=request_data.url,
+            params=request_data.query_params,
+            json=request_data.body_params,  # Use json parameter instead of data
+            headers=request_data.headers,
+            timeout=timeout_s
+        )

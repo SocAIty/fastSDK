@@ -1,20 +1,11 @@
 from typing import Dict, Any, List, Union
 
 from fastsdk.service_management.parsers.openapi_parser import OpenAPIParser
-from fastsdk.service_management.service_definition import ParameterType, ServiceDefinition
+from fastsdk.service_management.service_definition import ParameterType
 
 
 class FastTaskAPIParser(OpenAPIParser):
-    """Parser for FastTaskAPI services that extends OpenAPI with FastTaskAPI-specific schema parsing."""
-
-    def parse(self) -> ServiceDefinition:
-        """Parse the FastTaskAPI specification into a ServiceDefinition."""
-        service_def = super().parse()
-        service_def.specification = "fasttaskapi"
-        return service_def
-
     def _get_type(self, schema: Dict[str, Any]) -> Union[str, List[ParameterType]]:
-        """Extract parameter type(s) from a schema with FastTaskAPI-specific handling."""
         schema = self._resolve(schema)
         if not schema:
             return "object"
@@ -32,4 +23,4 @@ class FastTaskAPIParser(OpenAPIParser):
         ):
             return ['file', 'string', 'bytes']
 
-        return super()._get_type(schema) 
+        return super()._get_type(schema)

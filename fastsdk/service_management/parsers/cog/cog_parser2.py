@@ -48,8 +48,7 @@ class CogParser2(BaseParser):
         endpoint = create_endpoint_definition(
             id="predictions",
             path="/predictions",
-            description="Create a prediction",
-            short_desc="Create a prediction",
+            description="",
             method="post"
         )
 

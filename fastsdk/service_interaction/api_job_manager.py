@@ -79,7 +79,7 @@ class ApiJobManager:
         elif isinstance(service_def.service_address, ReplicateServiceAddress):
             return "replicate"
         elif isinstance(service_def.service_address, ServiceAddress):
-            if service_def.specification == "fasttaskapi":
+            if service_def.specification == "fasttaskapi" or service_def.specification == "socaity":
                 return "socaity"
             elif service_def.specification == "runpod":
                 return "runpod"

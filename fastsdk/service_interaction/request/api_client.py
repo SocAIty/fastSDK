@@ -147,8 +147,8 @@ class APIClient:
                 headers=request_data.headers,
                 timeout=timeout_s
             )
-
-        # If no files, send as JSON. Important, if no files are present; this must be sent like this.
+        
+        # If no files, send as JSON. Important, if no files are present;
         return await self.client.post(
             url=request_data.url,
             params=request_data.query_params,
