@@ -14,10 +14,21 @@ class FastTaskAPIParser(OpenAPIParser):
             return ['file', 'string', 'bytes']
 
         title = (schema.get('title') or '').lower()
-        if any(key in title for key in ['imagefilemodel', 'videofilemodel', 'audiofilemodel']):
-            media_type = title.replace('filemodel', '')
-            return [media_type, 'file', 'string', 'bytes']
 
+        # specific file models
+        supported_media_types = set()
+        for key in ['imagefilemodel', 'videofilemodel', 'audiofilemodel']:
+            if key in title:
+                media_type = title.replace('filemodel', '')
+                supported_media_types.add(media_type)
+ 
+        if len(supported_media_types) > 0:
+            supported_media_types.add('file')
+            supported_media_types.add('string')
+            supported_media_types.add('bytes')
+            return list(supported_media_types)
+
+        # general file model
         if 'filemodel' in title or (
             schema.get('properties') and {'file_name', 'content_type'}.issubset(schema['properties'])
         ):

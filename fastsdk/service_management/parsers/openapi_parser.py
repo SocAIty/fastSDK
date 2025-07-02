@@ -77,4 +77,4 @@ class OpenAPIParser(BaseParser):
 
     def _create_version_hash(self) -> str:
         """Create a version hash from the specification."""
-        return hashlib.sha1(json.dumps(self.spec, sort_keys=True).encode()).hexdigest() 
+        return hashlib.sha1(json.dumps(self.spec, sort_keys=True).encode()).hexdigest()

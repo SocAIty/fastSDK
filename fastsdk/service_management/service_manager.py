@@ -1,7 +1,7 @@
 from typing import Dict, Optional, Union, Any, List, Iterator
 from pathlib import Path
 from fastsdk.service_management.service_definition import (
-    ServiceDefinition, ModelDefinition, ServiceCategory, ServiceFamily, EndpointDefinition
+    ServiceDefinition, ModelDefinition, ServiceCategory, ServiceFamily, EndpointDefinition, ServiceAddress
 )
 from fastsdk.service_management.parsers import parse_service_definition
 from fastsdk.service_management.parsers.service_adress_parser import create_service_address
@@ -98,6 +98,8 @@ class ServiceManager:
             service_def.service_address = create_service_address(service_address, service_def.specification)
         elif service_address is None and isinstance(spec_source, str) and spec_source.startswith(('http://', 'https://')):
             service_def.service_address = create_service_address(spec_source, service_def.specification)
+        elif isinstance(service_address, ServiceAddress):
+            service_def.service_address = service_address
 
         if category:
             service_def.category = [category] if isinstance(category, str) else category

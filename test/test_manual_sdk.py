@@ -1,7 +1,9 @@
 from fastsdk.fastSDK import FastSDK
-from fastsdk.service_management import ServiceManager
+from fastsdk.settings import ServiceManager
 from media_toolkit import ImageFile, MediaFile, MediaList
 from typing import Union
+from fastsdk.service_management.service_definition import ServiceAddress
+import os
 
 
 class testFace2Face(FastSDK):
@@ -33,15 +35,37 @@ class testFace2Face(FastSDK):
         return self.submit_job("/swap-video-to-video", faces=faces, media=media, enhance_face_model=enhance_face_model, **kwargs)
 
 
+def add_service_def_localhost_runpod():
+    service_definition = ServiceManager.add_service(
+        spec_source="test/test_files/face2face.json", service_id="face2face", specification="runpod", service_address=ServiceAddress(url="http://localhost:8020")
+    )
+    return service_definition
+
+
+def add_service_def_localhost_fasttaskapi():
+    service_definition = ServiceManager.add_service(
+        spec_source="test/test_files/face2face.json", service_id="face2face", service_address="http://localhost:8020"
+    )
+    return service_definition
+
+
+def add_service_def_local_socaity_backend():
+    service_definition = ServiceManager.add_service(
+        spec_source="test/test_files/face2face.json", service_id="face2face", specification="fasttaskapi", service_address="http://localhost:8001/v1/face2face"
+    )
+    return service_definition
+
+
 def test_manual_face2face():
     # 1. load service definition from file
-    service_definition = ServiceManager.add_service(
-        spec_source="test/test_files/face2face.json", service_id="face2face", service_address="http://localhost:8020/"
-    )
+    # method with local runpod server
+    # service_definition = add_service_def_localhost_runpod()
+    # service_definition = add_service_def_localhost_fasttaskapi()
+    service_definition = add_service_def_local_socaity_backend()
     assert service_definition is not None
     # 2. create client
-    f2f = testFace2Face(api_key="test_api_key")
-    # 3. submit job 
+    f2f = testFace2Face(api_key=os.getenv("SOCAITY_API_KEY"))
+    # 3. submit job
     swap_job = f2f.swap_img_to_img("test/test_files/test_face_1.jpg", "test/test_files/test_face_2.jpg")
     # 4. wait for result
     result = swap_job.wait_for_result()

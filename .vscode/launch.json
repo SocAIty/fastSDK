@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Run test",
+            "name": "Test manual SDK",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/test_manual_sdk.py",
