@@ -132,7 +132,10 @@ class ReplicateResponseParser(ResponseParserStrategy):
         Method checks the results of the job, and converts file results to media-toolkit objects
         """
         if isinstance(result, str) and "https://replicate.delivery" in result:
-            return media_from_any(result)
+            try:
+                return media_from_any(result, allow_reads_from_disk=False)
+            except Exception:
+                return result
         elif isinstance(result, list):
             return [self._parse_media_result(m) for m in result]
         else:
