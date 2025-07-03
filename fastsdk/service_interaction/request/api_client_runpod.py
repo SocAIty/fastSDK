@@ -17,7 +17,9 @@ class APIClientRunpod(APIClient):
 
     def _build_request_url(self, endpoint: EndpointDefinition, query_params: dict | None = None) -> str:
         # Overwrites the default implementation, because query parameters are not added to the url but to the body
-        url = self.service_def.service_address.url.strip("/").strip("/run")  # in case was defined including 'run'
+        url = self.service_def.service_address.url.strip("/")  # don't use strip("/run") it will remove the letters / r u and n.
+        if url.endswith("/run"):
+            url = url[:-4]  # Remove "/run" suffix
         return f"{url}/run"
 
     def format_request_params(self, endpoint: EndpointDefinition, *args, **kwargs) -> RequestData:
