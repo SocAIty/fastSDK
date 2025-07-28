@@ -69,7 +69,7 @@ class EndpointDefinition(Meta):
     path: str
     parameters: List[EndpointParameter] = Field(default_factory=list)
     responses: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    timeout_s: Optional[float]  # gives the client a hint how long the request might take
+    timeout_s: Optional[float] = Field(default=None)  # gives the client a hint how long the request might take
 
 
 class ModelDefinition(Meta):

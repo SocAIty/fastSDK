@@ -1,10 +1,14 @@
 from typing import Dict, Any, List, Union
 
-from fastsdk.service_management.parsers.openapi_parser import OpenAPIParser
-from fastsdk.service_management.service_definition import ParameterType
+from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
+from fastsdk.service_definition import ParameterType
 
 
 class FastTaskAPIParser(OpenAPIParser):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.specification = "fasttaskapi"
+
     def _get_type(self, schema: Dict[str, Any]) -> Union[str, List[ParameterType]]:
         schema = self._resolve(schema)
         if not schema:

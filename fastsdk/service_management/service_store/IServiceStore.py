@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict
-from fastsdk.service_management.service_definition import ServiceDefinition
+from fastsdk.service_definition import ServiceDefinition
 
 
 class IServiceStore(ABC):

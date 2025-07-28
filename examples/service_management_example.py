@@ -8,7 +8,7 @@ This example shows how to:
 """
 
 from fastsdk.service_management.service_manager import ServiceManager
-from fastsdk.service_management.service_definition import (
+from fastsdk.service_definition import (
     ServiceFamily, ServiceCategory, ModelDefinition, ServiceDefinition
 )
 

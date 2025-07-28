@@ -12,9 +12,9 @@ current_path = Path(__file__).parent.parent
 sys.path.append(str(current_path))
 
 # Now we can import from fastsdk
-from fastsdk.client_factory.api_client_factory import create_sdk  # noqa: E402
+from fastsdk.sdk_factory import create_sdk  # noqa: E402
 from fastsdk.service_management import ServiceManager  # noqa: E402
-from fastsdk.service_management.service_definition import (  # noqa: E402
+from fastsdk.service_definition import (  # noqa: E402
     ServiceDefinition, EndpointDefinition, EndpointParameter,
     ServiceAddress
 )

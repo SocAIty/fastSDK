@@ -4,8 +4,7 @@ from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from fastsdk.settings import Global
-from fastsdk.service_management.service_definition import (
+from fastsdk.service_definition import (
     ServiceDefinition, EndpointDefinition, EndpointParameter
 )
 from fastsdk.utils import normalize_name_for_py
@@ -214,8 +213,6 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition, specification: str = No
     request_path = endpoint.path
     method_path = endpoint.path
     
- 
-
     # Get return type from 200 response if available
     returns = None
     response_200 = endpoint.responses.get("200", {})
@@ -228,7 +225,7 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition, specification: str = No
     description_contains_args = False
     if description:
         # First escape the description safely
-        safe_description = _safe_escape_description(description)  
+        safe_description = _safe_escape_description(description)
         # Then format with proper indentation
         description = "\n        ".join(line for line in safe_description.split("\n"))
         description_contains_args = "Args:" in description or ":param" in description
@@ -304,7 +301,7 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
         
     Returns:
         Path object for the file
-    """        
+    """
     if not save_path:
         save_path = os.getcwd()
     save_path = Path(save_path)
@@ -323,8 +320,8 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
 
                 
 def create_sdk(
-    service_definition: Union[str, ServiceDefinition],
-    save_path: Optional[str] = None, 
+    service_definition: ServiceDefinition,
+    save_path: Optional[str] = None,
     class_name: Optional[str] = None,
     template: Optional[str] = None
 ) -> tuple[str, str, ServiceDefinition]:
@@ -332,9 +329,7 @@ def create_sdk(
     Creates a .py file for a given service definition in the given save_path.
     
     Args:
-        service_definition:
-            If string - adds a service definition from url or file.
-            If ServiceDefinition object - uses the given service definition.
+        service_definition: the service_definition including all the endpoints and models.
         save_path: Path where to save the generated file(s). Can be either:
             - A directory path: File will be saved as {class_name.lower()}.py + {class_name.lower()}.json in this directory
             - A file path: File will be saved with this exact path
@@ -354,22 +349,20 @@ def create_sdk(
         IOError: If file cannot be written
     """
     # Get service definition
-    if isinstance(service_definition, str):
-        service_def = Global.service_manager.add_service(spec_source=service_definition)
-    else:
-        service_def = service_definition
-    
+    if not isinstance(service_definition, ServiceDefinition):
+        raise ValueError("service_definition must be a ServiceDefinition object. Load it with FastSDK().load_service_definition() first.")
+
     # Determine class name if not provided
     if not class_name:
-        class_name = normalize_name_for_py(service_def.display_name)
+        class_name = normalize_name_for_py(service_definition.display_name)
 
     # Get file path
     file_path = _get_file_path(save_path, class_name)
     
     # Prepare endpoint data
     endpoints_data = []
-    for endpoint in service_def.endpoints:
-        endpoint_data = _prepare_endpoint_data(endpoint, service_def.specification)
+    for endpoint in service_definition.endpoints:
+        endpoint_data = _prepare_endpoint_data(endpoint, service_definition.specification)
         if endpoint_data:
             endpoints_data.append(endpoint_data)
     
@@ -380,12 +373,12 @@ def create_sdk(
     template_data = {
         "class_name": class_name,
         "service": {
-            "id": service_def.id,
-            "display_name": service_def.display_name,
-            "description": service_def.description,
-            "short_desc": service_def.short_desc,
+            "id": service_definition.id,
+            "display_name": service_definition.display_name,
+            "description": service_definition.description,
+            "short_desc": service_definition.short_desc,
         },
-        "service_id": service_def.id,
+        "service_id": service_definition.id,
         "endpoints": endpoints_data,
         "imports_typing": ", ".join(typing_imports) if typing_imports else None,
         "imports_media_toolkit": ", ".join(media_types) if media_types else None
@@ -402,7 +395,7 @@ def create_sdk(
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(rendered)
 
-        return str(file_path), class_name, service_def
+        return str(file_path), class_name, service_definition
     except FileNotFoundError:
         raise FileNotFoundError(f"Template file not found: {template}")
     except IOError as e:

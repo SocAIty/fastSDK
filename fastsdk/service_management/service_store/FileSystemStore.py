@@ -1,6 +1,6 @@
 import os
 from typing import Union, Dict, List
-from fastsdk.service_management.service_definition import ServiceDefinition
+from fastsdk.service_definition import ServiceDefinition
 from fastsdk.service_management.service_store.IServiceStore import IServiceStore
 import json
 

@@ -59,7 +59,7 @@ pip install fastsdk
 
 # Get started
 
-First get your openapi.json file from your service usully under:  [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json).
+First get your openapi.json file from your service usually under:  [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json).
 You can use an example openapi.json from our face2face service located in this repos under [/test/test_files/face2face.json](/test/test_files/face2face.json)
 
 ```python

@@ -1,15 +1,15 @@
 from typing import Dict, Optional, Union, Any, List, Iterator
 from pathlib import Path
-from fastsdk.service_management.service_definition import (
-    ServiceDefinition, ModelDefinition, ServiceCategory, ServiceFamily, EndpointDefinition, ServiceAddress
+from fastsdk.service_definition import (
+    ServiceDefinition, ModelDefinition, ServiceCategory, ServiceFamily, EndpointDefinition
 )
-from fastsdk.service_management.parsers import parse_service_definition
-from fastsdk.service_management.parsers.service_adress_parser import create_service_address
+
+from fastsdk.service_specification_loader.parsers.service_adress_parser import create_service_address
 from fastsdk.service_management.service_store.IServiceStore import IServiceStore
 import uuid
 from fastsdk.utils import normalize_name_for_py
-    
 
+    
 class ServiceManager:
     """
     Central manager for all service-related entities.
@@ -38,77 +38,36 @@ class ServiceManager:
                     normalized = normalize_name_for_py(service.display_name)
                     self._service_names[normalized] = service.id
 
-    def add_service(
-        self,
-        spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
-        service_id: Optional[str] = None,
-        service_address: Optional[str] = None,
-        service_name: Optional[str] = None,
-        category: Union[str, List[str]] = None,
-        family_id: str = None,
-        used_models: Union[ModelDefinition, List[ModelDefinition]] = None,
-        specification: str = None,
-        description: str = None
-    ) -> ServiceDefinition:
+    def add_service(self, service_def: ServiceDefinition) -> ServiceDefinition:
         """
-        Add a new service definition from an OpenAPI specification source using OpenAPIParser.
+        Add a ServiceDefinition object directly to the service manager.
         
         Args:
-            spec_source: Path, URL to OpenAPI JSON, service definition file or loaded JSON dictionary.
-            service_id: Optional explicit ID to assign to the service,
-                overriding any ID found in the spec or generated.
-            service_address: Optional address to use for the service. If not provided and spec_sources is an url, the url will be used.
-            service_name: Optional name to assign to the service. Overrides any name found in the spec.
-            category: Optional category to assign to the service. Overrides any category found in the spec.
-            family_id: Optional family to assign to the service. Overrides any family found in the spec.
-            used_models: Optional models to assign to the service. Overrides any models found in the spec.
-            specification: Optional to guide the service manager additionally in resolving service adresses. Overrides any specification determined by the spec.
+            service_def: A complete ServiceDefinition object
+            
         Returns:
-            The added ServiceDefinition object.
+            The added ServiceDefinition object
             
         Raises:
-            ValueError: If the service ID (either provided or parsed) is already registered,
-                        or if the spec cannot be parsed.
+            ValueError: If the service ID is already registered or if service_def is invalid
         """
-        service_def = parse_service_definition(spec_source)
-
-        if service_id is not None:
-            service_def.id = service_id
-    
+        if not isinstance(service_def, ServiceDefinition):
+            raise ValueError("service_def must be a ServiceDefinition object")
+        
         if not service_def.id:
             service_def.id = "gen-" + str(uuid.uuid4())
-            
-        if service_name:
-            service_def.display_name = service_name
-
-        if not service_name and not service_def.display_name:
+        
+        if service_def.id in self._services:
+            raise ValueError(f"Service '{service_def.id}' is already registered")
+        
+        if not service_def.display_name:
             service_def.display_name = "unnamed_service_" + service_def.id
 
-        # Add normalized name mapping using display_name from the parsed definition
+        # Add normalized name mapping
         normalized = normalize_name_for_py(service_def.display_name)
-        # Check for potential name conflicts before adding
         if normalized in self._service_names and self._service_names[normalized] != service_def.id:
             print(f"Service name '{service_def.display_name}' (normalized: '{normalized}') conflicts with existing service ID '{self._service_names[normalized]}'. Overwriting mapping.")
         self._service_names[normalized] = service_def.id
-
-        if specification and isinstance(specification, str):
-            service_def.specification = specification.lower()
-
-        if service_address is not None and isinstance(service_address, str):
-            service_def.service_address = create_service_address(service_address, service_def.specification)
-        elif service_address is None and isinstance(spec_source, str) and spec_source.startswith(('http://', 'https://')):
-            service_def.service_address = create_service_address(spec_source, service_def.specification)
-        elif isinstance(service_address, ServiceAddress):
-            service_def.service_address = service_address
-
-        if category:
-            service_def.category = [category] if isinstance(category, str) else category
-        if family_id:
-            service_def.family_id = family_id
-        if used_models:
-            service_def.used_models = [used_models] if isinstance(used_models, ModelDefinition) else used_models
-        if description:
-            service_def.description = description
 
         # Store the service definition
         self._services[service_def.id] = service_def
@@ -121,7 +80,7 @@ class ServiceManager:
         self._link_service_dependencies(service_def)
 
         return service_def
-    
+
     def _link_service_dependencies(self, service_def: ServiceDefinition):
         """Helper to link service to existing families, categories, and register its models."""
         # Link to family if specified and family exists (no placeholder creation here)
@@ -158,7 +117,7 @@ class ServiceManager:
 
     def get_service(self, id_or_name: str) -> Optional[ServiceDefinition]:
         """
-        Get a service definition by its ID or display name. 
+        Get a service definition by its ID or display name.
         Precondition: the service must have been added to the ServiceManager/ServiceStore previously.
         First checks the in-memory cache, then falls back to the ServiceStore if available.
         

@@ -2,12 +2,12 @@ from typing import Dict, Any, Optional, List
 import hashlib
 import json
 
-from fastsdk.service_management.parsers.base_parser import BaseParser
-from fastsdk.service_management.parsers.factory import (
+from fastsdk.service_specification_loader.parsers.base_parser import BaseParser
+from fastsdk.service_specification_loader.parsers.factory import (
     create_service_definition,
     create_endpoint_definition
 )
-from fastsdk.service_management.service_definition import (
+from fastsdk.service_definition import (
     ServiceDefinition,
     EndpointDefinition
 )
@@ -19,6 +19,7 @@ class OpenAPIParser(BaseParser):
     def __init__(self, spec: Dict[str, Any]):
         super().__init__(spec)
         self.service_definition: Optional[ServiceDefinition] = None
+        self.specification = "openapi"  # Default, will be overridden by subclasses
 
     def parse(self) -> ServiceDefinition:
         """Parse the OpenAPI specification into a ServiceDefinition."""
@@ -28,7 +29,7 @@ class OpenAPIParser(BaseParser):
             display_name=info.get('title'),
             description=info.get('description'),
             short_desc=info.get('summary'),
-            specification="openapi",  # Default, will be overridden by subclasses
+            specification=self.specification,
             schemas=self._schemas,
             version=self._create_version_hash()
         )

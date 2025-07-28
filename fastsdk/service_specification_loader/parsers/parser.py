@@ -1,11 +1,10 @@
 from typing import Union, Dict, Any
 from pathlib import Path
-from fastsdk.service_management.parsers.spec_loader import load_spec
-from fastsdk.service_management.service_definition import ServiceDefinition, ServiceSpecification
-from fastsdk.service_management.parsers.openapi_parser import OpenAPIParser
-from fastsdk.service_management.parsers.cog.cog_parser import CogParser
-from fastsdk.service_management.parsers.cog.cog_parser2 import CogParser2
-from fastsdk.service_management.parsers.fasttaskapi_parser import FastTaskAPIParser
+from fastsdk.service_definition import ServiceDefinition, ServiceSpecification
+from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
+from fastsdk.service_specification_loader.parsers.cog.cog_parser import CogParser
+from fastsdk.service_specification_loader.parsers.cog.cog_parser2 import CogParser2
+from fastsdk.service_specification_loader.parsers.fasttaskapi_parser import FastTaskAPIParser
 
     
 def _determine_specification(spec: Dict[str, Any], spec_source: Union[str, Dict[str, Any]]) -> ServiceSpecification:
@@ -59,23 +58,22 @@ def _get_parser(spec: Dict[str, Any], spec_source: Union[str, Dict[str, Any]]):
     return parser_class(spec)
 
 
-def parse_service_definition(spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition]) -> ServiceDefinition:
+def parse_service_definition(loaded_spec: Union[str, Path, Dict[str, Any], ServiceDefinition], spec_source: Any = None) -> ServiceDefinition:
     """
     Parse any supported source (dict, file path, URL) into a ServiceDefinition.
     Args:
-        spec_source: dict, file path, or URL
+        spec_source: dict or service_definition of loaded openapi
     Returns:
         ServiceDefinition object
     Raises:
         ValueError if parsing fails
     """
 
-    if isinstance(spec_source, ServiceDefinition):
-        return spec_source
+    if isinstance(loaded_spec, ServiceDefinition):
+        return loaded_spec
 
-    data = load_spec(spec_source)
     try:
-        return ServiceDefinition(**data)
+        return ServiceDefinition(**loaded_spec)
     except Exception:
-        parser = _get_parser(data, spec_source)
+        parser = _get_parser(loaded_spec, spec_source)
         return parser.parse()

@@ -1,7 +1,10 @@
 from typing import Any, Dict
 
-from fastsdk.service_management import ServiceDefinition, EndpointDefinition
-from fastsdk.service_management import ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
+from fastsdk.service_definition import (
+    ServiceDefinition, EndpointDefinition,
+    ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
+)
+from fastsdk.service_management import ServiceManager
 
 from meseex import MeseexBox, MrMeseex
 from meseex.control_flow import polling_task, PollAgain
@@ -15,10 +18,6 @@ from fastsdk.service_interaction.response.base_response import BaseJobResponse
 from fastsdk.service_interaction.request import APIClient, APIClientReplicate, APIClientRunpod, APIClientSocaity, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit.core.MediaDict import MediaDict
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from fastsdk.settings import ServiceManager
 
 
 class APISeex(MrMeseex):
@@ -44,7 +43,7 @@ class ApiJobManager:
     Manages the lifecycle of asynchronous API jobs by orchestrating services.
     Delegates implementation details
     """
-    def __init__(self, service_manager: 'ServiceManager'):
+    def __init__(self, service_manager: ServiceManager):
         self.service_manager = service_manager
         self.api_clients: Dict[str, APIClient] = {}  # dict of service_id -> APIClient
         self.file_handlers: Dict[str, FileHandler] = {}  # dict of service_id -> FileHandler
@@ -174,7 +173,7 @@ class ApiJobManager:
         api_client = self.api_clients[job.service_def.id]
 
         # We in generally try to attach the files that could not have been converted as normal parameters to the body.
-        # For example in SpeechCraft voice can be a file but alos a voice_name is accepted. 
+        # For example in SpeechCraft voice can be a file but alos a voice_name is accepted.
         # In this case if someone provides a voice_name it will be send correctly as a body parameter instead of a file parameter.
         if isinstance(request_data.file_params, MediaDict):
             non_file_params = request_data.file_params.get_non_file_params(include_urls=True)
@@ -271,7 +270,7 @@ class ApiJobManager:
 
         return result.result
 
-    def submit_job(self, service_id: str, endpoint_id: str, data: dict) -> MrMeseex:
+    def submit_job(self, service_id: str, endpoint_id: str, data: dict) -> APISeex:
         """
         Submit a job for execution with the specified service and endpoint.
         Entry point for API interaction.

@@ -1,7 +1,7 @@
 import httpx
 import json
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from fastsdk.service_management.service_definition import EndpointDefinition, RunpodServiceAddress
+from fastsdk.service_definition import EndpointDefinition, RunpodServiceAddress
 
 
 class APIClientRunpod(APIClient):
@@ -48,7 +48,7 @@ class APIClientRunpod(APIClient):
         request_data.body_params = json.dumps({"input": all_params})
 
         # before switching to super().send_request() consider the following:
-        # we have no file params but a body 
+        # we have no file params but a body
         return await self.client.post(
             url=request_data.url,
             data=request_data.body_params,

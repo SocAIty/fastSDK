@@ -22,6 +22,17 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex"
             }
+        },
+        {
+            "name": "Run test client from runpod serverless",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_client_from_runpod_serverless.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex"
+            }
         }
     ]
 } 

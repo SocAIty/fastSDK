@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, Union
 import httpx
 
-from fastsdk.service_management.service_definition import ServiceDefinition, EndpointDefinition
+from fastsdk.service_definition import ServiceDefinition, EndpointDefinition
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
 from media_toolkit import MediaFile
 
@@ -93,6 +93,7 @@ class APIClient:
         if not data:
             rq = RequestData()
             rq.headers = self._add_authorization_to_headers()
+            rq.url = self._build_request_url(endpoint, rq.query_params)
             return rq
         
         if not isinstance(data, dict):

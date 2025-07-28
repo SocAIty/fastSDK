@@ -1,8 +1,8 @@
 from typing import Dict, Any, Optional, List, Union
-from fastsdk.service_management.service_definition import (
+from fastsdk.service_definition import (
     EndpointParameter, ParameterType, ServiceDefinition
 )
-from fastsdk.service_management.parsers.factory import create_endpoint_parameter
+from fastsdk.service_specification_loader.parsers.factory import create_endpoint_parameter
 
 
 class BaseParser:

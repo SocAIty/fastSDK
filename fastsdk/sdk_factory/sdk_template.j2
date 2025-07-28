@@ -1,4 +1,4 @@
-from fastsdk import FastSDK, APISeex
+from fastsdk import FastClient, APISeex
 {%- if imports_typing %}
 from typing import {{ imports_typing }}
 {% endif %}
@@ -6,7 +6,7 @@ from typing import {{ imports_typing }}
 from media_toolkit import {{ imports_media_toolkit }}
 {% endif %}
 
-class {{ class_name }}(FastSDK):
+class {{ class_name }}(FastClient):
     """
     {{ service.description or service.short_desc or "Generated client for " + service.display_name }}
     """

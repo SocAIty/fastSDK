@@ -7,7 +7,7 @@ even if they're marked as Optional in the model definition.
 """
 
 from typing import Optional, List, Dict, Any, Union
-from fastsdk.service_management.service_definition import (
+from fastsdk.service_definition import (
     ServiceDefinition, EndpointDefinition, EndpointParameter,
     ServiceSpecification, ParameterType, ParameterLocation
 )

@@ -1,5 +1,5 @@
 from .api_client import APIClient, APIKeyError
-from fastsdk.service_management.service_definition import SocaityServiceAddress
+from fastsdk.service_definition import SocaityServiceAddress
 import httpx
 from fastsdk.service_interaction.request.api_client import RequestData
 
@@ -10,7 +10,7 @@ class APIClientSocaity(APIClient):
             return True
         if self.api_key is None:
             raise APIKeyError("API key is required for Socaity API.", "socaity", "https://www.socaity.ai/")
-        if len(self.api_key) < 67 or not self.api_key.startswith("sk_"):
+        if len(self.api_key) < 67 or not self.api_key.startswith("sk_") or not self.api_key.startswith("tk_"):
             raise APIKeyError("Invalid API key. It should look like 'sk_...'. ", "socaity", "https://www.socaity.ai/")
         return True
 

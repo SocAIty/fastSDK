@@ -2,12 +2,12 @@ from typing import Dict, Any, List, Optional, Union
 import hashlib
 import json
 
-from fastsdk.service_management.parsers.base_parser import BaseParser
-from fastsdk.service_management.parsers.factory import (
+from fastsdk.service_specification_loader.parsers.base_parser import BaseParser
+from fastsdk.service_specification_loader.parsers.factory import (
     create_service_definition,
     create_endpoint_definition
 )
-from fastsdk.service_management.service_definition import (
+from fastsdk.service_definition import (
     ServiceDefinition,
     EndpointDefinition,
     ParameterType
