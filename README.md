@@ -68,7 +68,8 @@ create_sdk("openapi.json", save_path="my_service.py")
 
 # Import the client. It will have a method for each of your service endpoints including all parameters and its default values.
 from my_service import awesome_client
-awesome_client.my_method(...)
+mySDK = awesome_client()
+mySDK.my_method(...)
 ```
 
 ### Authorization
