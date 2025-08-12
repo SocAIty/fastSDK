@@ -62,11 +62,7 @@ class SocaityResponseParser(ResponseParserStrategy):
         if isinstance(result, dict) or isinstance(result, FileModel):
             return media_from_FileModel(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
         elif isinstance(result, list):
-            # for files socaity always returns a list of file-models
-            return [
-                media_from_FileModel(r, allow_reads_from_disk=False, default_return_if_not_file_result=r)
-                for r in result
-            ]
+            return [SocaityResponseParser._parse_media_result(r) for r in result]
         else:
             return result
 
@@ -104,7 +100,8 @@ class RunpodResponseParser(ResponseParserStrategy):
     def parse(self, data: Dict, parse_media: bool = True) -> RunpodJobResponse:
         status, progress = self.parse_status_and_progress(data)
         result = data.get("output")
-        #if parse_media:
+        
+        # if parse_media:
         #    result = self._parse_media_result(data.get("output"))
 
         return RunpodJobResponse(

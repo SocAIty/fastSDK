@@ -265,6 +265,18 @@ class FastSDK:
         # Add to service manager
         return self.service_manager.add_service(service_def)
 
+    def update_service(self, service_id_or_name: str, **kwargs) -> Optional[ServiceDefinition]:
+        """
+        Update a service definition's attributes.
+        Args:
+            service_id_or_name: Service ID or display name
+            **kwargs: Attributes to update. Unpack your **service_def to update all attributes.
+            
+        Returns:
+            Updated ServiceDefinition if found, None otherwise
+        """
+        return self.service_manager.update_service(service_id_or_name, **kwargs)
+
     def get_service(self, service_id_or_name: str) -> Optional[ServiceDefinition]:
         """
         Get a already added service by ID or name.
