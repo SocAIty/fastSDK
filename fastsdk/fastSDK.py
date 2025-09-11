@@ -52,18 +52,20 @@ class FastSDK:
 
     # ---- Service Definition Loading Methods ----
     @overload
-    def load_service_definition(self, spec_source: str) -> ServiceDefinition:
+    @staticmethod
+    def load_service_definition(spec_source: str) -> ServiceDefinition:
         """Load a service definition from spec source."""
         ...
 
     @overload
-    def load_service_definition(self, spec_source: Union[Path, Dict[str, Any]]) -> ServiceDefinition:
+    @staticmethod
+    def load_service_definition(spec_source: Union[Path, Dict[str, Any]]) -> ServiceDefinition:
         """Load a service definition from spec source."""
         ...
 
     @overload
+    @staticmethod
     def load_service_definition(
-        self,
         spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         service_id: Optional[str] = None,
         service_address: Optional[str] = None,
@@ -92,8 +94,8 @@ class FastSDK:
         """
         ...
 
+    @staticmethod
     def load_service_definition(
-        self,
         spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         service_id: Optional[str] = None,
         service_address: Optional[str] = None,
@@ -161,7 +163,8 @@ class FastSDK:
 
         return service_def
 
-    def load_openapi_spec_from_runpod(self, runpod_url: str, api_key: str, return_api_job: bool = False) -> Union[ServiceDefinition, 'ApiJob']:
+    @staticmethod
+    def load_openapi_spec_from_runpod(runpod_url: str, api_key: str, return_api_job: bool = False) -> Union[ServiceDefinition, 'ApiJob']:
         """Load service definition from RunPod serverless server.
         If return_api_job is True, return an ApiJob object instead of a ServiceDefinition.
         """

@@ -20,7 +20,7 @@ dependencies = [
     "media-toolkit[VideoFile]>=00.02.08",
     "singleton_decorator==1.0.0",
     "jinja2>=3.1.6",
-    "fastcloud[api_providers]>=0.0.6"
+    "fastcloud[api_providers]>=0.0.9"
 ]
 
 [project.optional-dependencies]

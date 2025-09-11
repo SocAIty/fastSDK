@@ -37,7 +37,7 @@ class FileHandler:
             - None: If no files were provided.
             - dict: files as provided if threshold is not met or no cloud handler is set.
             - dict: If files were uploaded. The dict is formatted as { file_name: download_url }.
-            - dict: If files are attached. The dict contains the files in a format that can be sent with httpx.
+            - dict: If file size < threshold or no fast_cloud is set -> return MediaDict (attach to httpx later)
         """
         if not files or len(files) == 0:
             return None
@@ -86,4 +86,3 @@ class FileHandler:
             return sendable_files.to_base64()
         
         return sendable_files
-

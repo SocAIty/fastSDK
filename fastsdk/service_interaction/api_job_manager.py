@@ -173,7 +173,7 @@ class ApiJobManager:
         api_client = self.api_clients[job.service_def.id]
 
         # We in generally try to attach the files that could not have been converted as normal parameters to the body.
-        # For example in SpeechCraft voice can be a file but alos a voice_name is accepted.
+        # For example in SpeechCraft voice can be a file but also a voice_name is accepted.
         # In this case if someone provides a voice_name it will be send correctly as a body parameter instead of a file parameter.
         if isinstance(request_data.file_params, MediaDict):
             non_file_params = request_data.file_params.get_non_file_params(include_urls=True)
