@@ -105,17 +105,21 @@ class APIClient:
             if param_value is None and param.required:
                 raise ValueError(f"Required parameter '{param.name}' is missing")
             
-            # if is file type put it into file_params
-            if isinstance(param_value, MediaFile):
-                rq.file_params[param.name] = param_value
-                continue
-
+            is_file_param = False
+            is_array_param = False
             if hasattr(param, "type") and param.type is not None:
                 ptype = param.type if isinstance(param.type, list) else [param.type]
-                if any(t in ["file", "image", "video", "audio"] for t in ptype):
-                    rq.file_params[param.name] = param_value
-                    continue
-                
+                is_file_param = any(t in ["file", "image", "video", "audio"] for t in ptype)
+                is_array_param = any(t in ["array"] for t in ptype)
+
+            # if is file type put it into file_params
+            is_file_param = is_file_param or isinstance(param_value, MediaFile)
+
+            if is_array_param and not isinstance(param_value, list):
+                param_value = [param_value]
+
+            if is_file_param:
+                rq.file_params[param.name] = param_value
             if param.location == "query":
                 rq.query_params[param.name] = param_value
             elif param.location == "body":

@@ -46,7 +46,7 @@ class FileHandler:
         if self.max_upload_file_size_mb and total_size > self.max_upload_file_size_mb:
             raise ValueError(f"File size exceeds limit of {self.max_upload_file_size_mb}MB")
 
-        if not self.fast_cloud or not self.upload_to_cloud_threshold_mb or total_size < self.upload_to_cloud_threshold_mb:
+        if not self.fast_cloud or self.upload_to_cloud_threshold_mb is None or total_size < self.upload_to_cloud_threshold_mb:
             return files
 
         if isinstance(self.fast_cloud, BaseUploadAPI):

@@ -17,7 +17,7 @@ from fastsdk.service_interaction.response.base_response import BaseJobResponse
 
 from fastsdk.service_interaction.request import APIClient, APIClientReplicate, APIClientRunpod, APIClientSocaity, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from media_toolkit.core.MediaDict import MediaDict
+from media_toolkit import MediaDict
 
 
 class APISeex(MrMeseex):
@@ -125,8 +125,9 @@ class ApiJobManager:
             fast_cloud = SocaityUploadAPI(api_key=api_key)
             file_handler = FileHandler(fast_cloud=fast_cloud, file_format="httpx", upload_to_cloud_threshold_mb=3, max_upload_file_size_mb=3000)
         elif service_type == "replicate":
+            # in case of replicate we upload everything
             fast_cloud = ReplicateUploadAPI(api_key=api_key)
-            file_handler = FileHandler(fast_cloud=fast_cloud, file_format="base64", upload_to_cloud_threshold_mb=10, max_upload_file_size_mb=300)
+            file_handler = FileHandler(fast_cloud=fast_cloud, file_format="base64", upload_to_cloud_threshold_mb=0, max_upload_file_size_mb=300)
         else:  # "other" or any other default case
             file_handler = FileHandler()
 
