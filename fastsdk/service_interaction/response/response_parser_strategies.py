@@ -6,7 +6,7 @@ from fastsdk.service_interaction.response.base_response import (
     BaseJobResponse, SocaityJobResponse,
     RunpodJobResponse, ReplicateJobResponse, JobProgress, FileModel
 )
-from media_toolkit import media_from_FileModel, media_from_any
+from media_toolkit import media_from_any
 
 
 class ResponseParserStrategy(ABC):
@@ -59,8 +59,15 @@ class SocaityResponseParser(ResponseParserStrategy):
         """
         Method checks the results of the job, and converts file results to media-toolkit objects
         """
+        if result is None:
+            return result
+        
         if isinstance(result, dict) or isinstance(result, FileModel):
-            return media_from_FileModel(result, allow_reads_from_disk=False, default_return_if_not_file_result=result)
+            try:
+                vid = media_from_any(result, allow_reads_from_disk=False)
+                return vid
+            except Exception:
+                return result
         elif isinstance(result, list):
             return [SocaityResponseParser._parse_media_result(r) for r in result]
         else:
@@ -70,7 +77,7 @@ class SocaityResponseParser(ResponseParserStrategy):
         status, progress = self.parse_status_and_progress(data)
         result = data.get("result")
         if parse_media:
-            result = self._parse_media_result(data.get("result"))
+            result = self._parse_media_result(result)
 
         return SocaityJobResponse(
             id=data["id"],
@@ -92,17 +99,13 @@ class RunpodResponseParser(ResponseParserStrategy):
         if not isinstance(data, dict):
             return False
         return (
-            "id" in data and
-            "status" in data and
+            "id" in data and "status" in data and
             APIJobStatus.map_runpod_status(data.get("status")) != APIJobStatus.UNKNOWN
         )
 
     def parse(self, data: Dict, parse_media: bool = True) -> RunpodJobResponse:
         status, progress = self.parse_status_and_progress(data)
         result = data.get("output")
-        
-        # if parse_media:
-        #    result = self._parse_media_result(data.get("output"))
 
         return RunpodJobResponse(
             id=data["id"],
@@ -168,6 +171,5 @@ class ReplicateResponseParser(ResponseParserStrategy):
             metrics=data.get("metrics"),
             created_at=data.get("created_at"),
             execution_started_at=data.get("started_at"),
-            execution_finished_at=data.get("completed_at"),
-            endpoint_protocol="replicate"
+            execution_finished_at=data.get("completed_at")
         )
