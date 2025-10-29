@@ -120,7 +120,7 @@ class APIClient:
 
             if is_file_param:
                 rq.file_params[param.name] = param_value
-            if param.location == "query":
+            elif param.location == "query":
                 rq.query_params[param.name] = param_value
             elif param.location == "body":
                 rq.body_params[param.name] = param_value

@@ -32,16 +32,22 @@ class CogParser(OpenAPIParser):
             return []
 
         required = input_schema.get("required", [])
-        return [
-            self._make_param(
+        
+        params = []
+        for prop in input_schema.get("properties", {}):
+            param = self._make_param(
                 name=prop,
                 schema=input_schema["properties"][prop],
                 location="body",
                 required=prop in required,
                 description=input_schema["properties"][prop].get("description") or prop
             )
-            for prop in input_schema.get("properties", {})
-        ]
+            # This is a bug fix for replicate, because they require seed but don't set it in the schema.
+            if param.name == "seed":
+                param.default = 42
+            params.append(param)
+
+        return params
 
     def _get_type(self, schema: Optional[Dict[str, Any]]) -> Union[str, List[ParameterType]]:
         """Extract parameter type(s) from a schema with Cog-specific handling."""

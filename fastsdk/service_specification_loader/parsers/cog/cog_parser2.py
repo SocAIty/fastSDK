@@ -65,6 +65,11 @@ class CogParser2(BaseParser):
                     required=prop_name in required,
                     description=prop_schema.get("description") or prop_name
                 )
+
+                # This is a bug fix for replicate, because they require seed but don't set it in the schema.
+                if param.name == "seed":
+                    param.default = 42
+
                 endpoint.parameters.append(param)
 
         # Add response information from Output schema
