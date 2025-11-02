@@ -335,9 +335,9 @@ class FastSDK:
         if isinstance(source, str):
             service_def = self.get_service(source)
             if not isinstance(service_def, ServiceDefinition):
-                service_def = self.load_service_definition(source, **kwargs)
+                service_def = self.add_service(source, **kwargs)
         else:
-            service_def = self.load_service_definition(source, **kwargs)
+            service_def = self.add_service(source, **kwargs)
 
         if not isinstance(service_def, ServiceDefinition):
             raise ValueError("Invalid service source")

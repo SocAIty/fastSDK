@@ -30,7 +30,7 @@ class OpenAPIParser(BaseParser):
             description=info.get('description'),
             short_desc=info.get('summary'),
             specification=self.specification,
-            schemas=self._schemas,
+            full_schema=self.spec,
             version=self._create_version_hash()
         )
 
@@ -54,6 +54,7 @@ class OpenAPIParser(BaseParser):
         """Parse a single endpoint from the OpenAPI specification."""
         endpoint = create_endpoint_definition(
             id=method_data.get('operationId'),
+            display_name=path.strip("/").strip(),
             path=path,
             description=method_data.get('description'),
             short_desc=method_data.get('summary'),

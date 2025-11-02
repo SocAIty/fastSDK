@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, Optional
 import hashlib
 import json
 
@@ -10,7 +10,7 @@ from fastsdk.service_specification_loader.parsers.factory import (
 from fastsdk.service_definition import (
     ServiceDefinition,
     EndpointDefinition,
-    ParameterType
+    ParameterDefinition
 )
 
 
@@ -26,7 +26,7 @@ class CogParser2(BaseParser):
             description=info.get('description'),
             short_desc=info.get('summary'),
             specification="cog2",
-            schemas=self._schemas,
+            full_schema=self.spec,
             version=self._create_version_hash()
         )
 
@@ -67,7 +67,7 @@ class CogParser2(BaseParser):
                 )
 
                 # This is a bug fix for replicate, because they require seed but don't set it in the schema.
-                if param.name == "seed":
+                if param.name == "seed" and param.default is None:
                     param.default = 42
 
                 endpoint.parameters.append(param)
@@ -87,20 +87,18 @@ class CogParser2(BaseParser):
 
         return endpoint
 
-    def _get_type(self, schema: Optional[Dict[str, Any]]) -> Union[str, List[ParameterType]]:
-        """Extract parameter type(s) from a schema with Cog-specific handling."""
-        schema = self._resolve(schema)
-        if not schema:
-            return "object"
+    def _resolve_type_format(self, schema: Optional[Dict[str, Any]]) -> ParameterDefinition:
+        """Override to add Cog-specific type/format mappings."""
+        schema = self._resolve(schema) or {}
 
         if schema.get("type") == "string" and schema.get("format") == "uri":
-            return ["file", "string"]
+            return ParameterDefinition(type="string", format="file")
 
         if schema.get("type") == "file":
-            return ["file", "string"]
+            return ParameterDefinition(type="string", format="file")
 
-        return super()._get_type(schema)
+        return super()._resolve_type_format(schema)
 
     def _create_version_hash(self) -> str:
         """Create a version hash from the specification."""
-        return hashlib.sha1(json.dumps(self.spec, sort_keys=True).encode()).hexdigest() 
+        return hashlib.sha1(json.dumps(self.spec, sort_keys=True).encode()).hexdigest()

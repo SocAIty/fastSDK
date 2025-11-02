@@ -8,14 +8,14 @@ from media_toolkit import {{ imports_media_toolkit }}
 
 class {{ class_name }}(FastClient):
     """
-    {{ service.description or service.short_desc or "Generated client for " + service.display_name }}
+    {{ service.description or service.short_desc or "Generated client based on " + service.display_name + " format" }}
     """
     def __init__(self, api_key: str = None):
         super().__init__(service_name_or_id="{{ service_id }}", api_key=api_key)
     {% for endpoint in endpoints %}
     def {{ endpoint.method_name }}(self, {% for param in endpoint.parameters %}{{ param.name }}{% if param.default_value %}: {{ param.type_hint }} = {{ param.default_value }}{% elif param.optional %}: Optional[{{ param.type_hint }}] = None{% else %}: {{ param.type_hint }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if endpoint.parameters %}, {% endif %}**kwargs) -> APISeex:
         """
-        {{ endpoint.description }}
+        {{ endpoint.description | trim }}
         {% if endpoint.parameters and not endpoint.description_contains_args %}
         
         Args:
@@ -36,3 +36,4 @@ class {{ class_name }}(FastClient):
     run = {{ endpoints[0].method_name }}
     __call__ = {{ endpoints[0].method_name }}
     {%- endif %}
+

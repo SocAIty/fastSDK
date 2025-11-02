@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any, Union, Set
 from jinja2 import Environment, FileSystemLoader, Template
 
 from fastsdk.service_definition import (
-    ServiceDefinition, EndpointDefinition, EndpointParameter
+    ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterDefinition
 )
 from fastsdk.utils import normalize_name_for_py
 
@@ -63,39 +63,83 @@ def _get_type_hint(param: EndpointParameter) -> str:
     Returns:
         Python type hint as a string
     """
-    # Handle arrays and lists
-    param_types = param.type if isinstance(param.type, list) else [param.type]
-    
-    # For multiple types, create a Union
-    includes_media = False
-    mapped_types = []
-    
-    for p_type in param_types:
-        # First check if it's a media type
-        mapped_type = MEDIA_TYPES.get(p_type)
-        if mapped_type:
-            includes_media = True
-            if mapped_type not in mapped_types:
-                mapped_types.append(mapped_type)
-            continue
-            
-        # Then check standard types
-        mapped_type = STANDARD_TYPE_MAPPING.get(p_type, "Any")
-        if mapped_type not in mapped_types:
-            mapped_types.append(mapped_type)
-    
-    # Add string and bytes types when media types are included
-    if includes_media:
-        for extra_type in ["str", "bytes"]:
-            if extra_type not in mapped_types:
-                mapped_types.append(extra_type)
+    # Helpers to flatten definitions
+    def _flatten_defs(defn: ParameterDefinition | list[ParameterDefinition]) -> list[ParameterDefinition]:
+        if isinstance(defn, list):
+            return defn
+        return [defn]
 
-    # If we have multiple types, create a Union
-    if len(mapped_types) > 1:
+    definitions = _flatten_defs(param.definition) if getattr(param, "definition", None) is not None else []
+
+    # Map each definition to a python type
+    def _map_one(defn: ParameterDefinition) -> str:
+        p_type = getattr(defn, "type", None)
+        p_format = getattr(defn, "format", None)
+        additional_props = getattr(defn, "additional_properties", None)
+        enum_values = getattr(defn, "enum", None)
+
+        # Handle enums first - they take precedence
+        if enum_values and isinstance(enum_values, list):
+            # Create Literal type for enum values
+            literal_values = []
+            for val in enum_values:
+                if isinstance(val, str):
+                    literal_values.append(f'"{val}"')
+                elif isinstance(val, (int, float)):
+                    literal_values.append(str(val))
+                elif isinstance(val, bool):
+                    literal_values.append(str(val))
+                else:
+                    # For complex values, fall back to Any
+                    return "Any"
+            if literal_values:
+                return f"Literal[{', '.join(literal_values)}]"
+
+        # Handle arrays
+        if p_type == "array":
+            if isinstance(p_format, str):
+                media = MEDIA_TYPES.get(p_format)
+                if media:
+                    return f"List[{media}]"
+                elif p_format == "binary":
+                    return "List[bytes]"
+                else:
+                    # For other formats like "string", map to List[str]
+                    return f"List[{STANDARD_TYPE_MAPPING.get(p_format, 'Any')}]"
+            else:
+                # Array without specific format
+                return "List[Any]"
+
+        # Handle objects with additional properties
+        if p_type == "object" and additional_props:
+            return "Dict[str, Any]"
+
+        # Media types by format
+        if isinstance(p_format, str):
+            media = MEDIA_TYPES.get(p_format)
+            if media:
+                return media
+            elif p_format == "binary":
+                return "bytes"
+
+        # Fallback by type
+        py = STANDARD_TYPE_MAPPING.get(p_type, "Any")
+        return py
+
+    if not definitions:
+        return "Any"
+
+    mapped_types: list[str] = []
+    for defn in definitions:
+        py_type = _map_one(defn)
+        if py_type not in mapped_types:
+            mapped_types.append(py_type)
+
+    # Create Union when needed
+    if len(mapped_types) == 1:
+        return mapped_types[0]
+    else:
         return f"Union[{', '.join(mapped_types)}]"
-    
-    # Default to the first type if all mappings are the same
-    return mapped_types[0]
 
 
 def _format_default_value(param: EndpointParameter) -> Optional[str]:
@@ -110,40 +154,49 @@ def _format_default_value(param: EndpointParameter) -> Optional[str]:
     """
     if param.default is None:
         return None
-    
-    param_types = param.type if isinstance(param.type, list) else [param.type]
-    
-    # Try to find the most appropriate type for the default value
-    for p_type in param_types:
-        if p_type == "string":
-            # Use repr() to safely escape the string for Python literals
-            return repr(str(param.default))
-        elif p_type == "boolean":
-            # Use Python's True/False for boolean values
-            if isinstance(param.default, bool):
-                return str(param.default)
-            elif str(param.default).lower() in ["true", "1", "yes"]:
-                return "True"
-            elif str(param.default).lower() in ["false", "0", "no"]:
-                return "False"
-        elif p_type == "integer":
-            try:
+
+    # Try to infer from definitions first
+    defs: list[ParameterDefinition] = []
+    if getattr(param, "definition", None) is not None:
+        defs = param.definition if isinstance(param.definition, list) else [param.definition]
+
+    # Helper tries in order of likely correctness
+    def try_format(expected_type: str) -> Optional[str]:
+        try:
+            if expected_type == "string":
+                return repr(str(param.default))
+            if expected_type == "boolean":
+                if isinstance(param.default, bool):
+                    return str(param.default)
+                if str(param.default).lower() in ["true", "1", "yes"]:
+                    return "True"
+                if str(param.default).lower() in ["false", "0", "no"]:
+                    return "False"
+            if expected_type == "integer":
                 return str(int(param.default))
-            except (ValueError, TypeError):
-                continue
-        elif p_type == "number":
-            try:
+            if expected_type == "number":
                 return str(float(param.default))
-            except (ValueError, TypeError):
-                continue
-        elif p_type == "array":
-            if isinstance(param.default, (list, tuple)):
+            if expected_type == "array" and isinstance(param.default, (list, tuple)):
                 return repr(param.default)
-        elif p_type == "object":
-            if isinstance(param.default, dict):
+            if expected_type == "object" and isinstance(param.default, dict):
                 return repr(param.default)
-    
-    # If no type matched or conversion failed, return as safely escaped string
+        except (ValueError, TypeError):
+            return None
+        return None
+
+    # Try all defined types
+    for d in defs:
+        val = try_format(getattr(d, "type", "string"))
+        if val is not None:
+            return val
+
+    # Fallback: try infer from param_schema
+    schema = getattr(param, "param_schema", None) or {}
+    val = try_format(schema.get("type", "string"))
+    if val is not None:
+        return val
+
+    # Final fallback: repr as string
     return repr(str(param.default))
 
 
@@ -226,6 +279,8 @@ def _prepare_endpoint_data(endpoint: EndpointDefinition, specification: str = No
     if description:
         # First escape the description safely
         safe_description = _safe_escape_description(description)
+        # Remove leading/trailing newlines
+        safe_description = safe_description.strip("\n")
         # Then format with proper indentation
         description = "\n        ".join(line for line in safe_description.split("\n"))
         description_contains_args = "Args:" in description or ":param" in description
@@ -259,6 +314,7 @@ def _detect_required_imports(endpoints_data: List[Dict[str, Any]]) -> tuple[Set[
         "Union[": "Union",
         "List[": "List",
         "Dict[": "Dict",
+        "Literal[": "Literal",
         "Any": "Any",
         "Optional[": "Optional"
     }

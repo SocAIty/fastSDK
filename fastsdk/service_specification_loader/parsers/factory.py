@@ -9,7 +9,7 @@ even if they're marked as Optional in the model definition.
 from typing import Optional, List, Dict, Any, Union
 from fastsdk.service_definition import (
     ServiceDefinition, EndpointDefinition, EndpointParameter,
-    ServiceSpecification, ParameterType, ParameterLocation
+    ServiceSpecification, ParameterLocation, ParameterDefinition
 )
 from datetime import datetime, timezone
 import uuid
@@ -22,10 +22,10 @@ def create_service_definition(
     short_desc: Optional[str] = None,
     specification: ServiceSpecification = "other",
     endpoints: List[EndpointDefinition] = None,
-    used_models: Optional[List[Dict]] = None,  # Assuming models might be parsed later
+    used_models: Optional[List[Dict]] = None,
     category: Optional[List[str]] = None,
     family_id: Optional[str] = None,
-    schemas: Optional[Dict[str, Any]] = None,  # Store raw schemas
+    full_schema: Optional[Dict[str, Any]] = None,  # raw OpenAPI/Cog schema
     source_identifier: Optional[str] = None,  # Store original source (URL/path)
     version: Optional[str] = None  # should be the hash of the openapi specification
 ) -> ServiceDefinition:
@@ -42,7 +42,7 @@ def create_service_definition(
         used_models=used_models or [],
         category=category,
         family_id=family_id,
-        schemas=schemas or {},
+        full_schema=full_schema or {},
         source_identifier=source_identifier,
         created_at=datetime.now(timezone.utc).isoformat(),
         version=version
@@ -69,19 +69,19 @@ def create_endpoint_definition(
         display_name=display_name or effective_id,  # Fallback display_name to id
         description=description,
         short_desc=short_desc or display_name,  # Fallback short_desc to display_name
-        method=method,
+        method=method.upper() if isinstance(method, str) else method,
         parameters=parameters or [],
         responses=responses or {},
-        timeout_s=timeout_s
+        x_timeout_s=timeout_s
     )
 
 
 def create_endpoint_parameter(
     name: str,
-    type: Union[ParameterType, Any] = "string",  # Default to string
+    definition: Union[ParameterDefinition, List[ParameterDefinition]],
     required: bool = False,
     default: Optional[Any] = None,
-    location: ParameterLocation = "query",  # Default to query
+    location: ParameterLocation = "query",
     description: Optional[str] = None,
     param_schema: Optional[Dict[str, Any]] = None
 ) -> EndpointParameter:
@@ -93,10 +93,10 @@ def create_endpoint_parameter(
 
     return EndpointParameter(
         name=name,
-        type=type,
+        definition=definition,
         required=required,
         default=default,
         location=location,
         description=description,
-        param_schema=param_schema or {}  # Ensure schema is at least an empty dict
+        param_schema=param_schema or {}
     )

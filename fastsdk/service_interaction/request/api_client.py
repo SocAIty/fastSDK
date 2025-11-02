@@ -105,12 +105,24 @@ class APIClient:
             if param_value is None and param.required:
                 raise ValueError(f"Required parameter '{param.name}' is missing")
             
+            # Determine characteristics
             is_file_param = False
             is_array_param = False
-            if hasattr(param, "type") and param.type is not None:
-                ptype = param.type if isinstance(param.type, list) else [param.type]
-                is_file_param = any(t in ["file", "image", "video", "audio"] for t in ptype)
-                is_array_param = any(t in ["array"] for t in ptype)
+
+            # Detect media/file by ParameterDefinition.format
+            definitions = getattr(param, "definition", None)
+            if definitions is not None:
+                defs = definitions if isinstance(definitions, list) else [definitions]
+                for d in defs:
+                    fmt = getattr(d, "format", None)
+                    if fmt in {"file", "image", "video", "audio"}:
+                        is_file_param = True
+                        break
+
+            # Detect array via schema
+            schema = getattr(param, "param_schema", None) or {}
+            if isinstance(schema, dict) and schema.get("type") == "array":
+                is_array_param = True
 
             # if is file type put it into file_params
             is_file_param = is_file_param or isinstance(param_value, MediaFile)
@@ -157,7 +169,7 @@ class APIClient:
         return await self.client.post(
             url=request_data.url,
             params=request_data.query_params,
-            json=request_data.body_params,  # Use json parameter instead of data
+            json=request_data.body_params,
             headers=request_data.headers,
             timeout=timeout_s
         )
@@ -174,7 +186,7 @@ class APIClient:
         Submit a direct URL request.
         
         Args:
-            service_def: Service definition 
+            service_def: Service definition
             url: Target URL
             method: HTTP method
             files: Optional files to upload

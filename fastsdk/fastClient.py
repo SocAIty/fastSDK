@@ -20,6 +20,9 @@ class FastClient:
         self.fsdk = FastSDK()   # its a signleton, so if it was already created, it will be reused with all the loaded services
         
         self.service_definition = self.fsdk.service_manager.get_service(service_name_or_id)
+        if not self.service_definition:
+            raise ValueError(f"Service {service_name_or_id} not found in the library. Check if the service {service_name_or_id} was added to the library.")
+
         # try to get api key from global settings if not provided
         self.api_key = api_key or self._get_api_key()
         # This loads the service_def and creates the api_client and the file_handler in the ApiJobManager

@@ -1,7 +1,7 @@
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, Optional
 
 from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
-from fastsdk.service_definition import ParameterType
+from fastsdk.service_definition import ParameterDefinition
 
 
 class FastTaskAPIParser(OpenAPIParser):
@@ -9,33 +9,22 @@ class FastTaskAPIParser(OpenAPIParser):
         super().__init__(*args, **kwargs)
         self.specification = "fasttaskapi"
 
-    def _get_type(self, schema: Dict[str, Any]) -> Union[str, List[ParameterType]]:
-        schema = self._resolve(schema)
-        if not schema:
-            return "object"
-
-        if schema.get('type') == 'string' and schema.get('format') in {'binary', 'byte'}:
-            return ['file', 'string', 'bytes']
+    def _resolve_type_format(self, schema: Optional[Dict[str, Any]]) -> ParameterDefinition:
+        """Override to add FastTaskAPI-specific type/format mappings."""
+        schema = self._resolve(schema) or {}
 
         title = (schema.get('title') or '').lower()
 
-        # specific file models
-        supported_media_types = set()
-        for key in ['imagefilemodel', 'videofilemodel', 'audiofilemodel']:
+        # Add support for Media-Toolkit MediaFiles.
+        # specific media file models
+        for key, fmt in [('imagefilemodel', 'image'), ('videofilemodel', 'video'), ('audiofilemodel', 'audio')]:
             if key in title:
-                media_type = title.replace('filemodel', '')
-                supported_media_types.add(media_type)
- 
-        if len(supported_media_types) > 0:
-            supported_media_types.add('file')
-            supported_media_types.add('string')
-            supported_media_types.add('bytes')
-            return list(supported_media_types)
+                return ParameterDefinition(type='string', format=fmt)
 
         # general file model
         if 'filemodel' in title or (
             schema.get('properties') and {'file_name', 'content_type'}.issubset(schema['properties'])
         ):
-            return ['file', 'string', 'bytes']
+            return ParameterDefinition(type='string', format='file')
 
-        return super()._get_type(schema)
+        return super()._resolve_type_format(schema)

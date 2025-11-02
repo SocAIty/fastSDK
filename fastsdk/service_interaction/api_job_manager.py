@@ -297,8 +297,16 @@ class ApiJobManager:
         # Build task list
         task_list = ["Preparing"]
         for param in endpoint_def.parameters:
-            param_types = param.type if isinstance(param.type, list) else [param.type]
-            if any(t in ["file", "image", "video", "audio"] for t in param_types):
+            has_media = False
+            definitions = getattr(param, "definition", None)
+            if definitions is not None:
+                defs = definitions if isinstance(definitions, list) else [definitions]
+                for d in defs:
+                    fmt = getattr(d, "format", None)
+                    if fmt in {"file", "image", "video", "audio"}:
+                        has_media = True
+                        break
+            if has_media:
                 task_list.append("Load files")
                 break
 

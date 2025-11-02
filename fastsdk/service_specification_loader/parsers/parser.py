@@ -72,6 +72,10 @@ def parse_service_definition(loaded_spec: Union[str, Path, Dict[str, Any], Servi
     if isinstance(loaded_spec, ServiceDefinition):
         return loaded_spec
 
+    if not hasattr(loaded_spec, "endpoints"):
+        parser = _get_parser(loaded_spec, spec_source)
+        return parser.parse()
+        
     try:
         return ServiceDefinition(**loaded_spec)
     except Exception:

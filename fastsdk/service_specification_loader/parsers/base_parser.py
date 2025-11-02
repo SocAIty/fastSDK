@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, List, Union
 from fastsdk.service_definition import (
-    EndpointParameter, ParameterType, ServiceDefinition
+    EndpointParameter, ServiceDefinition, ParameterDefinition
 )
 from fastsdk.service_specification_loader.parsers.factory import create_endpoint_parameter
 
@@ -21,34 +21,70 @@ class BaseParser:
             return self._schemas.get(ref)
         return obj
 
-    def _get_type(self, schema: Optional[Dict[str, Any]]) -> Union[str, List[ParameterType]]:
-        """Extract parameter type(s) from a schema."""
-        schema = self._resolve(schema)
-        if not schema:
-            return "object"
+    def _build_param_definition(self, schema: Optional[Dict[str, Any]]) -> ParameterDefinition:
+        """Build a ParameterDefinition from a resolved schema node."""
+        resolved = self._resolve(schema) or {}
 
-        if "type" in schema:
-            if schema["type"] == "array":
-                item_type = self._get_type(schema.get("items"))
-                return ["array", item_type] if isinstance(item_type, str) else ["array", *item_type]
-            return schema["type"]
+        p_type = resolved.get("type") or "object"
+        p_format = resolved.get("format")
 
-        if "anyOf" in schema:
-            types = [self._get_type(s) for s in schema["anyOf"]]
-            flat = [t for typ in types for t in (typ if isinstance(typ, list) else [typ])]
-            return list(flat) if len(flat) > 1 else flat.pop()
+        # Map common cases without forcing a particular strategy; subclasses can refine
+        # Keep 'binary'/'byte' as-is; specialized parsers may convert to 'file'
+        # Preserve constraints and enums
+        return ParameterDefinition(
+            type=p_type,
+            format=p_format,
+            enum=resolved.get("enum"),
+            minLength=resolved.get("minLength"),
+            maxLength=resolved.get("maxLength"),
+            minimum=resolved.get("minimum"),
+            maximum=resolved.get("maximum"),
+            additional_properties=resolved.get("additionalProperties")
+        )
+        
+    def _resolve_type_format(self, schema: Optional[Dict[str, Any]]) -> ParameterDefinition:
+        """Resolve type and format for a single schema node. Subclasses can override for custom logic."""
+        schema = self._resolve(schema) or {}
 
-        if "allOf" in schema:
-            types = [self._get_type(s) for s in schema["allOf"]]
-            flat = [t for typ in types for t in (typ if isinstance(typ, list) else [typ])]
-            return list(flat) if len(flat) > 1 else flat.pop()
+        if schema.get("type") == "array":
+            # Recursively resolve the item type/format
+            item_def = self._resolve_type_format(schema.get("items"))
+            # For arrays, set format to the item's type or format
+            arr_format = getattr(item_def, "format", None) or getattr(item_def, "type", None)
+            # Preserve constraints from the array schema itself if any
+            return ParameterDefinition(
+                type="array",
+                format=arr_format,
+                enum=None,  # Arrays don't have enum directly
+                minLength=schema.get("minLength"),
+                maxLength=schema.get("maxLength"),
+                minimum=schema.get("minimum"),
+                maximum=schema.get("maximum"),
+                additional_properties=None  # Arrays don't have additional_properties
+            )
 
-        if "oneOf" in schema:
-            types = [self._get_type(s) for s in schema["oneOf"]]
-            flat = [t for typ in types for t in (typ if isinstance(typ, list) else [typ])]
-            return list(flat) if len(flat) > 1 else flat.pop()
+        # Base case: build definition from schema
+        return self._build_param_definition(schema)
 
-        return "object"
+    def _get_type(self, schema: Optional[Dict[str, Any]]) -> Union[ParameterDefinition, List[ParameterDefinition]]:
+        """Extract ParameterDefinition(s) from a schema, honoring anyOf/allOf/oneOf."""
+        schema = self._resolve(schema) or {}
+
+        # Handle composition keywords first
+        for key in ("anyOf", "allOf", "oneOf"):
+            if key in schema:
+                defs: List[ParameterDefinition] = []
+                for sub_schema in schema[key]:
+                    sub_def = self._resolve_type_format(sub_schema)
+                    defs.append(sub_def)
+                # Deduplicate by (type, format)
+                dedup: Dict[tuple, ParameterDefinition] = {}
+                for d in defs:
+                    dedup[(d.type, d.format)] = d
+                return list(dedup.values())
+
+        # Simple schema: delegate to _resolve_type_format
+        return self._resolve_type_format(schema)
 
     def _make_param(
         self,
@@ -61,19 +97,16 @@ class BaseParser:
         """Create an EndpointParameter from schema information."""
         resolved = self._resolve(schema)
 
-        # deduplicate param types
-        param_type = self._get_type(resolved)
-        if isinstance(param_type, list):
-            param_type = list(set(param_type))
+        definition = self._get_type(resolved)
 
         return create_endpoint_parameter(
             name=name,
-            type=param_type,
+            definition=definition,
             location=location,
             required=required,
-            description=description or resolved.get("description") if resolved else None,
+            description=description or (resolved.get("description") if resolved else None),
             param_schema=resolved,
-            default=resolved.get("default") if resolved else None,
+            default=(resolved.get("default") if resolved else None),
         )
 
     def parse_parameters(self, endpoint: Dict[str, Any]) -> List[EndpointParameter]:
@@ -120,4 +153,4 @@ class BaseParser:
 
     def parse(self) -> ServiceDefinition:
         """Parse the specification into a ServiceDefinition. Must be implemented by subclasses."""
-        raise NotImplementedError("Subclasses must implement the parse method") 
+        raise NotImplementedError("Subclasses must implement the parse method")

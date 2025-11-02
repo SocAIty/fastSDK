@@ -1,8 +1,8 @@
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 
 from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
 from fastsdk.service_definition import (
-    EndpointParameter, ParameterType, ServiceDefinition
+    EndpointParameter, ServiceDefinition, ParameterDefinition
 )
 
 
@@ -49,16 +49,14 @@ class CogParser(OpenAPIParser):
 
         return params
 
-    def _get_type(self, schema: Optional[Dict[str, Any]]) -> Union[str, List[ParameterType]]:
-        """Extract parameter type(s) from a schema with Cog-specific handling."""
-        schema = self._resolve(schema)
-        if not schema:
-            return "object"
+    def _resolve_type_format(self, schema: Optional[Dict[str, Any]]) -> ParameterDefinition:
+        """Override to add Cog-specific type/format mappings."""
+        schema = self._resolve(schema) or {}
 
         if schema.get("type") == "string" and schema.get("format") == "uri":
-            return ["file", "string"]
+            return ParameterDefinition(type="string", format="file")
 
         if schema.get("type") == "file":
-            return ["file", "string"]
+            return ParameterDefinition(type="string", format="file")
 
-        return super()._get_type(schema)
+        return super()._resolve_type_format(schema)
