@@ -43,7 +43,7 @@ class ApiJobManager:
     Manages the lifecycle of asynchronous API jobs by orchestrating services.
     Delegates implementation details
     """
-    def __init__(self, service_manager: ServiceManager):
+    def __init__(self, service_manager: ServiceManager, progress_verbosity: int = 2):
         self.service_manager = service_manager
         self.api_clients: Dict[str, APIClient] = {}  # dict of service_id -> APIClient
         self.file_handlers: Dict[str, FileHandler] = {}  # dict of service_id -> FileHandler
@@ -59,7 +59,7 @@ class ApiJobManager:
         }
 
         # Create Meseex task orchestrator
-        self.meseex_box = MeseexBox(task_methods=self.tasks)
+        self.meseex_box = MeseexBox(task_methods=self.tasks, progress_verbosity=progress_verbosity)
 
     def _determine_service_type(self, service_def: ServiceDefinition) -> ServiceSpecification:
         """

@@ -26,6 +26,9 @@ class FastSDK:
         if not hasattr(self, '_initialized'):
             self._service_manager = None
             self._api_job_manager = None
+            # Default verbosity level. Set directly after first init to change it;
+            # or before api_job_manager is used the first time.
+            self._progress_verbosity = 2
             self._initialized = True
 
     @property
@@ -43,7 +46,7 @@ class FastSDK:
     @property
     def api_job_manager(self) -> ApiJobManager:
         if self._api_job_manager is None:
-            self._api_job_manager = ApiJobManager(self.service_manager)
+            self._api_job_manager = ApiJobManager(self.service_manager, progress_verbosity=self._progress_verbosity)
         return self._api_job_manager
 
     @api_job_manager.setter
