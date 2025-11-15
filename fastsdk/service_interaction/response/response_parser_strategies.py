@@ -138,6 +138,8 @@ class ReplicateResponseParser(ResponseParserStrategy):
                 return result
         elif isinstance(result, list):
             return [self._parse_media_result(m) for m in result]
+        elif isinstance(result, dict):
+            return {k: self._parse_media_result(v) for k, v in result.items()}
         else:
             return result
 
