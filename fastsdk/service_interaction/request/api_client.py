@@ -33,6 +33,7 @@ class APIClient:
         self.api_key = api_key
         self.validate_api_key()
         self.poll_method = "POST"
+        self.cancel_method = "POST"
         
     @property
     def client(self) -> httpx.AsyncClient:
@@ -233,5 +234,20 @@ class APIClient:
         return await self.request_url(
             url=response.refresh_job_url,
             method=self.poll_method
+        )
+
+    async def cancel_job(self, response: Union[BaseJobResponse, Any], method: str = "POST") -> httpx.Response:
+        """
+        Request cancellation for a previously created remote job.
+        """
+        if not isinstance(response, BaseJobResponse):
+            raise ValueError("Cancellation requires a job-based response")
+
+        if not response.cancel_job_url:
+            raise ValueError("The service response does not contain a cancel URL")
+
+        return await self.request_url(
+            url=response.cancel_job_url,
+            method=self.cancel_method
         )
         

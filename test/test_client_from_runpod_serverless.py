@@ -10,7 +10,7 @@ def test_async_openapi_spec_fetching():
     openapi_spec_job = fsdk.load_openapi_spec_from_runpod(serverless_url + "/openapi.json", api_key=os.getenv("RUNPOD_API_KEY"), return_api_job=True)
     openapi_spec = openapi_spec_job.wait_for_result()
     assert isinstance(openapi_spec, dict)
-    assert "fast-task-api" in openapi_spec["info"]
+    assert "apipod" in openapi_spec["info"]
     return openapi_spec
     
 
@@ -31,7 +31,16 @@ def test_permanent_client():
     assert client_sp is not None
     
 
+def test_job_cancel():
+    fsdk = FastSDK()
+    client = fsdk.create_permanent_client(serverless_url)
+    job = client.submit_job("/swap-img-to-img", source_img="test/test_files/test_face_1.jpg", target_img="test/test_files/test_face_2.jpg", enhance_face_model=None)
+    cancel_info = job.cancel()
+    assert cancel_info is not None
+
+    
 if __name__ == "__main__":
     test_async_openapi_spec_fetching()
     test_temporary_auto_client()
     test_permanent_client()
+    test_job_cancel()

@@ -8,8 +8,8 @@ ModelDomain = Literal["text", "audio", "image", "video", "other"]
 
 # Literals for service specifications
 ServiceSpecification = Literal[
-    "socaity",      # all socaity.ai endpoints that support fasttaskapi protocol
-    "fasttaskapi",  # all servers that support fasttaskapi protocol with job queues
+    "socaity",      # all socaity.ai endpoints that support apipod protocol
+    "apipod",  # all servers that support apipod protocol with job queues
     "runpod",       # for example runpod servers
     "cog",         # is a service protocol used by replicate.ai
     "cog2",        # new cog format with Input/Output schemas

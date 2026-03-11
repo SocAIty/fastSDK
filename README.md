@@ -22,12 +22,12 @@ All these problems are solved with the fastSDK.
 Simple API calls, file uploads, job handling, and cloud storage providers are just a few features of the fastSDK.
 
 FastSDK is designed to work beautifully with long-running services like machine learning and data processing endpoints.
-It works hand-in-hand with [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) that let's you build and deploy those services and endpoints easily.
+It works hand-in-hand with [APIPod](https://github.com/SocAIty/APIPod) that let's you build and deploy those services and endpoints easily.
 
 ### Service compatibility
 
 Out of the box works with following services:
-- Services created with [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) which return a job object.
+- Services created with [APIPod](https://github.com/SocAIty/APIPod) which return a job object.
 - [Runpod](https://github.com/runpod/runpod-python) services
 - [Cog](https://github.com/replicate/cog) services
 - OpenAPI 3.0 / RestAPIs
@@ -44,7 +44,7 @@ Can be used together with
 - Async and Threaded job support. Execute multiple requests and heavy preprocessing tasks in parallel and with high speed.
   - Massively parallel job and request execution.
 - Working with services that create "Jobs". The SDK will wait for the job to finish and return the result.
-  - Support for [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) and [runpod (serverless)](https://www.runpod.io/serverless-gpu) endpoints.
+  - Support for [APIPod](https://github.com/SocAIty/APIPod) and [runpod (serverless)](https://www.runpod.io/serverless-gpu) endpoints.
   - Retrieving the job status, progres and print status updates.
 - Streaming of files 
 - Automatic serialization of data types
@@ -92,11 +92,11 @@ settings.api_keys["runpod"] = os.getenv("my_api_key")
 API keys can be set in environment variables, when creating the Service Client or when initializing your SDK.
 In settings.py the default environment variables are set.
 
-# FastSDK :two_hearts: FastTaskAPI
+# FastSDK :two_hearts: APIPod
 
-<img src="https://github.com/SocAIty/FastTaskAPI/blob/main/docs/fastsdk_to_fasttaskapi.png?raw=true" width="50%" />
+<img src="https://github.com/SocAIty/APIPod/blob/main/docs/fastsdk_to_apipod.png?raw=true" width="50%" />
 
-[FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) allows you to easily create and deploy services that can be used with fastSDK.
+[APIPod](https://github.com/SocAIty/APIPod) allows you to easily create and deploy services that can be used with fastSDK.
 They are two beating hearts :two_hearts: beating in harmony for client <--> service interaction.
 Create your service now.
 

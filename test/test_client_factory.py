@@ -23,7 +23,7 @@ def load_created_client(saved_client_path, class_name):
     return inst
 
 
-def test_fasttaskapi_client():
+def test_apipod_client():
     saved_client_path, class_name, service_definition = fsdk.create_sdk("test/test_files/face2face.json", save_path="test/output/face2face.py", class_name="face2face")
     # create dynamic import of the new file 
     face2face = load_created_client(saved_client_path, class_name)
@@ -83,6 +83,6 @@ def test_replicate():
     
 
 if __name__ == "__main__":
-    test_fasttaskapi_client()
+    test_apipod_client()
     test_cog()
     test_replicate()
