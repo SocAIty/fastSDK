@@ -126,7 +126,7 @@ class APISeex(MrMeseex):
 
         return current_response
 
-    def cancel(self, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
+    def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
         if self._meseex_box is None or self._api_client is None or self._response_parser is None:
             return super().cancel()
 
@@ -148,6 +148,18 @@ class APISeex(MrMeseex):
         if cancel_response is None:
             self.set_cancel_result(current_response)
             return current_response
+
+        if cancel_response.status == APIJobStatus.CANCELLED:
+            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
+            return cancel_response
+
+        if cancel_response.status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
+            self.set_cancel_result(cancel_response)
+            return cancel_response
+
+        self.set_cancel_result(cancel_response)
+        if not wait:
+            return cancel_response
 
         return self._wait_for_remote_cancellation(
             cancel_response,
@@ -351,7 +363,10 @@ class ApiJobManager:
         # Return result if job is done, otherwise signal to poll again
         if parsed_response.status == APIJobStatus.FINISHED:
             return parsed_response
-        elif parsed_response.status in [APIJobStatus.FAILED, APIJobStatus.CANCELLED]:
+        elif parsed_response.status == APIJobStatus.CANCELLED:
+            job.mark_cancelled(cancel_result=parsed_response)
+            return parsed_response
+        elif parsed_response.status == APIJobStatus.FAILED:
             raise ValueError(parsed_response.error or f"Job failed with status: {parsed_response.status.name}")
  
         # Update progress based on job status
