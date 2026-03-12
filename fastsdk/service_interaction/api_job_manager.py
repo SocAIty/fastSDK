@@ -94,6 +94,7 @@ class APISeex(MrMeseex):
         timeout_s: float = 30.0,
         poll_interval_s: float = 0.5
     ):
+        print(f"DEBUG: _wait_for_remote_cancellation started")
         current_response = cancel_response
         deadline = time.monotonic() + timeout_s
 
@@ -127,6 +128,7 @@ class APISeex(MrMeseex):
         return current_response
 
     def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
+        print(f"DEBUG: ApiJobManager.cancel called with wait={wait}")
         if self._meseex_box is None or self._api_client is None or self._response_parser is None:
             return super().cancel()
 
@@ -387,6 +389,9 @@ class ApiJobManager:
                     parsed_response.progress.progress,
                     message
                 )
+        
+        # Update the task output so that job.response reflects the current state during polling
+        job.set_task_output(parsed_response)
 
         return PollAgain(f"Job status: {parsed_response.status.name}")
 
