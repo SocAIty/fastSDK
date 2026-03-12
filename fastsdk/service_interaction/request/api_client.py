@@ -246,8 +246,6 @@ class APIClient:
         if not response.cancel_job_url:
             raise ValueError("The service response does not contain a cancel URL")
 
-        print(f"DEBUG: Cancelling job {response.id} with method {method} and url {response.cancel_job_url}")
-
         return await self.request_url(
             url=response.cancel_job_url,
             method=self.cancel_method

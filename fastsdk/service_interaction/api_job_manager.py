@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from fastsdk.service_definition import (
     ServiceDefinition, EndpointDefinition,
@@ -22,25 +22,23 @@ from media_toolkit import MediaDict
 
 
 class APISeex(MrMeseex):
-    """Meseex extension specifically for API job handling"""
-    def __init__(self, service_def: ServiceDefinition, endpoint_def: EndpointDefinition, data: Any = None, name: str = None, tasks: list = None):
-        super().__init__(tasks, data, name)
+    """Meseex extension specifically for API job handling."""
+    def __init__(
+        self,
+        service_def: ServiceDefinition,
+        endpoint_def: EndpointDefinition,
+        data: Any = None,
+        name: str = None,
+        tasks: list = None,
+        cancel_handler: Callable[..., Any] = None,
+    ):
+        super().__init__(tasks, data, name, cancel_handler)
         self.service_def = service_def
         self.endpoint_def = endpoint_def
-        self._api_client: Optional[APIClient] = None
-        self._meseex_box: Optional[MeseexBox] = None
-        self._response_parser: Optional[ResponseParser] = None
-
-    def attach_runtime(self, api_client: APIClient, meseex_box: MeseexBox, response_parser: ResponseParser) -> None:
-        self._api_client = api_client
-        self._meseex_box = meseex_box
-        self._response_parser = response_parser
 
     @property
-    def response(self) -> BaseJobResponse:
-        """
-        Returns the latest parsed response from the API.
-        """
+    def response(self) -> Optional[BaseJobResponse]:
+        """Returns the latest parsed response from the API."""
         if self.termination_state is not None and isinstance(self.cancel_result, BaseJobResponse):
             return self.cancel_result
 
@@ -48,126 +46,6 @@ class APISeex(MrMeseex):
         if resp is not None:
             return resp
         return self.get_task_output("Sending request")
-
-    def _run_async_call(self, method, *args, timeout_s: float = 30.0):
-        if self._meseex_box is None:
-            raise RuntimeError("The job is not attached to a MeseexBox runtime")
-
-        task = self._meseex_box.task_executor.submit(method, *args)
-        started_at = time.monotonic()
-
-        while not task.is_completed:
-            if timeout_s is not None and (time.monotonic() - started_at) > timeout_s:
-                task.cancel()
-                raise TimeoutError("Timed out while waiting for cancellation request")
-            time.sleep(0.01)
-
-        if task.error is not None:
-            raise task.error
-
-        return task.result
-
-    def _local_cancel_response(self, message: str) -> BaseJobResponse:
-        return BaseJobResponse(
-            id=self.meseex_id,
-            status=APIJobStatus.CANCELLED,
-            error=message,
-            service_specification=self.service_def.specification
-        )
-
-    def _parse_cancel_response(self, http_response) -> Optional[BaseJobResponse]:
-        if self._response_parser is None:
-            raise RuntimeError("The job is not attached to a response parser")
-
-        error = self._response_parser.check_response_status(http_response)
-        if error:
-            raise ValueError(f"Job cancellation failed: {error}")
-
-        parsed_response = self._response_parser.parse_response(http_response, parse_media=False)
-        if isinstance(parsed_response, BaseJobResponse):
-            return parsed_response
-        return None
-
-    def _wait_for_remote_cancellation(
-        self,
-        cancel_response: BaseJobResponse,
-        timeout_s: float = 30.0,
-        poll_interval_s: float = 0.5
-    ):
-        print(f"DEBUG: _wait_for_remote_cancellation started")
-        current_response = cancel_response
-        deadline = time.monotonic() + timeout_s
-
-        while isinstance(current_response, BaseJobResponse):
-            if current_response.status == APIJobStatus.CANCELLED:
-                self._meseex_box.cancel_meseex(self, cancel_result=current_response)
-                return current_response
-
-            if current_response.status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            remaining_timeout = deadline - time.monotonic()
-            if remaining_timeout <= 0:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            time.sleep(min(poll_interval_s, remaining_timeout))
-            http_response = self._run_async_call(
-                self._api_client.poll_status,
-                current_response,
-                timeout_s=min(remaining_timeout, 30.0)
-            )
-            next_response = self._parse_cancel_response(http_response)
-            if next_response is None:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            current_response = next_response
-
-        return current_response
-
-    def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
-        print(f"DEBUG: ApiJobManager.cancel called with wait={wait}")
-        if self._meseex_box is None or self._api_client is None or self._response_parser is None:
-            return super().cancel()
-
-        if self.is_terminal:
-            return self.cancel_result or self.response
-
-        current_response = self.response
-        if not isinstance(current_response, BaseJobResponse) or not current_response.cancel_job_url:
-            cancel_response = current_response or self._local_cancel_response("Cancelled before remote job submission")
-            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
-            return cancel_response
-
-        http_response = self._run_async_call(
-            self._api_client.cancel_job,
-            current_response,
-            timeout_s=timeout_s
-        )
-        cancel_response = self._parse_cancel_response(http_response)
-        if cancel_response is None:
-            self.set_cancel_result(current_response)
-            return current_response
-
-        if cancel_response.status == APIJobStatus.CANCELLED:
-            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
-            return cancel_response
-
-        if cancel_response.status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
-            self.set_cancel_result(cancel_response)
-            return cancel_response
-
-        self.set_cancel_result(cancel_response)
-        if not wait:
-            return cancel_response
-
-        return self._wait_for_remote_cancellation(
-            cancel_response,
-            timeout_s=timeout_s,
-            poll_interval_s=poll_interval_s
-        )
 
 
 class ApiJobManager:
@@ -330,10 +208,9 @@ class ApiJobManager:
 
     @polling_task(poll_interval_seconds=1.0, timeout_seconds=3600)
     async def _poll_status(self, job: APISeex) -> Any:
-        """Task method that polls for job completion by delegating to ApiService"""
+        """Task method that polls for job completion by delegating to ApiService."""
         parsed_response = job.prev_task_output
 
-        # If not a job-based API response, skip polling
         if not isinstance(parsed_response, BaseJobResponse):
             return parsed_response
 
@@ -351,18 +228,15 @@ class ApiJobManager:
             job.set_task_data({"number_of_polling_errors": n_polling_errors + 1})
             return PollAgain(f"Job status polling failed: {e}")
 
-        # Check for HTTP errors
         error = self.response_parser.check_response_status(http_response)
         if error:
             raise ValueError(f"Job status polling failed: {error}")
             
-        # Parse the response
         parsed_response = self.response_parser.parse_response(http_response, parse_media=False)
         
         if not isinstance(parsed_response, BaseJobResponse):
             raise ValueError(f"Expected job response but got {type(parsed_response)}")
             
-        # Return result if job is done, otherwise signal to poll again
         if parsed_response.status == APIJobStatus.FINISHED:
             return parsed_response
         elif parsed_response.status == APIJobStatus.CANCELLED:
@@ -370,29 +244,25 @@ class ApiJobManager:
             return parsed_response
         elif parsed_response.status == APIJobStatus.FAILED:
             raise ValueError(parsed_response.error or f"Job failed with status: {parsed_response.status.name}")
- 
-        # Update progress based on job status
-        if isinstance(parsed_response, BaseJobResponse):
-            if parsed_response.progress is None:
-                job.set_task_progress(
-                    None,
-                    f"Job {parsed_response.id} status: {parsed_response.status.name}"
-                )
-            else:
-                message = f"Job {parsed_response.id}"
-                if parsed_response.progress.message:
-                    message += f": {parsed_response.progress.message}"
-                else:
-                    message += f" status: {parsed_response.status.name}"
-                
-                job.set_task_progress(
-                    parsed_response.progress.progress,
-                    message
-                )
-        
-        # Update the task output so that job.response reflects the current state during polling
-        job.set_task_output(parsed_response)
 
+        if parsed_response.progress is None:
+            job.set_task_progress(
+                None,
+                f"Job {parsed_response.id} status: {parsed_response.status.name}"
+            )
+        else:
+            message = f"Job {parsed_response.id}"
+            if parsed_response.progress.message:
+                message += f": {parsed_response.progress.message}"
+            else:
+                message += f" status: {parsed_response.status.name}"
+            
+            job.set_task_progress(
+                parsed_response.progress.progress,
+                message
+            )
+
+        job.set_task_output(parsed_response)
         return PollAgain(f"Job status: {parsed_response.status.name}")
 
     async def _process_result(self, job: APISeex) -> Any:
@@ -475,13 +345,98 @@ class ApiJobManager:
             endpoint_def=endpoint_def,
             data=data,
             tasks=task_list,
-            name=seex_name
-        )
-        job.attach_runtime(
-            api_client=self.api_clients[service_id],
-            meseex_box=self.meseex_box,
-            response_parser=self.response_parser
+            name=seex_name,
+            cancel_handler=self.cancel_api_job
         )
         
         # Submit the job to the MeseexBox for execution
         return self.meseex_box.summon_meseex(job)
+
+    def _run_async_call(self, method, *args, timeout_s: float = 30.0):
+        """Bridge helper: run an async method synchronously via the task executor."""
+        task = self.meseex_box.task_executor.submit(method, *args)
+        started_at = time.monotonic()
+
+        while not task.is_completed:
+            if timeout_s is not None and (time.monotonic() - started_at) > timeout_s:
+                task.cancel()
+                raise TimeoutError("Timed out while waiting for async call")
+            time.sleep(0.01)
+
+        if task.error is not None:
+            raise task.error
+
+        return task.result
+
+    def _try_remote_cancel(self, job: APISeex) -> Optional[BaseJobResponse]:
+        """
+        Best-effort: send a cancel request to the remote API.
+        Returns the parsed BaseJobResponse from the remote on success.
+        Raises an exception if communication fails.
+        Returns None if the current response is not job-based or has no cancel_job_url.
+        """
+        current_response = job.response
+        if not isinstance(current_response, BaseJobResponse) or not current_response.cancel_job_url:
+            return None  # No remote job or no cancel URL
+
+        http_response = self._run_async_call(
+            self.api_clients[job.service_def.id].cancel_job,
+            current_response,
+        )
+        error = self.response_parser.check_response_status(http_response)
+        if error:
+            # If HTTP status indicates an error, still parse to see if it's a BaseJobResponse
+            parsed_error_response = self.response_parser.parse_response(http_response, parse_media=False)
+            if isinstance(parsed_error_response, BaseJobResponse):
+                return parsed_error_response # Return the error response if it's a job response
+            raise ValueError(f"Remote cancellation failed with HTTP error: {error}")
+
+        parsed = self.response_parser.parse_response(http_response, parse_media=False)
+        return parsed if isinstance(parsed, BaseJobResponse) else None
+
+    def cancel_api_job(self, job: APISeex, **kwargs) -> Any:
+        """
+        Best-effort cancel: send remote cancel request if possible.
+        Cancels locally only when the remote confirms cancellation or if the job
+        has not yet been sent to the remote API.
+        """
+        # The meseex_box.cancel_meseex call already includes a check for job.is_terminal,
+        # so no need for an explicit check here.
+
+        # If job was not sent to remote yet we can just cancel locally
+        if not isinstance(job.response, BaseJobResponse) or not job.response.cancel_job_url:
+            local_cancel_response = BaseJobResponse(
+                id=job.meseex_id,
+                status=APIJobStatus.CANCELLED,
+                error="Cancelled before remote submission",
+                service_specification=job.service_def.specification,
+            )
+            # Note a very race condition can happen. Sending finishes before the local cancel finished.
+            # Then we have a remote orphan job.
+            self.meseex_box.cancel_meseex(job, cancel_result=local_cancel_response)
+            return local_cancel_response
+
+        try:
+            remote_response = self._try_remote_cancel(job)
+        except Exception as e:
+            # Remote cancellation failed due to communication error (unreachable, timeout, etc.)
+            # Do NOT cancel locally. The job will continue polling.
+            # Log the error, or return a specific error response to the user.
+            print(f"Warning: Remote cancellation for job {job.meseex_id} failed: {e}. Job will continue polling.")
+            return job.response # Return current job state, don't mark as cancelled.
+
+        if remote_response is None:
+            # No remote job or no cancel URL. Do NOT cancel locally.
+            # The job will continue polling until it finishes or fails naturally.
+            print(f"Warning: Job {job.meseex_id} has no remote cancel URL or no job response. Cannot perform remote cancel. Job will continue polling.")
+            return job.response # Return current job state, don't mark as cancelled.
+
+        # Remote confirmed cancellation → finalize locally.
+        if remote_response.status == APIJobStatus.CANCELLED:
+            self.meseex_box.cancel_meseex(job, cancel_result=remote_response)
+            return remote_response
+
+        # Remote returned a non-cancelled status (e.g. still PROCESSING or
+        # already FINISHED) → the cancel was rejected or the job already
+        # completed. Do NOT cancel locally; let the polling loop handle it.
+        return remote_response
