@@ -21,7 +21,7 @@ dependencies = [
     "singleton_decorator==1.0.0",
     "jinja2>=3.1.6",
     "fastcloud>=0.0.14",
-	"apipodregistry>=0.0.0"
+	"apipod-registry>=0.0.0"
 ]
 
 [project.optional-dependencies]
