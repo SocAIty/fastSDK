@@ -42,7 +42,7 @@ def add_service_def_localhost_runpod():
     return service_definition
 
 
-def add_service_def_localhost_fasttaskapi():
+def add_service_def_localhost_apipod():
     service_definition = ServiceManager.add_service(
         spec_source="test/test_files/face2face.json", service_id="face2face", service_address="http://localhost:8020"
     )
@@ -51,7 +51,7 @@ def add_service_def_localhost_fasttaskapi():
 
 def add_service_def_local_socaity_backend():
     service_definition = ServiceManager.add_service(
-        spec_source="test/test_files/face2face.json", service_id="face2face", specification="fasttaskapi", service_address="http://localhost:8001/v1/face2face"
+        spec_source="test/test_files/face2face.json", service_id="face2face", specification="apipod", service_address="http://localhost:8001/v1/face2face"
     )
     return service_definition
 
@@ -60,7 +60,7 @@ def test_manual_face2face():
     # 1. load service definition from file
     # method with local runpod server
     # service_definition = add_service_def_localhost_runpod()
-    # service_definition = add_service_def_localhost_fasttaskapi()
+    # service_definition = add_service_def_localhost_apipod()
     service_definition = add_service_def_local_socaity_backend()
     assert service_definition is not None
     # 2. create client

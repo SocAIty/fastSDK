@@ -4,13 +4,13 @@ from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIP
 from apipod_registry.definitions.service_definitions import ParameterDefinition
 
 
-class FastTaskAPIParser(OpenAPIParser):
+class APIPodParser(OpenAPIParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.specification = "fasttaskapi"
+        self.specification = "apipod"
 
     def _resolve_type_format(self, schema: Optional[Dict[str, Any]]) -> ParameterDefinition:
-        """Override to add FastTaskAPI-specific type/format mappings."""
+        """Override to add APIPod-specific type/format mappings."""
         schema = self._resolve(schema) or {}
 
         title = (schema.get('title') or '').lower()

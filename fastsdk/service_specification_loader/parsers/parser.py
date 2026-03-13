@@ -5,7 +5,7 @@ from apipod_registry.definitions.service_definitions import ServiceSpecification
 from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
 from fastsdk.service_specification_loader.parsers.cog.cog_parser import CogParser
 from fastsdk.service_specification_loader.parsers.cog.cog_parser2 import CogParser2
-from fastsdk.service_specification_loader.parsers.fasttaskapi_parser import FastTaskAPIParser
+from fastsdk.service_specification_loader.parsers.apipod_parser import APIPodParser
 
     
 def _determine_specification(spec: Dict[str, Any], spec_source: Union[str, Dict[str, Any]]) -> ServiceSpecification:
@@ -16,12 +16,12 @@ def _determine_specification(spec: Dict[str, Any], spec_source: Union[str, Dict[
     combined = title + " " + desc
     schemas = spec.get('components', {}).get('schemas', {})
     
-    if "fast-task-api" in info:
-        return "fasttaskapi"
+    if "apipod" in info:
+        return "apipod"
     if schemas:
         names = {k.lower() for k in schemas}
         if 'jobresult' in names or any(name.endswith('filemodel') for name in names):
-            return "fasttaskapi"
+            return "apipod"
     if title == 'cog':
         if not spec.get('paths') and 'Input' in schemas and 'Output' in schemas:
             return "cog2"
@@ -48,9 +48,9 @@ def _get_parser(spec: Dict[str, Any], spec_source: Union[str, Dict[str, Any]]):
         "cog": CogParser,
         "replicate": CogParser,
         "cog2": CogParser2,
-        "fasttaskapi": FastTaskAPIParser,
+        "apipod": APIPodParser,
         "runpod": OpenAPIParser,
-        "socaity": FastTaskAPIParser,
+        "socaity": APIPodParser,
         "openai": OpenAPIParser,
         "openapi": OpenAPIParser
     }

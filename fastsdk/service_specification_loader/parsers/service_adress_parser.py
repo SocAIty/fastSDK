@@ -26,7 +26,7 @@ def parse_runpod_url(url: str) -> tuple:
     Parses the runpod url to get the base runpod url, pod_id (and path).
     Accepted formats:
     - https://api.runpod.ai/v2/pod_id/run
-    - https://api.runpod.ai/v2/pod_id/path  - path is the route in fast-task-api.
+    - https://api.runpod.ai/v2/pod_id/path  - path is the route in apipod.
     - pod_id/run
     - pod_id
     - localhost:port/pod_id/run

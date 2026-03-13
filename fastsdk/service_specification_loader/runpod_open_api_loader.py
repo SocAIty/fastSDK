@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 class RunpodOpenAPILoader:
     """
-    Simplified loader for fetching OpenAPI specifications from RunPod FastTaskAPI endpoints.
-    Polls the service_definition from the runpod serverless fasttaskapi server and creates a temporary service definition.
+    Simplified loader for fetching OpenAPI specifications from RunPod APIPod endpoints.
+    Polls the service_definition from the runpod serverless apipod server and creates a temporary service definition.
     Uses ServiceManager and ApiJobManager infrastructure instead of implementing logic from scratch.
     """
     

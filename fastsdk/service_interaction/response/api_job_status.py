@@ -1,10 +1,29 @@
 from enum import Enum
 
+RUNPOD_STATUS_MAPPINGS = {
+    "IN_QUEUE": "QUEUED",
+    "IN_PROGRESS": "PROCESSING",
+    "COMPLETED": "FINISHED",
+    "FAILED": "FAILED",
+    "CANCELLED": "CANCELLED",
+    "TIMED_OUT": "TIMEOUT",
+}
+
+REPLICATE_STATUS_MAPPINGS = {
+    "STARTING": "QUEUED",
+    "BOOTING": "PROCESSING",
+    "PROCESSING": "PROCESSING",
+    "SUCCEEDED": "FINISHED",
+    "FAILED": "FAILED",
+    "CANCELED": "CANCELLED",
+    "ABORTED": "CANCELLED",
+}
+
 
 class APIJobStatus(Enum):
     """
-    Describes the status the job has on the service (server-side)
-    Unified status enum for jobs across multiple server providers
+    Unified status enum for jobs across multiple server providers.
+    Describes the status the job has on the service (server-side).
     """
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
@@ -18,54 +37,38 @@ class APIJobStatus(Enum):
     def map_runpod_status(status: str) -> 'APIJobStatus':
         if not status:
             return APIJobStatus.UNKNOWN
-
-        RUNPOD_STATUS_MAPPINGS = {
-            # Runpod mappings
-            "IN_QUEUE": APIJobStatus.QUEUED,
-            "IN_PROGRESS": APIJobStatus.PROCESSING,
-            "COMPLETED": APIJobStatus.FINISHED,
-            "FAILED": APIJobStatus.FAILED,
-            "CANCELLED": APIJobStatus.CANCELLED,
-            "TIMED_OUT": APIJobStatus.TIMEOUT
-        }
-
-        return RUNPOD_STATUS_MAPPINGS.get(status, APIJobStatus.UNKNOWN)
+        canonical = RUNPOD_STATUS_MAPPINGS.get(status)
+        if canonical is None:
+            return APIJobStatus.UNKNOWN
+        return APIJobStatus(canonical)
 
     @staticmethod
     def map_replicate_status(status: str) -> 'APIJobStatus':
         if not status:
             return APIJobStatus.UNKNOWN
-
-        REPLICATE_STATUS_MAPPINGS = {
-            # Replicate mappings
-            "STARTING": APIJobStatus.QUEUED,
-            "BOOTING": APIJobStatus.PROCESSING,
-            "PROCESSING": APIJobStatus.PROCESSING,
-            "SUCCEEDED": APIJobStatus.FINISHED,
-            "FAILED": APIJobStatus.FAILED,
-            "CANCELED": APIJobStatus.CANCELLED,
-        }
-
-        return REPLICATE_STATUS_MAPPINGS.get(status, APIJobStatus.UNKNOWN)
+        canonical = REPLICATE_STATUS_MAPPINGS.get(status)
+        if canonical is None:
+            return APIJobStatus.UNKNOWN
+        return APIJobStatus(canonical)
 
     @classmethod
     def from_str(cls, status_str: str) -> 'APIJobStatus':
-        """Convert any platform's status string to the unified enum"""
+        """Convert any platform's status string to the unified enum."""
         if not status_str:
             return cls.UNKNOWN
 
         if isinstance(status_str, cls):
             return status_str
 
-        if isinstance(status_str, str):
-            status_str = status_str.upper()
+        status_str = status_str.upper()
 
-        # Try direct match first
         try:
             return cls(status_str)
         except ValueError:
-            # Try mapped values
-            x = cls.map_runpod_status(status_str)
-            if x is not None and x != cls.UNKNOWN:
-                return x
-            return cls.map_replicate_status(status_str)
+            pass
+
+        result = cls.map_runpod_status(status_str)
+        if result != cls.UNKNOWN:
+            return result
+
+        return cls.map_replicate_status(status_str)
