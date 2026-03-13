@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsdk"
-version = "0.2.16"
+version = "0.2.18"
 description = "Your SDK and model zoo for generative AI. Build AI-powered applications with ease."
 requires-python = ">=3.8"
 authors = [
@@ -16,11 +16,11 @@ dependencies = [
     "httpx",
     "tqdm",
     "pydantic>=2.11.3",
-    "meseex>=0.0.6",
+    "meseex>=0.0.7",
     "media-toolkit>=00.02.22",
     "singleton_decorator==1.0.0",
     "jinja2>=3.1.6",
-    "fastcloud>=0.0.13"
+    "fastcloud>=0.0.14"
 ]
 
 [project.optional-dependencies]
