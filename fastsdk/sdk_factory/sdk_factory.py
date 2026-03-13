@@ -397,7 +397,7 @@ def create_sdk(
         Tuple containing:
             - Path to the generated Python file
             - Name of the generated class (needed for import)
-            - ServiceDefinition object of the created service (if you want use the service with the ServiceManager)
+            - ServiceDefinition object of the created service (if you want use the service with the Registry)
         
     Raises:
         ValueError: If service_definition is not valid

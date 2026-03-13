@@ -1,4 +1,4 @@
-from apipod_registry.registry import ServiceManager
+from apipod_registry.registry import Registry
 from apipod_registry.definitions.service_definitions import ServiceDefinition, ModelDefinition
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, load_spec
@@ -32,13 +32,13 @@ class FastSDK:
             self._initialized = True
 
     @property
-    def service_manager(self) -> ServiceManager:
+    def service_manager(self) -> Registry:
         if self._service_manager is None:
-            self._service_manager = ServiceManager()
+            self._service_manager = Registry()
         return self._service_manager
 
     @service_manager.setter
-    def service_manager(self, value: ServiceManager):
+    def service_manager(self, value: Registry):
         self._service_manager = value
         if self._api_job_manager:
             self._api_job_manager.service_manager = value

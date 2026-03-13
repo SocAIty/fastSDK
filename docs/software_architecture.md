@@ -43,7 +43,7 @@ FastSDK consists of three core domains:
 | Component         | Description |
 |------------------|-------------|
 | `ServiceDefinition` | A Pydantic model representing an OpenAPI-based service and its endpoints. |
-| `ServiceManager`    | Loads, organizes, and manages all available service definitions. |
+| `Registry`    | Loads, organizes, and manages all available service definitions. |
 | `OpenAPIParser`     | Parses an OpenAPI spec (JSON) into a structured `ServiceDefinition`. |
 | `ClientGenerator`   | Dynamically generates specialized `APIClient` classes from service definitions. |
 
