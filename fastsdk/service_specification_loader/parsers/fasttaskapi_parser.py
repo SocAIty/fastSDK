@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional
 
 from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
-from fastsdk.service_definition import ParameterDefinition
+from apipod_registry.definitions.service_definitions import ParameterDefinition
 
 
 class FastTaskAPIParser(OpenAPIParser):

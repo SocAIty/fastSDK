@@ -1,7 +1,8 @@
 import httpx
 import json
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from fastsdk.service_definition import EndpointDefinition, RunpodServiceAddress
+from fastsdk.service_definition import RunpodServiceAddress
+from apipod_registry.definitions.service_definitions import EndpointDefinition
 
 
 class APIClientRunpod(APIClient):
@@ -38,7 +39,7 @@ class APIClientRunpod(APIClient):
         """
         # runpod wants all parameters in the body. If it is a an fasttaskapi service the "path" is in the body.
         # so we need to check if the service is a fasttaskapi service and if so, we need to add the path to the body.
-        
+        #print("Request runpod data before sending:", request_data)
         all_params = request_data.body_params
         all_params.update(request_data.query_params)
         all_params.update(request_data.file_params)

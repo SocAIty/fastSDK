@@ -1,5 +1,5 @@
 from fastsdk.fastClient import TemporaryFastClient
-from fastsdk.service_definition import (
+from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition
 )
 from fastsdk.service_specification_loader.parsers.service_adress_parser import create_service_address

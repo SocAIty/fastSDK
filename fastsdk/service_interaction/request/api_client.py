@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, Union
 import httpx
 
-from fastsdk.service_definition import ServiceDefinition, EndpointDefinition
+from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
 from media_toolkit import MediaFile
 
@@ -153,6 +153,7 @@ class APIClient:
         Returns:
             The API response
         """
+        #print(f"Sending normal API Client request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {list(request_data.file_params.keys())}")
         # Use json parameter for JSON requests, data for form requests
         if request_data.file_params:
             # If there are files, use multipart/form-data
@@ -229,6 +230,8 @@ class APIClient:
         if not isinstance(response, BaseJobResponse):
             return response
             
+        # print(" ") 
+        # print(f"Request url: {response.refresh_job_url}")
         # Request updated status
         return await self.request_url(
             url=response.refresh_job_url,

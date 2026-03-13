@@ -7,10 +7,10 @@ even if they're marked as Optional in the model definition.
 """
 
 from typing import Optional, List, Dict, Any, Union
-from fastsdk.service_definition import (
-    ServiceDefinition, EndpointDefinition, EndpointParameter,
-    ServiceSpecification, ParameterLocation, ParameterDefinition
+from apipod_registry.definitions.service_definitions import (
+    ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterLocation, ParameterDefinition
 )
+from fastsdk.service_definition import ServiceSpecification
 from datetime import datetime, timezone
 import uuid
 
