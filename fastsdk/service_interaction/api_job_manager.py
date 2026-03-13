@@ -1,11 +1,8 @@
 import time
 from typing import Any, Callable, Dict, Optional
 
-from fastsdk.service_definition import (
-    ServiceDefinition, EndpointDefinition,
-    ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
-)
-from fastsdk.service_management import ServiceManager
+from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
+from apipod_registry.registry import ServiceManager
 
 from meseex import MeseexBox, MrMeseex
 from meseex.control_flow import polling_task, PollAgain
@@ -193,7 +190,6 @@ class ApiJobManager:
 
         fh = self.file_handlers.get(job.service_def.id)
         request_data.file_params = await fh.prepare_files_for_send(request_data.file_params)
-
         response = await api_client.send_request(request_data)
 
         # Check for HTTP errors

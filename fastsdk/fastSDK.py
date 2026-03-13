@@ -1,5 +1,5 @@
-from fastsdk.service_management import ServiceManager
-from fastsdk.service_definition import ServiceDefinition, ModelDefinition
+from apipod_registry.registry import ServiceManager
+from apipod_registry.definitions.service_definitions import ServiceDefinition, ModelDefinition
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, load_spec
 from fastsdk.service_specification_loader.parsers import parse_service_definition
@@ -281,6 +281,9 @@ class FastSDK:
         Returns:
             Updated ServiceDefinition if found, None otherwise
         """
+        for key, value in kwargs.items():
+            if key == "service_address" and isinstance(value, str):
+                kwargs[key] = create_service_address(value, None)
         return self.service_manager.update_service(service_id_or_name, **kwargs)
 
     def get_service(self, service_id_or_name: str) -> Optional[ServiceDefinition]:

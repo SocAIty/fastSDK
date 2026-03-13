@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from fastsdk.service_definition import (
+from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterDefinition
 )
 from fastsdk.utils import normalize_name_for_py

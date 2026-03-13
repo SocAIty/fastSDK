@@ -1,6 +1,7 @@
 from typing import Union, Dict, Any
 from pathlib import Path
-from fastsdk.service_definition import ServiceDefinition, ServiceSpecification
+from apipod_registry.definitions.service_definitions import ServiceDefinition
+from apipod_registry.definitions.service_definitions import ServiceSpecification
 from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
 from fastsdk.service_specification_loader.parsers.cog.cog_parser import CogParser
 from fastsdk.service_specification_loader.parsers.cog.cog_parser2 import CogParser2

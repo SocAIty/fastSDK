@@ -1,4 +1,4 @@
-from fastsdk.service_definition import SocaityServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, ServiceDefinition
+from apipod_registry.definitions.service_definitions import ServiceDefinition, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress
 from fastsdk.fastSDK import FastSDK
 import os
 
@@ -20,6 +20,7 @@ class FastClient:
         self.fsdk = FastSDK()   # its a signleton, so if it was already created, it will be reused with all the loaded services
         
         self.service_definition = self.fsdk.service_manager.get_service(service_name_or_id)
+
         if not self.service_definition:
             raise ValueError(f"Service {service_name_or_id} not found in the library. Check if the service {service_name_or_id} was added to the library.")
 

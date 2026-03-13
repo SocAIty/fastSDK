@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional
 
 from fastsdk.service_specification_loader.parsers.openapi_parser import OpenAPIParser
-from fastsdk.service_definition import (
+from apipod_registry.definitions.service_definitions import (
     EndpointParameter, ServiceDefinition, ParameterDefinition
 )
 
