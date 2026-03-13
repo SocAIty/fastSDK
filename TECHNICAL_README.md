@@ -16,7 +16,7 @@ Think of `fastsdk` as two connected subsystems:
 1. Definition layer
    - Loads `openapi.json` or provider-specific specs
    - Normalizes them into a `ServiceDefinition`
-   - Stores them in `ServiceManager`
+   - Stores them in `Registry`
 
 2. Runtime layer
    - Formats requests
@@ -49,12 +49,12 @@ Main façade for users.
 
 Important responsibilities:
 - load a service definition from spec input
-- register services in `ServiceManager`
+- register services in `Registry`
 - create generated SDK files
 - create temporary or permanent clients
 - expose the shared `ApiJobManager`
 
-### `ServiceDefinition` and `ServiceManager`
+### `ServiceDefinition` and `Registry`
 These define the internal contract for a service:
 - endpoints
 - parameters
@@ -62,7 +62,7 @@ These define the internal contract for a service:
 - service address
 - specification type
 
-`ServiceManager` is the in-memory registry used by runtime code.
+`Registry` is the in-memory registry used by runtime code.
 
 ### Specification Loading
 The service specification loader does provider-aware parsing:

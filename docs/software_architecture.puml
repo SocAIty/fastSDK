@@ -87,7 +87,7 @@ package "Service Management" {
         .. Pydantic model of OpenAPI service/endpoint ..
     }
 
-    class ServiceManager {
+    class Registry {
         .. Loads and manages ServiceDefinitions ..
     }
 
@@ -100,7 +100,7 @@ package "Service Management" {
         .. Creates APIClient from definitions ..
     }
 
-    ServiceManager --> ServiceDefinition
+    Registry --> ServiceDefinition
     OpenAPIParser --> ServiceDefinition
     ClientGenerator --> APIClient
     ClientGenerator --> ServiceDefinition

@@ -1,5 +1,5 @@
 """
-Example demonstrating how to use the fastsdk ServiceManager.
+Example demonstrating how to use the fastsdk Registry.
 
 This example shows how to:
 1. Add service definitions from OpenAPI specs
@@ -7,7 +7,7 @@ This example shows how to:
 3. Create and manage service families and categories
 """
 
-from fastsdk.service_management.service_manager import ServiceManager
+from fastsdk.service_management.service_manager import Registry
 from apipod_registry.definitions.service_definitions import (
     ServiceFamily, ServiceCategory, ModelDefinition, ServiceDefinition
 )
@@ -15,7 +15,7 @@ from apipod_registry.definitions.service_definitions import (
 
 def main():
     # Create a service manager
-    manager = ServiceManager()
+    manager = Registry()
     
     # Add service categories
     image_category = ServiceCategory(
