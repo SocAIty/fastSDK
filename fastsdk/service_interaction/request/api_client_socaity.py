@@ -1,5 +1,5 @@
 from .api_client import APIClient, APIKeyError
-from fastsdk.service_definition import SocaityServiceAddress
+from apipod_registry.definitions.service_definitions import SocaityServiceAddress
 import httpx
 from fastsdk.service_interaction.request.api_client import RequestData
 
@@ -27,10 +27,11 @@ class APIClientSocaity(APIClient):
             The API response
         """
         # Socaity expects data as multipart/form-data. Thus parameters are put into data and files.
+        #print(f"Sending socaity request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {request_data.file_params}")
         return await self.client.post(
             url=request_data.url,
             params=request_data.query_params,
-            data=request_data.body_params,
+            json=request_data.body_params,
             files=request_data.file_params,
             headers=request_data.headers,
             timeout=timeout_s

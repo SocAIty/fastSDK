@@ -7,7 +7,7 @@ from fastsdk.service_specification_loader.parsers.factory import (
     create_service_definition,
     create_endpoint_definition
 )
-from fastsdk.service_definition import (
+from apipod_registry.definitions.service_definitions import (
     ServiceDefinition,
     EndpointDefinition
 )

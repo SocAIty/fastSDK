@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List, Union
-from fastsdk.service_definition import (
+from apipod_registry.definitions.service_definitions import (
     EndpointParameter, ServiceDefinition, ParameterDefinition
 )
 from fastsdk.service_specification_loader.parsers.factory import create_endpoint_parameter
