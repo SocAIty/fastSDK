@@ -1,4 +1,3 @@
-from fastsdk import service_definition
 from apipod_registry.definitions.service_definitions import ServiceDefinition, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress
 from fastsdk.fastSDK import FastSDK
 import os

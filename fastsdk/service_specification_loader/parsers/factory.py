@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any, Union
 from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterLocation, ParameterDefinition
 )
-from fastsdk.service_definition import ServiceSpecification
+from apipod_registry.definitions.service_definitions import ServiceSpecification
 from datetime import datetime, timezone
 import uuid
 

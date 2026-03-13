@@ -5,13 +5,10 @@ from .sdk_factory import create_sdk
 from .service_interaction.api_job_manager import APISeex
 from .fastClient import FastClient
 
-from .service_definition import RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
-
 from .fastSDK import FastSDK
 
 
 __all__ = [
     'create_sdk', 'APISeex', 'FastClient', 'FastSDK',
-    'MediaFile', 'ImageFile', 'VideoFile', 'AudioFile', 'gather_results', 'gather_results_async',
-    'RunpodServiceAddress', 'ReplicateServiceAddress', 'SocaityServiceAddress', 'ServiceSpecification'
+    'MediaFile', 'ImageFile', 'VideoFile', 'AudioFile', 'gather_results', 'gather_results_async'
 ]

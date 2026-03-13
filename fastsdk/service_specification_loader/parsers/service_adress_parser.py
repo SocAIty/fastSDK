@@ -1,6 +1,6 @@
 from typing import Union
 from urllib.parse import urlparse
-from fastsdk.service_definition import ServiceSpecification, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress
+from apipod_registry.definitions.service_definitions import ServiceSpecification, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress
 from apipod_registry.definitions.service_definitions import ServiceAddress
 
 def _url_sanitize(url: str):

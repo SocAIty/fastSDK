@@ -1,7 +1,7 @@
 import httpx
 import json
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from fastsdk.service_definition import RunpodServiceAddress
+from apipod_registry.definitions.service_definitions import RunpodServiceAddress
 from apipod_registry.definitions.service_definitions import EndpointDefinition
 
 

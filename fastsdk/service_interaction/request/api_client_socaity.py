@@ -1,5 +1,5 @@
 from .api_client import APIClient, APIKeyError
-from fastsdk.service_definition import SocaityServiceAddress
+from apipod_registry.definitions.service_definitions import SocaityServiceAddress
 import httpx
 from fastsdk.service_interaction.request.api_client import RequestData
 
