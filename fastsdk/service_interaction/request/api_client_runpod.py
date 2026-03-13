@@ -26,7 +26,7 @@ class APIClientRunpod(APIClient):
         """Prepare request parameters for Runpod API."""
         request_data = super().format_request_params(endpoint, *args, **kwargs)
 
-        # adding path to the body for runpod fasttaskapi services
+        # adding path to the body for runpod apipod services
         if endpoint.path:
             request_data.body_params["path"] = endpoint.path
 
@@ -36,8 +36,8 @@ class APIClientRunpod(APIClient):
         """
         Send the prepared request to the API.
         """
-        # runpod wants all parameters in the body. If it is a an fasttaskapi service the "path" is in the body.
-        # so we need to check if the service is a fasttaskapi service and if so, we need to add the path to the body.
+        # runpod wants all parameters in the body. If it is a an apipod service the "path" is in the body.
+        # so we need to check if the service is a apipod service and if so, we need to add the path to the body.
         
         all_params = request_data.body_params
         all_params.update(request_data.query_params)

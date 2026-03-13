@@ -4,6 +4,9 @@ import os
 from fastsdk import FastSDK
 import importlib.util
 
+from fastsdk.fastClient import FastClient, ReplicateServiceAddress
+from time import sleep
+
 fsdk = FastSDK()
 
 
@@ -23,7 +26,7 @@ def load_created_client(saved_client_path, class_name):
     return inst
 
 
-def test_fasttaskapi_client():
+def test_apipod_client():
     saved_client_path, class_name, service_definition = fsdk.create_sdk("test/test_files/face2face.json", save_path="test/output/face2face.py", class_name="face2face")
     # create dynamic import of the new file 
     face2face = load_created_client(saved_client_path, class_name)
@@ -54,7 +57,8 @@ def test_cog():
     pass
 
 
-def test_replicate():
+
+def create_replicate_client(model_name: str) -> FastClient:
     try:
         import replicate
     except ImportError:
@@ -67,22 +71,49 @@ def test_replicate():
         return
 
     replicate_client = replicate.Client(api_token=replicate_api_key)
-    
+
+    model = replicate_client.models.get(model_name)
+    print(f"Testing {model.name}...")
+    service_def = fsdk.load_service_definition(model.latest_version.openapi_schema, specification="replicate", service_address=f"https://api.replicate.com/v1/models/{model_name}")
+    model_save_name = model.name.replace("-", "_")
+    saved_client_path, class_name, service_definition = fsdk.create_sdk(service_def, save_path=f"test/output/{model_save_name}.py", class_name=model_save_name)
+    replicate_model_client = load_created_client(saved_client_path, class_name)
+    return replicate_model_client
+
+
+def test_replicate():
     services_to_test = [
         "qwen/qwen-image-edit-plus",
         "flux-kontext-apps/renaissance"
     ]
     for service in services_to_test:
-        model = replicate_client.models.get(service)
-        print(f"Testing {model.name}...")
-        service_def = fsdk.load_service_definition(model.latest_version.openapi_schema)
-        model_save_name = model.name.replace("-", "_")
-        saved_client_path, class_name, service_definition = fsdk.create_sdk(service_def, save_path=f"test/output/{model_save_name}.py", class_name=model_save_name)
-        replicate_model_client = load_created_client(saved_client_path, class_name)
+        replicate_model_client = create_replicate_client(service)
         assert replicate_model_client
     
 
+def test_replicate_cancel():
+    replicate_model_client = create_replicate_client("google/veo-3-fast")
+    # replicate_model_client = create_replicate_client("black-forest-labs/flux-schnell")
+    assert replicate_model_client
+    # job = replicate_model_client()(prompt="A beautiful sunset over a calm ocean.")
+    job = replicate_model_client()(
+        prompt="A beautiful sunset over a calm ocean.",
+        image="https://wallpapercave.com/wp/wp2225992.jpg",
+        negative_prompt="monkey", duration=4, resolution="720p",
+        aspect_ratio="16:9",
+        generate_audio=False
+    )
+    #  generate_audio=False)
+    # res = job.get_result()
+    assert job
+    sleep(0.5)
+    job.cancel(wait=True)
+    assert job.is_terminal
+    assert job.termination_state.name == "CANCELLED"
+
+
 if __name__ == "__main__":
-    test_fasttaskapi_client()
-    test_cog()
-    test_replicate()
+    #test_apipod_client()
+    #test_cog()
+    #test_replicate()
+    test_replicate_cancel()
