@@ -2,7 +2,7 @@ import time
 from typing import Any, Callable, Dict, Optional
 
 from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
-from apipod_registry.registry import ServiceManager
+from apipod_registry.registry import Registry
 
 from meseex import MeseexBox, MrMeseex
 from meseex.control_flow import polling_task, PollAgain
@@ -50,7 +50,7 @@ class ApiJobManager:
     Manages the lifecycle of asynchronous API jobs by orchestrating services.
     Delegates implementation details
     """
-    def __init__(self, service_manager: ServiceManager, progress_verbosity: int = 2):
+    def __init__(self, service_manager: Registry, progress_verbosity: int = 2):
         self.service_manager = service_manager
         self.api_clients: Dict[str, APIClient] = {}  # dict of service_id -> APIClient
         self.file_handlers: Dict[str, FileHandler] = {}  # dict of service_id -> FileHandler
@@ -99,7 +99,7 @@ class ApiJobManager:
                 raise ValueError(f"Service {service_id} not found")
             
             if not hasattr(service_def, "service_address") or service_def.service_address is None:
-                raise ValueError(f"Service {service_id} has no service address. Add a service address to the service definition first with ServiceManager.update_service(service_id, service_address=...)")
+                raise ValueError(f"Service {service_id} has no service address. Add a service address to the service definition first with Registry.update_service(service_id, service_address=...)")
 
             service_type = self._determine_service_type(service_def)
             

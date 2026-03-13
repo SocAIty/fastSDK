@@ -1,5 +1,5 @@
 from fastsdk.fastClient import FastClient
-from fastsdk.fastSDK import ServiceManager
+from fastsdk.fastSDK import Registry
 from media_toolkit import ImageFile, MediaFile, MediaList
 from typing import Union
 from apipod_registry.definitions.service_definitions import ServiceAddress
@@ -36,21 +36,21 @@ class testFace2Face(FastClient):
 
 
 def add_service_def_localhost_runpod():
-    service_definition = ServiceManager.add_service(
+    service_definition = Registry.add_service(
         spec_source="test/test_files/face2face.json", service_id="face2face", specification="runpod", service_address=ServiceAddress(url="http://localhost:8020")
     )
     return service_definition
 
 
 def add_service_def_localhost_apipod():
-    service_definition = ServiceManager.add_service(
+    service_definition = Registry.add_service(
         spec_source="test/test_files/face2face.json", service_id="face2face", service_address="http://localhost:8020"
     )
     return service_definition
 
 
 def add_service_def_local_socaity_backend():
-    service_definition = ServiceManager.add_service(
+    service_definition = Registry.add_service(
         spec_source="test/test_files/face2face.json", service_id="face2face", specification="apipod", service_address="http://localhost:8001/v1/face2face"
     )
     return service_definition
