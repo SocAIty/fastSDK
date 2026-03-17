@@ -2,7 +2,7 @@ from fastsdk.fastClient import TemporaryFastClient
 from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition
 )
-from fastsdk.service_specification_loader.parsers.service_adress_parser import create_service_address
+from apipod_registry.parsers.service_adress_parser import create_service_address
 from typing import Any, Dict
 import uuid
 

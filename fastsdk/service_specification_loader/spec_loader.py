@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import httpx
 from httpx import TimeoutException, HTTPError
+
 from apipod_registry.definitions.service_definitions import ServiceDefinition
 
 from typing import TYPE_CHECKING

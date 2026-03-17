@@ -1,12 +1,14 @@
 from apipod_registry.registry import Registry
 from apipod_registry.definitions.service_definitions import ServiceDefinition, ModelDefinition
+from apipod_registry.parsers.service_definition_parser import parse_service_definition
+from apipod_registry.parsers.service_adress_parser import create_service_address
+
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, load_spec
-from fastsdk.service_specification_loader.parsers import parse_service_definition
+
 from fastsdk.sdk_factory.sdk_factory import create_sdk
 from typing import Union, Optional, Dict, Any, List, overload, TYPE_CHECKING
 from pathlib import Path
-from fastsdk.service_specification_loader.parsers.service_adress_parser import create_service_address
 import uuid
 
 if TYPE_CHECKING:
