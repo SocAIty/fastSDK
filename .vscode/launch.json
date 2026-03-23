@@ -9,7 +9,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
             }
         },
         {
@@ -20,7 +20,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
             }
         },
         {
@@ -31,7 +31,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
             }
         }
     ]
