@@ -1,10 +1,12 @@
 import re
+from typing import Union, List
 
 
+# copy of apipod implementation
 def normalize_identifier(
     original: str,
     replacement_char: str,
-    allowed_non_alphanum: str,
+    allowed_non_alphanum: Union[str, List[str]],
     trim_chars: str,
     lower_case: bool = True
 ) -> str:
@@ -30,6 +32,9 @@ def normalize_identifier(
     normalized = normalized.replace("\\", "/")
 
     # Replace all characters that are not a-z, 0-9, or explicitly allowed
+    if isinstance(allowed_non_alphanum, list):
+        allowed_non_alphanum = "".join(allowed_non_alphanum)
+
     allowed = f"a-z0-9{re.escape(allowed_non_alphanum)}"
     normalized = re.sub(f"[^{allowed}]+", replacement_char, normalized)
 
@@ -45,7 +50,6 @@ def normalize_identifier(
         normalized = replacement_char + normalized
 
     return normalized
-
             
 def normalize_name_for_py(name: str, lower_case: bool = True) -> str:
     """
