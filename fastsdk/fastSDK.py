@@ -1,6 +1,6 @@
 from apipod_registry import Registry
 from apipod_registry.definitions.service_definitions import ServiceDefinition, ModelDefinition
-from apipod_registry.parsers.parser import parse_service_definition
+from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 
 from fastsdk.service_interaction import ApiJobManager
