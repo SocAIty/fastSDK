@@ -27,7 +27,7 @@ class APIClientSocaity(APIClient):
             The API response
         """
         # Socaity expects data as multipart/form-data. Thus parameters are put into data and files.
-        #print(f"Sending socaity request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {request_data.file_params}")
+        # print(f"Sending socaity request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {request_data.file_params}")
         return await self.client.post(
             url=request_data.url,
             params=request_data.query_params,

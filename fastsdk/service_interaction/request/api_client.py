@@ -154,7 +154,7 @@ class APIClient:
         Returns:
             The API response
         """
-        #print(f"Sending normal API Client request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {list(request_data.file_params.keys())}")
+        # print(f"Sending normal API Client request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {list(request_data.file_params.keys())}")
         # Use json parameter for JSON requests, data for form requests
         if request_data.file_params:
             # If there are files, use multipart/form-data

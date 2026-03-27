@@ -19,7 +19,7 @@ class FastClient:
         """
         self.fsdk = FastSDK()   # its a signleton, so if it was already created, it will be reused with all the loaded services
         
-        self.service_definition = self.fsdk.service_manager.get_service(service_name_or_id)
+        self.service_definition = self.fsdk.service_registry.get_service(service_name_or_id)
 
         if not self.service_definition:
             raise ValueError(f"Service {service_name_or_id} not found in the library. Check if the service {service_name_or_id} was added to the library.")
@@ -70,7 +70,7 @@ class TemporaryFastClient(DynamicFastClient):
         """Remove the service from the service manager when client is deleted."""
         if self.service_definition and hasattr(self, 'fsdk'):
             try:
-                self.fsdk.service_manager.remove_service(self.service_definition.id)
+                self.fsdk.service_registry.remove_service(self.service_definition.id)
             except Exception:
                 # Ignore errors during cleanup (e.g., if FastSDK is already destroyed)
                 pass

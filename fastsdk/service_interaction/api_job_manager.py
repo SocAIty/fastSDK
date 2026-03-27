@@ -44,60 +44,134 @@ class APISeex(MrMeseex):
         if resp is not None:
             return resp
         return self.get_task_output("Sending request")
-    
-    @property
-    def runtime_info(self) -> Tuple[Optional[float], Optional[float]]:
-        """
-        Returns (delay_seconds, execution_seconds) in seconds.
-        Normalizes different provider formats to a consistent float-based second unit.
-        """
-        delay_seconds: Optional[float] = None
-        execution_seconds: Optional[float] = None
-        
-        resp = self.response
-        if not resp:
-            return None, None
 
-        addr = self.service_def.service_address
+    def _run_async_call(self, method, *args, timeout_s: float = 30.0):
+        if self._meseex_box is None:
+            raise RuntimeError("The job is not attached to a MeseexBox runtime")
 
-        # --- Provider 1: Runpod ---
-        if isinstance(addr, RunpodServiceAddress):
-            delay_ms = getattr(resp, "delayTime", None)
-            execution_ms = getattr(resp, "executionTime", None)
+        task = self._meseex_box.task_executor.submit(method, *args)
+        started_at = time.monotonic()
 
-            if delay_ms is not None:
-                delay_seconds = float(delay_ms) / 1000.0
-            if execution_ms is not None:
-                execution_seconds = float(execution_ms) / 1000.0
+        while not task.is_completed:
+            if timeout_s is not None and (time.monotonic() - started_at) > timeout_s:
+                task.cancel()
+                raise TimeoutError("Timed out while waiting for cancellation request")
+            time.sleep(0.01)
 
-        # --- Provider 2: Replicate ---
-        elif isinstance(addr, ReplicateServiceAddress):
-            created_str = getattr(resp, "created_at", None)
-            started_str = getattr(resp, "execution_started_at", None)
+        if task.error is not None:
+            raise task.error
 
-            if created_str and started_str:
-                try:
-                    # Parse ISO strings; handle 'Z' for UTC compatibility
-                    t1 = datetime.fromisoformat(str(created_str).replace("Z", "+00:00"))
-                    t2 = datetime.fromisoformat(str(started_str).replace("Z", "+00:00"))
-                    delay_seconds = (t2 - t1).total_seconds()
-                except (ValueError, TypeError):
-                    delay_seconds = None
+        return task.result
 
-            # Normalize Replicate's ms to seconds
-            exec_ms = getattr(resp, "execution_time_ms", None)
-            if exec_ms is not None:
-                execution_seconds = float(exec_ms) / 1000.0
+    def _local_cancel_response(self, message: str) -> BaseJobResponse:
+        return BaseJobResponse(
+            id=self.meseex_id,
+            status=APIJobStatus.CANCELLED,
+            error=message,
+            service_specification=self.service_def.specification
+        )
 
-        return delay_seconds, execution_seconds
+    def _parse_cancel_response(self, http_response) -> Optional[BaseJobResponse]:
+        if self._response_parser is None:
+            raise RuntimeError("The job is not attached to a response parser")
+
+        error = self._response_parser.check_response_status(http_response)
+        if error:
+            raise ValueError(f"Job cancellation failed: {error}")
+
+        parsed_response = self._response_parser.parse_response(http_response, parse_media=False)
+        if isinstance(parsed_response, BaseJobResponse):
+            return parsed_response
+        return None
+
+    def _wait_for_remote_cancellation(
+        self,
+        cancel_response: BaseJobResponse,
+        timeout_s: float = 30.0,
+        poll_interval_s: float = 0.5
+    ):
+        current_response = cancel_response
+        deadline = time.monotonic() + timeout_s
+
+        while isinstance(current_response, BaseJobResponse):
+            if current_response.status == APIJobStatus.CANCELLED:
+                self._meseex_box.cancel_meseex(self, cancel_result=current_response)
+                return current_response
+
+            if current_response.status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
+                self.set_cancel_result(current_response)
+                return current_response
+
+            remaining_timeout = deadline - time.monotonic()
+            if remaining_timeout <= 0:
+                self.set_cancel_result(current_response)
+                return current_response
+
+            time.sleep(min(poll_interval_s, remaining_timeout))
+            http_response = self._run_async_call(
+                self._api_client.poll_status,
+                current_response,
+                timeout_s=min(remaining_timeout, 30.0)
+            )
+            next_response = self._parse_cancel_response(http_response)
+            if next_response is None:
+                self.set_cancel_result(current_response)
+                return current_response
+
+            current_response = next_response
+
+        return current_response
+
+    def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
+        print(f"DEBUG: ApiJobManager.cancel called with wait={wait}")
+        if self._meseex_box is None or self._api_client is None or self._response_parser is None:
+            return super().cancel()
+
+        if self.is_terminal:
+            return self.cancel_result or self.response
+
+        current_response = self.response
+        if not isinstance(current_response, BaseJobResponse) or not current_response.cancel_job_url:
+            cancel_response = current_response or self._local_cancel_response("Cancelled before remote job submission")
+            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
+            return cancel_response
+
+        http_response = self._run_async_call(
+            self._api_client.cancel_job,
+            current_response,
+            timeout_s=timeout_s
+        )
+        cancel_response = self._parse_cancel_response(http_response)
+        if cancel_response is None:
+            self.set_cancel_result(current_response)
+            return current_response
+
+        if cancel_response.status == APIJobStatus.CANCELLED:
+            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
+            return cancel_response
+
+        if cancel_response.status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
+            self.set_cancel_result(cancel_response)
+            return cancel_response
+
+        self.set_cancel_result(cancel_response)
+        if not wait:
+            return cancel_response
+
+        return self._wait_for_remote_cancellation(
+            cancel_response,
+            timeout_s=timeout_s,
+            poll_interval_s=poll_interval_s
+        )
+
 
 class ApiJobManager:
     """
     Manages the lifecycle of asynchronous API jobs by orchestrating services.
     Delegates implementation details
     """
-    def __init__(self, service_manager: Registry, progress_verbosity: int = 2):
-        self.service_manager = service_manager
+    def __init__(self, service_registry: Registry, progress_verbosity: int = 2):
+        self.service_registry = service_registry
         self.api_clients: Dict[str, APIClient] = {}  # dict of service_id -> APIClient
         self.file_handlers: Dict[str, FileHandler] = {}  # dict of service_id -> FileHandler
         self.response_parser = ResponseParser()
@@ -140,7 +214,7 @@ class ApiJobManager:
 
     def add_api_client(self, service_id: str, api_key: str):
         if service_id not in self.api_clients:
-            service_def = self.service_manager.get_service(service_id)
+            service_def = self.service_registry.get_service(service_id)
             if not service_def:
                 raise ValueError(f"Service {service_id} not found")
             
@@ -169,7 +243,7 @@ class ApiJobManager:
             self.file_handlers[service_id] = file_handler
             return
 
-        service_def = self.service_manager.get_service(service_id)
+        service_def = self.service_registry.get_service(service_id)
         service_type = self._determine_service_type(service_def)
         
         if service_type == "runpod":
@@ -187,7 +261,7 @@ class ApiJobManager:
         self.file_handlers[service_id] = file_handler
     
     def load_api_client(self, service_name_or_id: str, api_key: str = None):
-        service_def = self.service_manager.get_service(service_name_or_id)
+        service_def = self.service_registry.get_service(service_name_or_id)
         if not service_def:
             raise ValueError(f"Service {service_name_or_id} not found")
         
@@ -336,11 +410,11 @@ class ApiJobManager:
             MrMeseex task that can be awaited for the result
         """
         # Get service and endpoint definitions
-        service_def = self.service_manager.get_service(service_id)
+        service_def = self.service_registry.get_service(service_id)
         if not service_def:
             raise ValueError(f"Service {service_id} not found")
 
-        endpoint_def = self.service_manager.get_endpoint(service_id, endpoint_id)
+        endpoint_def = self.service_registry.get_endpoint(service_id, endpoint_id)
         if not endpoint_def:
             raise ValueError(f"Endpoint {endpoint_id} not found in service {service_id}")
 

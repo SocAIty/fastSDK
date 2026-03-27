@@ -13,7 +13,7 @@ sys.path.append(str(current_path))
 
 # Now we can import from fastsdk
 from fastsdk.sdk_factory import create_sdk  # noqa: E402
-from fastsdk.service_management import Registry  # noqa: E402
+from apipod_registry import Registry  # noqa: E402
 from apipod_registry.definitions.service_definitions import (  # noqa: E402
     ServiceDefinition, EndpointDefinition, EndpointParameter,
     ServiceAddress

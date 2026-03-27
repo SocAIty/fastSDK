@@ -26,7 +26,7 @@ class FastSDK:
     
     def __init__(self):
         if not hasattr(self, '_initialized'):
-            self._service_manager = None
+            self._service_registry = None
             self._api_job_manager = None
             # Default verbosity level. Set directly after first init to change it;
             # or before api_job_manager is used the first time.
@@ -34,21 +34,21 @@ class FastSDK:
             self._initialized = True
 
     @property
-    def service_manager(self) -> Registry:
-        if self._service_manager is None:
-            self._service_manager = Registry()
-        return self._service_manager
+    def service_registry(self) -> Registry:
+        if self._service_registry is None:
+            self._service_registry = Registry()
+        return self._service_registry
 
-    @service_manager.setter
-    def service_manager(self, value: Registry):
-        self._service_manager = value
+    @service_registry.setter
+    def service_registry(self, value: Registry):
+        self._service_registry = value
         if self._api_job_manager:
-            self._api_job_manager.service_manager = value
+            self._api_job_manager.service_registry = value
 
     @property
     def api_job_manager(self) -> ApiJobManager:
         if self._api_job_manager is None:
-            self._api_job_manager = ApiJobManager(self.service_manager, progress_verbosity=self._progress_verbosity)
+            self._api_job_manager = ApiJobManager(self.service_registry, progress_verbosity=self._progress_verbosity)
         return self._api_job_manager
 
     @api_job_manager.setter
@@ -262,7 +262,7 @@ class FastSDK:
         """
         # If already a ServiceDefinition, add it directly
         if isinstance(spec_source, ServiceDefinition):
-            return self.service_manager.add_service(spec_source)
+            return self.service_registry.add_service(spec_source)
         
         # Load the service definition first
         service_def = self.load_service_definition(
@@ -271,7 +271,7 @@ class FastSDK:
         )
         
         # Add to service manager
-        return self.service_manager.add_service(service_def)
+        return self.service_registry.add_service(service_def)
 
     def update_service(self, service_id_or_name: str, **kwargs) -> Optional[ServiceDefinition]:
         """
@@ -286,7 +286,7 @@ class FastSDK:
         for key, value in kwargs.items():
             if key == "service_address" and isinstance(value, str):
                 kwargs[key] = create_service_address(value, None)
-        return self.service_manager.update_service(service_id_or_name, **kwargs)
+        return self.service_registry.update_service(service_id_or_name, **kwargs)
 
     def get_service(self, service_id_or_name: str) -> Optional[ServiceDefinition]:
         """
@@ -298,7 +298,7 @@ class FastSDK:
         Returns:
             ServiceDefinition if found, None otherwise
         """
-        return self.service_manager.get_service(service_id_or_name)
+        return self.service_registry.get_service(service_id_or_name)
 
     # ---- Client Creation Methods ----
     
