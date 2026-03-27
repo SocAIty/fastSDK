@@ -51,8 +51,10 @@ class SocaityResponseParser(ResponseParserStrategy):
     def can_parse(self, data: Dict) -> bool:
         if not isinstance(data, dict):
             return False
-        return (data.get("endpoint_protocol") == "socaity"
-                and "id" in data and "status" in data)
+        # Submission response: has job_id + links
+        if "job_id" in data and "links" in data:
+            return True
+        return False
 
     @staticmethod
     def _parse_media_result(result):
@@ -99,8 +101,8 @@ class RunpodResponseParser(ResponseParserStrategy):
         if not isinstance(data, dict):
             return False
         return (
-            "id" in data and "status" in data and
-            APIJobStatus.map_runpod_status(data.get("status")) != APIJobStatus.UNKNOWN
+            "id" in data
+            and "status" in data
         )
 
     def parse(self, data: Dict, parse_media: bool = True) -> RunpodJobResponse:
