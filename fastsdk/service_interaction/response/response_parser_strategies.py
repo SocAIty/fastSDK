@@ -1,96 +1,111 @@
-from typing import Dict
+from typing import Dict, Optional, Tuple
 from abc import ABC, abstractmethod
 
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from fastsdk.service_interaction.response.base_response import (
     BaseJobResponse, SocaityJobResponse,
-    RunpodJobResponse, ReplicateJobResponse, JobProgress, FileModel
+    RunpodJobResponse, ReplicateJobResponse, FileModel
 )
 from media_toolkit import media_from_any
+
+_RUNPOD_SPECIFIC_FIELDS = frozenset({"delayTime", "executionTime", "workerId", "retries"})
 
 
 class ResponseParserStrategy(ABC):
     @abstractmethod
     def can_parse(self, data: Dict) -> bool:
-        """Check if this strategy can parse the given data."""
         pass
 
     @abstractmethod
     def parse(self, data: Dict, parse_media: bool = True) -> BaseJobResponse:
-        """Parse the data into a BaseJobResponse object."""
         pass
 
     @staticmethod
-    def parse_status_and_progress(data: Dict) -> tuple[APIJobStatus, JobProgress]:
-        """Parse status and progress from response data."""
+    def parse_status_and_progress(data: Dict) -> Tuple[APIJobStatus, Optional[float], Optional[str]]:
+        """Extract status, progress (float) and message from response data."""
         status = APIJobStatus.from_str(data.get("status"))
-
-        # Extract progress data
-        progress_value = data.get("progress", 0.0)
+        progress = data.get("progress")
         message = data.get("message")
 
-        # Handle nested progress info
-        if isinstance(progress_value, dict):
-            message = progress_value.get("message", message)
-            progress_value = progress_value.get("progress", 0.0)
+        if isinstance(progress, dict):
+            message = progress.get("message", message)
+            progress = progress.get("progress")
 
-        # Convert progress to float
         try:
-            progress_value = float(progress_value) if progress_value is not None else 0.0
+            progress = float(progress) if progress is not None else None
         except (ValueError, TypeError):
-            progress_value = 0.0
+            progress = None
 
-        # If status is FINISHED, set progress to 100%
         if status == APIJobStatus.FINISHED:
-            progress_value = 1.0
+            progress = 1.0
 
-        return status, JobProgress(progress=progress_value, message=message)
+        return status, progress, message
 
 
 class SocaityResponseParser(ResponseParserStrategy):
+    """Handles both JobSubmissionResponse and JobStatusResponse from the Socaity gateway."""
+
     def can_parse(self, data: Dict) -> bool:
         if not isinstance(data, dict):
             return False
-        return (data.get("endpoint_protocol") == "socaity"
-                and "id" in data and "status" in data)
+        # Submission response: has job_id + links
+        if "job_id" in data and "links" in data:
+            return True
+        # Status response: has id + status, but no Runpod/Replicate indicators
+        if "id" in data and "status" in data:
+            if data.keys() & _RUNPOD_SPECIFIC_FIELDS:
+                return False
+            if "urls" in data:
+                return False
+            return True
+        return False
 
     @staticmethod
     def _parse_media_result(result):
-        """
-        Method checks the results of the job, and converts file results to media-toolkit objects
-        """
         if result is None:
             return result
-        
-        if isinstance(result, dict) or isinstance(result, FileModel):
+
+        if isinstance(result, (dict, FileModel)):
             try:
-                vid = media_from_any(result, allow_reads_from_disk=False)
-                return vid
+                return media_from_any(result, allow_reads_from_disk=False)
             except Exception:
                 return result
         elif isinstance(result, list):
             return [SocaityResponseParser._parse_media_result(r) for r in result]
-        else:
-            return result
+        return result
 
     def parse(self, data: Dict, parse_media: bool = True) -> SocaityJobResponse:
-        status, progress = self.parse_status_and_progress(data)
+        status, progress, message = self.parse_status_and_progress(data)
+
+        # Submission uses "job_id"; status uses "id"
+        job_id = data.get("id") or data.get("job_id")
+
+        # Submission nests URLs under "links"; status responses don't
+        links = data.get("links", {})
+        refresh_url = links.get("status") or data.get("refresh_job_url")
+        cancel_url = links.get("cancel") or data.get("cancel_job_url")
+
+        # If still no URLs, fallback to defaults
+        if not refresh_url:
+            refresh_url = f"/gateway/v1/status/{job_id}"
+        if not cancel_url:
+            cancel_url = f"/gateway/v1/cancel/{job_id}"
+
         result = data.get("result")
         if parse_media:
             result = self._parse_media_result(result)
 
         return SocaityJobResponse(
-            id=data["id"],
+            id=job_id,
             status=status,
             progress=progress,
+            message=message,
             error=data.get("error"),
-            result=result,  # of media files the endpoint request takes care by parsing nested socaity results
-            refresh_job_url=data.get("refresh_job_url", f'/status/{data["id"]}'),
-            cancel_job_url=data.get("cancel_job_url", f'/cancel/{data["id"]}'),
+            result=result,
+            refresh_job_url=refresh_url,
+            cancel_job_url=cancel_url,
             created_at=data.get("created_at"),
-            execution_started_at=data.get("execution_started_at"),
-            execution_finished_at=data.get("execution_finished_at"),
-            endpoint_protocol=data.get("endpoint_protocol", None)
+            updated_at=data.get("updated_at"),
         )
 
 
@@ -99,38 +114,35 @@ class RunpodResponseParser(ResponseParserStrategy):
         if not isinstance(data, dict):
             return False
         return (
-            "id" in data and "status" in data and
-            APIJobStatus.map_runpod_status(data.get("status")) != APIJobStatus.UNKNOWN
+            "id" in data
+            and "status" in data
+            and APIJobStatus.map_runpod_status(data.get("status")) != APIJobStatus.UNKNOWN
         )
 
     def parse(self, data: Dict, parse_media: bool = True) -> RunpodJobResponse:
-        status, progress = self.parse_status_and_progress(data)
-        result = data.get("output")
+        status, progress, _ = self.parse_status_and_progress(data)
 
         return RunpodJobResponse(
             id=data["id"],
             status=status,
             error=data.get("error"),
             progress=progress,
-            result=result,
-            refresh_job_url=data.get("refresh_job_url", f'/status/{data["id"]}'),
-            cancel_job_url=data.get("cancel_job_url", f'/cancel/{data["id"]}'),
-            delayTime=data.get("delayTime", None),
-            executionTime=data.get("executionTime", None),
-            retries=data.get("retries", None),
-            workerId=data.get("workerId", None)
+            result=data.get("output"),
+            refresh_job_url=data.get("refresh_job_url", f'status/{data["id"]}'),
+            cancel_job_url=data.get("cancel_job_url", f'cancel/{data["id"]}'),
+            delayTime=data.get("delayTime"),
+            executionTime=data.get("executionTime"),
+            retries=data.get("retries"),
+            workerId=data.get("workerId"),
         )
 
 
 class ReplicateResponseParser(ResponseParserStrategy):
     def can_parse(self, data: Dict) -> bool:
         urls = data.get("urls", {})
-        return urls and "api.replicate.com" in urls.get("get", "")
+        return bool(urls) and "api.replicate.com" in urls.get("get", "")
 
     def _parse_media_result(self, result):
-        """
-        Method checks the results of the job, and converts file results to media-toolkit objects
-        """
         if isinstance(result, str) and "https://replicate.delivery" in result:
             try:
                 return media_from_any(result, allow_reads_from_disk=False)
@@ -140,13 +152,11 @@ class ReplicateResponseParser(ResponseParserStrategy):
             return [self._parse_media_result(m) for m in result]
         elif isinstance(result, dict):
             return {k: self._parse_media_result(v) for k, v in result.items()}
-        else:
-            return result
+        return result
 
     def parse(self, data: Dict, parse_media: bool = False) -> ReplicateJobResponse:
-        status, progress = self.parse_status_and_progress(data)
+        status, progress, _ = self.parse_status_and_progress(data)
 
-        # Handle Replicate-specific status edge case
         if status == APIJobStatus.UNKNOWN:
             if data.get("status_code", 200) == 200 and not data.get("is_error", False):
                 status = APIJobStatus.FINISHED
@@ -156,7 +166,7 @@ class ReplicateResponseParser(ResponseParserStrategy):
 
         result = data.get("output")
         if parse_media:
-            result = self._parse_media_result(data.get("output"))
+            result = self._parse_media_result(result)
 
         return ReplicateJobResponse(
             id=job_id,
@@ -167,11 +177,15 @@ class ReplicateResponseParser(ResponseParserStrategy):
             refresh_job_url=urls.get("get", f"v1/predictions/{job_id}"),
             cancel_job_url=urls.get("cancel", f"v1/predictions/{job_id}/cancel"),
             stream_job_url=urls.get("stream"),
+            model=data.get("model"),
             version=data.get("version"),
+            input=data.get("input"),
+            source=data.get("source"),
+            status_str=data.get("status"),
             data_removed=data.get("data_removed"),
             logs=data.get("logs"),
             metrics=data.get("metrics"),
             created_at=data.get("created_at"),
             execution_started_at=data.get("started_at"),
-            execution_finished_at=data.get("completed_at")
+            execution_finished_at=data.get("completed_at"),
         )

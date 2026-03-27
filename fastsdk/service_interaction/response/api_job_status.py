@@ -25,6 +25,7 @@ class APIJobStatus(Enum):
     Unified status enum for jobs across multiple server providers.
     Describes the status the job has on the service (server-side).
     """
+    PENDING = "PENDING"
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     FINISHED = "FINISHED"
@@ -32,6 +33,10 @@ class APIJobStatus(Enum):
     TIMEOUT = "TIMEOUT"
     CANCELLED = "CANCELLED"
     UNKNOWN = "UNKNOWN"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self in {self.FINISHED, self.FAILED, self.TIMEOUT, self.CANCELLED}
 
     @staticmethod
     def map_runpod_status(status: str) -> 'APIJobStatus':

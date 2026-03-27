@@ -4,11 +4,6 @@ from pydantic import BaseModel, Field, computed_field
 from .api_job_status import APIJobStatus
 
 
-class JobProgress(BaseModel):
-    progress: float = Field(default=0.0)
-    message: Optional[str] = Field(default=None)
-
-
 class FileModel(BaseModel):
     file_name: str
     content_type: str
@@ -18,7 +13,7 @@ class FileModel(BaseModel):
 class BaseJobResponse(BaseModel):
     id: str
     status: APIJobStatus
-    progress: Optional[JobProgress] = Field(default=None)
+    progress: Optional[float] = Field(default=None)
     error: Optional[str] = Field(default=None)
     result: Optional[Union[FileModel, Any]] = Field(default=None)
     refresh_job_url: Optional[str] = Field(default=None)
@@ -34,13 +29,13 @@ class BaseJobResponse(BaseModel):
 
 
 class SocaityJobResponse(BaseJobResponse):
+    message: Optional[str] = Field(default=None)
     created_at: Optional[str] = Field(default=None)
-    execution_started_at: Optional[str] = Field(default=None)
-    execution_finished_at: Optional[str] = Field(default=None)
-    endpoint_protocol: str = Field(default="socaity")  # is used to differ in parsing strategies between socaity and runpod
+    updated_at: Optional[str] = Field(default=None)
 
 
 class RunpodJobResponse(BaseJobResponse):
+    message: Optional[str] = Field(default=None)
     delayTime: Optional[int] = Field(default=None)
     executionTime: Optional[int] = Field(default=None)
     retries: Optional[int] = Field(default=None)
@@ -48,12 +43,16 @@ class RunpodJobResponse(BaseJobResponse):
 
 
 class ReplicateJobResponse(BaseJobResponse):
+    model: Optional[str] = Field(default=None)
+    version: Optional[str] = Field(default=None)
+    input: Optional[dict[str, Any]] = Field(default=None)
+    source: Optional[str] = Field(default=None)
+    status_str: Optional[str] = Field(default=None, description="The original status string from Replicate")
     created_at: Optional[str] = Field(default=None)
     execution_started_at: Optional[str] = Field(default=None)
     execution_finished_at: Optional[str] = Field(default=None)
     metrics: Optional[dict[str, Any]] = Field(default=None)
     stream_job_url: Optional[str] = Field(default=None)
-    version: Optional[str] = Field(default=None)
     data_removed: Optional[bool] = Field(default=None)
     logs: Optional[str] = Field(default=None)
 

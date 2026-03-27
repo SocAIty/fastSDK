@@ -1,15 +1,15 @@
 import time
-from datetime import datetime
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
-from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
+from apipod_registry.definitions.service_definitions import ServiceDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
 from apipod_registry.registry import Registry
 
-from meseex import MeseexBox, MrMeseex
+from fastsdk.service_interaction.api_seex import APISeex
+from meseex import MeseexBox
 from meseex.control_flow import polling_task, PollAgain
 
 from fastsdk.service_interaction.request.file_handler import FileHandler
-from fastCloud import SocaityUploadAPI, ReplicateUploadAPI
+from fastCloud import ReplicateUploadAPI
 
 from fastsdk.service_interaction.response.response_parser import ResponseParser
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
@@ -19,163 +19,16 @@ from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaDict
 
 
-class APISeex(MrMeseex):
-    """Meseex extension specifically for API job handling."""
-    def __init__(
-        self,
-        service_def: ServiceDefinition,
-        endpoint_def: EndpointDefinition,
-        data: Any = None,
-        name: str = None,
-        tasks: list = None,
-        cancel_handler: Callable[..., Any] = None,
-    ):
-        super().__init__(tasks, data, name, cancel_handler)
-        self.service_def = service_def
-        self.endpoint_def = endpoint_def
-
-    @property
-    def response(self) -> Optional[BaseJobResponse]:
-        """Returns the latest parsed response from the API."""
-        if self.termination_state is not None and isinstance(self.cancel_result, BaseJobResponse):
-            return self.cancel_result
-
-        resp = self.get_task_output("Polling")
-        if resp is not None:
-            return resp
-        return self.get_task_output("Sending request")
-
-    def _run_async_call(self, method, *args, timeout_s: float = 30.0):
-        if self._meseex_box is None:
-            raise RuntimeError("The job is not attached to a MeseexBox runtime")
-
-        task = self._meseex_box.task_executor.submit(method, *args)
-        started_at = time.monotonic()
-
-        while not task.is_completed:
-            if timeout_s is not None and (time.monotonic() - started_at) > timeout_s:
-                task.cancel()
-                raise TimeoutError("Timed out while waiting for cancellation request")
-            time.sleep(0.01)
-
-        if task.error is not None:
-            raise task.error
-
-        return task.result
-
-    def _local_cancel_response(self, message: str) -> BaseJobResponse:
-        return BaseJobResponse(
-            id=self.meseex_id,
-            status=APIJobStatus.CANCELLED,
-            error=message,
-            service_specification=self.service_def.specification
-        )
-
-    def _parse_cancel_response(self, http_response) -> Optional[BaseJobResponse]:
-        if self._response_parser is None:
-            raise RuntimeError("The job is not attached to a response parser")
-
-        error = self._response_parser.check_response_status(http_response)
-        if error:
-            raise ValueError(f"Job cancellation failed: {error}")
-
-        parsed_response = self._response_parser.parse_response(http_response, parse_media=False)
-        if isinstance(parsed_response, BaseJobResponse):
-            return parsed_response
-        return None
-
-    def _wait_for_remote_cancellation(
-        self,
-        cancel_response: BaseJobResponse,
-        timeout_s: float = 30.0,
-        poll_interval_s: float = 0.5
-    ):
-        current_response = cancel_response
-        deadline = time.monotonic() + timeout_s
-
-        while isinstance(current_response, BaseJobResponse):
-            if current_response.status == APIJobStatus.CANCELLED:
-                self._meseex_box.cancel_meseex(self, cancel_result=current_response)
-                return current_response
-
-            if current_response.status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            remaining_timeout = deadline - time.monotonic()
-            if remaining_timeout <= 0:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            time.sleep(min(poll_interval_s, remaining_timeout))
-            http_response = self._run_async_call(
-                self._api_client.poll_status,
-                current_response,
-                timeout_s=min(remaining_timeout, 30.0)
-            )
-            next_response = self._parse_cancel_response(http_response)
-            if next_response is None:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            current_response = next_response
-
-        return current_response
-
-    def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
-        print(f"DEBUG: ApiJobManager.cancel called with wait={wait}")
-        if self._meseex_box is None or self._api_client is None or self._response_parser is None:
-            return super().cancel()
-
-        if self.is_terminal:
-            return self.cancel_result or self.response
-
-        current_response = self.response
-        if not isinstance(current_response, BaseJobResponse) or not current_response.cancel_job_url:
-            cancel_response = current_response or self._local_cancel_response("Cancelled before remote job submission")
-            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
-            return cancel_response
-
-        http_response = self._run_async_call(
-            self._api_client.cancel_job,
-            current_response,
-            timeout_s=timeout_s
-        )
-        cancel_response = self._parse_cancel_response(http_response)
-        if cancel_response is None:
-            self.set_cancel_result(current_response)
-            return current_response
-
-        if cancel_response.status == APIJobStatus.CANCELLED:
-            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
-            return cancel_response
-
-        if cancel_response.status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
-            self.set_cancel_result(cancel_response)
-            return cancel_response
-
-        self.set_cancel_result(cancel_response)
-        if not wait:
-            return cancel_response
-
-        return self._wait_for_remote_cancellation(
-            cancel_response,
-            timeout_s=timeout_s,
-            poll_interval_s=poll_interval_s
-        )
-
-
 class ApiJobManager:
     """
     Manages the lifecycle of asynchronous API jobs by orchestrating services.
-    Delegates implementation details
+    Delegates implementation details.
     """
     def __init__(self, service_registry: Registry, progress_verbosity: int = 2):
         self.service_registry = service_registry
-        self.api_clients: Dict[str, APIClient] = {}  # dict of service_id -> APIClient
-        self.file_handlers: Dict[str, FileHandler] = {}  # dict of service_id -> FileHandler
+        self.api_clients: Dict[str, APIClient] = {}
+        self.file_handlers: Dict[str, FileHandler] = {}
         self.response_parser = ResponseParser()
-        # Define task sequence
         self.tasks = {
             "Preparing": self._prepare_request,
             "Load files": self._load_files,
@@ -184,20 +37,9 @@ class ApiJobManager:
             "Polling": self._poll_status,
             "Processing result": self._process_result
         }
-
-        # Create Meseex task orchestrator
         self.meseex_box = MeseexBox(task_methods=self.tasks, progress_verbosity=progress_verbosity)
 
     def _determine_service_type(self, service_def: ServiceDefinition) -> ServiceSpecification:
-        """
-        Helper method to determine the service type based on service address and specification.
-        Needs to be done seperately because of intented changes in different dependencies for changing runtime behavior.
-        Args:
-            service_def: The service definition containing address and specification info
-            
-        Returns:
-            ServiceSpecification literal indicating the service type
-        """
         if isinstance(service_def.service_address, RunpodServiceAddress):
             return "runpod"
         elif isinstance(service_def.service_address, SocaityServiceAddress):
@@ -205,11 +47,11 @@ class ApiJobManager:
         elif isinstance(service_def.service_address, ReplicateServiceAddress):
             return "replicate"
         elif isinstance(service_def.service_address, ServiceAddress):
-            if service_def.specification == "apipod" or service_def.specification == "socaity":
+            if service_def.specification in ("apipod", "socaity"):
                 return "socaity"
             elif service_def.specification == "runpod":
                 return "runpod"
-        
+
         return "other"
 
     def add_api_client(self, service_id: str, api_key: str):
@@ -217,128 +59,104 @@ class ApiJobManager:
             service_def = self.service_registry.get_service(service_id)
             if not service_def:
                 raise ValueError(f"Service {service_id} not found")
-            
+
             if not hasattr(service_def, "service_address") or service_def.service_address is None:
                 raise ValueError(f"Service {service_id} has no service address. Add a service address to the service definition first with Registry.update_service(service_id, service_address=...)")
 
             service_type = self._determine_service_type(service_def)
-            
-            if service_type == "runpod":
-                api_client = APIClientRunpod(service_def=service_def, api_key=api_key)
-            elif service_type == "socaity":
-                api_client = APIClientSocaity(service_def=service_def, api_key=api_key)
-            elif service_type in "replicate":
-                api_client = APIClientReplicate(service_def=service_def, api_key=api_key)
-            else:  # "other" or any other default case
-                api_client = APIClient(service_def=service_def, api_key=api_key)
+            client_cls = {
+                "runpod": APIClientRunpod,
+                "socaity": APIClientSocaity,
+                "replicate": APIClientReplicate,
+            }.get(service_type, APIClient)
 
-            self.api_clients[service_id] = api_client
+            self.api_clients[service_id] = client_cls(service_def=service_def, api_key=api_key)
 
     def add_file_handler(self, service_id: str, api_key: str = None, file_handler: FileHandler = None):
-        """
-        Adds a file handler to the job manager.
-        If no file handler is provided, the job manager will create a default one based on the service definition.
-        """
         if file_handler is not None:
             self.file_handlers[service_id] = file_handler
             return
 
         service_def = self.service_registry.get_service(service_id)
         service_type = self._determine_service_type(service_def)
-        
-        if service_type == "runpod":
+
+        if service_type == "socaity":
+            file_handler = FileHandler(file_format="httpx", upload_to_cloud_threshold_mb=0, max_upload_file_size_mb=300)
+        elif service_type == "runpod":
             file_handler = FileHandler(file_format="base64", max_upload_file_size_mb=300)
-        elif service_type == "socaity":
-            fast_cloud = SocaityUploadAPI(api_key=api_key)
-            file_handler = FileHandler(fast_cloud=fast_cloud, file_format="httpx", upload_to_cloud_threshold_mb=3, max_upload_file_size_mb=3000)
         elif service_type == "replicate":
-            # in case of replicate we upload everything
             fast_cloud = ReplicateUploadAPI(api_key=api_key)
             file_handler = FileHandler(fast_cloud=fast_cloud, file_format="base64", upload_to_cloud_threshold_mb=0, max_upload_file_size_mb=300)
-        else:  # "other" or any other default case
+        else:
             file_handler = FileHandler()
 
         self.file_handlers[service_id] = file_handler
-    
+
     def load_api_client(self, service_name_or_id: str, api_key: str = None):
         service_def = self.service_registry.get_service(service_name_or_id)
         if not service_def:
             raise ValueError(f"Service {service_name_or_id} not found")
-        
+
         self.add_api_client(service_def.id, api_key)
         self.add_file_handler(service_def.id, api_key)
         return service_def
-    
+
     async def _prepare_request(self, job: APISeex) -> RequestData:
         api_client = self.api_clients[job.service_def.id]
         return api_client.format_request_params(job.endpoint_def, job.input)
-     
-    async def _load_files(self, job: APISeex) -> APISeex:
-        """Task method that loads files from disk by delegating to FileHandler"""
+
+    async def _load_files(self, job: APISeex) -> RequestData:
         request_data = job.prev_task_output
-        if not request_data.file_params or len(request_data.file_params) == 0:
+        if not request_data.file_params:
             return request_data
 
         fh = self.file_handlers.get(job.service_def.id)
         request_data.file_params = await fh.load_files_from_disk(request_data.file_params)
         return request_data
-    
-    async def _upload_files(self, job: APISeex) -> APISeex:
-        """Task method that handles file upload by delegating to FileService"""
 
+    async def _upload_files(self, job: APISeex) -> RequestData:
         request_data = job.prev_task_output
-        if not request_data.file_params or len(request_data.file_params) == 0:
+        if not request_data.file_params:
             return request_data
 
         fh = self.file_handlers.get(job.service_def.id)
         request_data.file_params = await fh.upload_files(request_data.file_params)
-
         return request_data
 
     async def _send_request(self, job: APISeex) -> Any:
-        """Task method that sends the request by delegating to ApiService"""
         request_data = job.prev_task_output
         api_client = self.api_clients[job.service_def.id]
 
-        # We in generally try to attach the files that could not have been converted as normal parameters to the body.
-        # For example in SpeechCraft voice can be a file but also a voice_name is accepted.
-        # In this case if someone provides a voice_name it will be send correctly as a body parameter instead of a file parameter.
         if isinstance(request_data.file_params, MediaDict):
             non_file_params = request_data.file_params.get_non_file_params(include_urls=True)
-            if non_file_params and len(non_file_params) > 0:
+            if non_file_params:
                 request_data.body_params.update(non_file_params)
 
         fh = self.file_handlers.get(job.service_def.id)
         request_data.file_params = await fh.prepare_files_for_send(request_data.file_params)
         response = await api_client.send_request(request_data)
 
-        # Check for HTTP errors
         error = self.response_parser.check_response_status(response)
         if error:
             raise Exception(error)
-            
-        # Parse the response
-        parsed_response = self.response_parser.parse_response(response)
-        
-        return parsed_response
+
+        return self.response_parser.parse_response(response)
 
     @polling_task(poll_interval_seconds=1.0, timeout_seconds=3600)
     async def _poll_status(self, job: APISeex) -> Any:
-        """Task method that polls for job completion by delegating to ApiService."""
         parsed_response = job.prev_task_output
 
         if not isinstance(parsed_response, BaseJobResponse):
             return parsed_response
 
         api_client = self.api_clients[job.service_def.id]
-        
+
         try:
             http_response = await api_client.poll_status(parsed_response)
         except Exception as e:
-            n_polling_errors = 0
-            if job.has_task_data("number_of_polling_errors"):
-                n_polling_errors = job.get_task_data()["number_of_polling_errors"]
-            
+            n_errors = job.get_task_data() or {}
+            n_polling_errors = n_errors.get("number_of_polling_errors", 0) if isinstance(n_errors, dict) else 0
+
             if n_polling_errors > 3:
                 raise e
             job.set_task_data({"number_of_polling_errors": n_polling_errors + 1})
@@ -347,48 +165,36 @@ class ApiJobManager:
         error = self.response_parser.check_response_status(http_response)
         if error:
             raise ValueError(f"Job status polling failed: {error}")
-            
+
         parsed_response = self.response_parser.parse_response(http_response, parse_media=False)
-        
+
         if not isinstance(parsed_response, BaseJobResponse):
             raise ValueError(f"Expected job response but got {type(parsed_response)}")
-            
+
         if parsed_response.status == APIJobStatus.FINISHED:
             return parsed_response
         elif parsed_response.status == APIJobStatus.CANCELLED:
             job.mark_cancelled(cancel_result=parsed_response)
             return parsed_response
         elif parsed_response.status == APIJobStatus.FAILED:
-            raise ValueError(parsed_response.error or f"Job failed with status: {parsed_response.status.name}")
+            raise ValueError(parsed_response.error or f"Job failed with status: {parsed_response.status.value}")
 
-        if parsed_response.progress is None:
-            job.set_task_progress(
-                None,
-                f"Job {parsed_response.id} status: {parsed_response.status.name}"
-            )
+        progress_msg = f"Job {parsed_response.id}"
+        message = getattr(parsed_response, "message", None)
+        if message:
+            progress_msg += f": {message}"
         else:
-            message = f"Job {parsed_response.id}"
-            if parsed_response.progress.message:
-                message += f": {parsed_response.progress.message}"
-            else:
-                message += f" status: {parsed_response.status.name}"
-            
-            job.set_task_progress(
-                parsed_response.progress.progress,
-                message
-            )
+            progress_msg += f" status: {parsed_response.status.value}"
 
+        job.set_task_progress(parsed_response.progress, progress_msg)
         job.set_task_output(parsed_response)
-        return PollAgain(f"Job status: {parsed_response.status.name}")
+        return PollAgain(f"Job status: {parsed_response.status.value}")
 
     async def _process_result(self, job: APISeex) -> Any:
-        """Task method that processes the result by delegating to FileService"""
-
         result = job.prev_task_output
         if not isinstance(result, BaseJobResponse):
             return result
-            
-        # Process file responses if they are media-type likely
+
         result = await self.response_parser.parse_media_result(result)
         if result is None:
             return result
@@ -396,20 +202,6 @@ class ApiJobManager:
         return result.result
 
     def submit_job(self, service_id: str, endpoint_id: str, data: dict) -> APISeex:
-        """
-        Submit a job for execution with the specified service and endpoint.
-        Entry point for API interaction.
-        Builds a blueprint for how the job needs to be executed with all necessary tasks.
-        
-        Args:
-            service_id: ID of the service to use
-            endpoint_id: ID of the endpoint to call
-            params: Parameters for the API call
-            
-        Returns:
-            MrMeseex task that can be awaited for the result
-        """
-        # Get service and endpoint definitions
         service_def = self.service_registry.get_service(service_id)
         if not service_def:
             raise ValueError(f"Service {service_id} not found")
@@ -418,21 +210,14 @@ class ApiJobManager:
         if not endpoint_def:
             raise ValueError(f"Endpoint {endpoint_id} not found in service {service_id}")
 
-        # Build task list
         task_list = ["Preparing"]
         for param in endpoint_def.parameters:
-            has_media = False
             definitions = getattr(param, "definition", None)
             if definitions is not None:
                 defs = definitions if isinstance(definitions, list) else [definitions]
-                for d in defs:
-                    fmt = getattr(d, "format", None)
-                    if fmt in {"file", "image", "video", "audio"}:
-                        has_media = True
-                        break
-            if has_media:
-                task_list.append("Load files")
-                break
+                if any(getattr(d, "format", None) in {"file", "image", "video", "audio"} for d in defs):
+                    task_list.append("Load files")
+                    break
 
         fh = self.file_handlers.get(service_id)
         if fh is not None and hasattr(fh, "fast_cloud") and fh.fast_cloud is not None:
@@ -443,19 +228,10 @@ class ApiJobManager:
         if service_def.specification in ["apipod", "socaity", "runpod", "replicate"]:
             task_list.append("Polling")
 
-        # APIPod sollte aufgemotzt werden, damit beim Request Result bereits klar ist, ob es ein FileResult werden wird..?
-        # Vorerst kann man einfach immer den Schritt 'process result' ausführen.
-        # for response in endpoint_def.responses:
-        #    if response.type in ["file", "image", "video", "audio"]:
-        #        request_blueprint.has_download_files = True
-        #        break
-
         task_list.append("Processing result")
 
-        # Create job name
         seex_name = f"{service_def.display_name}.{endpoint_def.path}"
-        
-        # Create the job with the appropriate task list
+
         job = APISeex(
             service_def=service_def,
             endpoint_def=endpoint_def,
@@ -464,8 +240,7 @@ class ApiJobManager:
             name=seex_name,
             cancel_handler=self.cancel_api_job
         )
-        
-        # Submit the job to the MeseexBox for execution
+
         return self.meseex_box.summon_meseex(job)
 
     def _run_async_call(self, method, *args, timeout_s: float = 30.0):
@@ -485,15 +260,10 @@ class ApiJobManager:
         return task.result
 
     def _try_remote_cancel(self, job: APISeex) -> Optional[BaseJobResponse]:
-        """
-        Best-effort: send a cancel request to the remote API.
-        Returns the parsed BaseJobResponse from the remote on success.
-        Raises an exception if communication fails.
-        Returns None if the current response is not job-based or has no cancel_job_url.
-        """
+        """Best-effort: send a cancel request to the remote API."""
         current_response = job.response
         if not isinstance(current_response, BaseJobResponse) or not current_response.cancel_job_url:
-            return None  # No remote job or no cancel URL
+            return None
 
         http_response = self._run_async_call(
             self.api_clients[job.service_def.id].cancel_job,
@@ -501,58 +271,38 @@ class ApiJobManager:
         )
         error = self.response_parser.check_response_status(http_response)
         if error:
-            # If HTTP status indicates an error, still parse to see if it's a BaseJobResponse
-            parsed_error_response = self.response_parser.parse_response(http_response, parse_media=False)
-            if isinstance(parsed_error_response, BaseJobResponse):
-                return parsed_error_response # Return the error response if it's a job response
+            parsed_error = self.response_parser.parse_response(http_response, parse_media=False)
+            if isinstance(parsed_error, BaseJobResponse):
+                return parsed_error
             raise ValueError(f"Remote cancellation failed with HTTP error: {error}")
 
         parsed = self.response_parser.parse_response(http_response, parse_media=False)
         return parsed if isinstance(parsed, BaseJobResponse) else None
 
     def cancel_api_job(self, job: APISeex, **kwargs) -> Any:
-        """
-        Best-effort cancel: send remote cancel request if possible.
-        Cancels locally only when the remote confirms cancellation or if the job
-        has not yet been sent to the remote API.
-        """
-        # The meseex_box.cancel_meseex call already includes a check for job.is_terminal,
-        # so no need for an explicit check here.
-
-        # If job was not sent to remote yet we can just cancel locally
+        """Best-effort cancel: send remote cancel request if possible."""
         if not isinstance(job.response, BaseJobResponse) or not job.response.cancel_job_url:
-            local_cancel_response = BaseJobResponse(
+            local_cancel = BaseJobResponse(
                 id=job.meseex_id,
                 status=APIJobStatus.CANCELLED,
                 error="Cancelled before remote submission",
                 service_specification=job.service_def.specification,
             )
-            # Note a very race condition can happen. Sending finishes before the local cancel finished.
-            # Then we have a remote orphan job.
-            self.meseex_box.cancel_meseex(job, cancel_result=local_cancel_response)
-            return local_cancel_response
+            self.meseex_box.cancel_meseex(job, cancel_result=local_cancel)
+            return local_cancel
 
         try:
             remote_response = self._try_remote_cancel(job)
         except Exception as e:
-            # Remote cancellation failed due to communication error (unreachable, timeout, etc.)
-            # Do NOT cancel locally. The job will continue polling.
-            # Log the error, or return a specific error response to the user.
             print(f"Warning: Remote cancellation for job {job.meseex_id} failed: {e}. Job will continue polling.")
-            return job.response # Return current job state, don't mark as cancelled.
+            return job.response
 
         if remote_response is None:
-            # No remote job or no cancel URL. Do NOT cancel locally.
-            # The job will continue polling until it finishes or fails naturally.
-            print(f"Warning: Job {job.meseex_id} has no remote cancel URL or no job response. Cannot perform remote cancel. Job will continue polling.")
-            return job.response # Return current job state, don't mark as cancelled.
+            print(f"Warning: Job {job.meseex_id} has no remote cancel URL or no job response. Job will continue polling.")
+            return job.response
 
-        # Remote confirmed cancellation → finalize locally.
         if remote_response.status == APIJobStatus.CANCELLED:
             self.meseex_box.cancel_meseex(job, cancel_result=remote_response)
             return remote_response
 
-        # Remote returned a non-cancelled status (e.g. still PROCESSING or
-        # already FINISHED) → the cancel was rejected or the job already
-        # completed. Do NOT cancel locally; let the polling loop handle it.
         return remote_response
