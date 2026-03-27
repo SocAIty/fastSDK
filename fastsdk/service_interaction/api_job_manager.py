@@ -1,6 +1,5 @@
 import time
-from datetime import datetime
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from apipod_registry.definitions.service_definitions import ServiceDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
 from apipod_registry.registry import Registry
