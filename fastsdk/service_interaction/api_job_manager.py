@@ -1,5 +1,6 @@
 import time
-from typing import Any, Dict, Optional
+from datetime import datetime
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from apipod_registry.definitions.service_definitions import ServiceDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
 from apipod_registry.registry import Registry
@@ -18,6 +19,78 @@ from fastsdk.service_interaction.request import APIClient, APIClientReplicate, A
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaDict
 
+
+class APISeex(MrMeseex):
+    """Meseex extension specifically for API job handling."""
+    def __init__(
+        self,
+        service_def: ServiceDefinition,
+        endpoint_def: EndpointDefinition,
+        data: Any = None,
+        name: str = None,
+        tasks: list = None,
+        cancel_handler: Callable[..., Any] = None,
+    ):
+        super().__init__(tasks, data, name, cancel_handler)
+        self.service_def = service_def
+        self.endpoint_def = endpoint_def
+
+    @property
+    def response(self) -> Optional[BaseJobResponse]:
+        """Returns the latest parsed response from the API."""
+        if self.termination_state is not None and isinstance(self.cancel_result, BaseJobResponse):
+            return self.cancel_result
+
+        resp = self.get_task_output("Polling")
+        if resp is not None:
+            return resp
+        return self.get_task_output("Sending request")
+    
+    @property
+    def runtime_info(self) -> Tuple[Optional[float], Optional[float]]:
+        """
+        Returns (delay_seconds, execution_seconds) in seconds.
+        Normalizes different provider formats to a consistent float-based second unit.
+        """
+        delay_seconds: Optional[float] = None
+        execution_seconds: Optional[float] = None
+        
+        resp = self.response
+        if not resp:
+            return None, None
+
+        addr = self.service_def.service_address
+
+        # --- Provider 1: Runpod ---
+        if isinstance(addr, RunpodServiceAddress):
+            delay_ms = getattr(resp, "delayTime", None)
+            execution_ms = getattr(resp, "executionTime", None)
+
+            if delay_ms is not None:
+                delay_seconds = float(delay_ms) / 1000.0
+            if execution_ms is not None:
+                execution_seconds = float(execution_ms) / 1000.0
+
+        # --- Provider 2: Replicate ---
+        elif isinstance(addr, ReplicateServiceAddress):
+            created_str = getattr(resp, "created_at", None)
+            started_str = getattr(resp, "execution_started_at", None)
+
+            if created_str and started_str:
+                try:
+                    # Parse ISO strings; handle 'Z' for UTC compatibility
+                    t1 = datetime.fromisoformat(str(created_str).replace("Z", "+00:00"))
+                    t2 = datetime.fromisoformat(str(started_str).replace("Z", "+00:00"))
+                    delay_seconds = (t2 - t1).total_seconds()
+                except (ValueError, TypeError):
+                    delay_seconds = None
+
+            # Normalize Replicate's ms to seconds
+            exec_ms = getattr(resp, "execution_time_ms", None)
+            if exec_ms is not None:
+                execution_seconds = float(exec_ms) / 1000.0
+
+        return delay_seconds, execution_seconds
 
 class ApiJobManager:
     """

@@ -51,13 +51,6 @@ class SocaityResponseParser(ResponseParserStrategy):
         # Submission response: has job_id + links
         if "job_id" in data and "links" in data:
             return True
-        # Status response: has id + status, but no Runpod/Replicate indicators
-        if "id" in data and "status" in data:
-            if data.keys() & _RUNPOD_SPECIFIC_FIELDS:
-                return False
-            if "urls" in data:
-                return False
-            return True
         return False
 
     @staticmethod
@@ -116,7 +109,6 @@ class RunpodResponseParser(ResponseParserStrategy):
         return (
             "id" in data
             and "status" in data
-            and APIJobStatus.map_runpod_status(data.get("status")) != APIJobStatus.UNKNOWN
         )
 
     def parse(self, data: Dict, parse_media: bool = True) -> RunpodJobResponse:
