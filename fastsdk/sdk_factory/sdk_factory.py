@@ -7,7 +7,7 @@ from jinja2 import Environment, FileSystemLoader, Template
 from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterDefinition
 )
-from fastsdk.utils import normalize_name_for_py
+from apipod_registry.utils.normalization import normalize_name_for_py
 
 # Constants for improved maintainability
 MEDIA_TYPES = {

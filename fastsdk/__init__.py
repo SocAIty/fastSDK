@@ -2,7 +2,7 @@ from media_toolkit import MediaFile, ImageFile, VideoFile, AudioFile
 from meseex import gather_results, gather_results_async
 
 from .sdk_factory import create_sdk
-from .service_interaction.api_job_manager import APISeex
+from .service_interaction.api_seex import APISeex
 from .fastClient import FastClient
 
 from .fastSDK import FastSDK
