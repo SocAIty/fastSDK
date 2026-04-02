@@ -18,12 +18,24 @@ class APIClientSocaity(APIClient):
         return True
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
-        """Socaity expects multipart/form-data, so parameters go into data and files."""
-        return await self.client.post(
-            url=request_data.url,
-            params=request_data.query_params,
-            data=request_data.body_params,
-            files=request_data.file_params,
-            headers=request_data.headers,
-            timeout=timeout_s
-        )
+        """
+        Socaity/APIPod services expect multipart/form-data when files are
+        present, but plain JSON otherwise. Supports direct streaming responses.
+        """
+        kwargs = {
+            "url": request_data.url,
+            "params": request_data.query_params,
+            "headers": request_data.headers,
+            "timeout": timeout_s
+        }
+
+        if request_data.file_params:
+            # Multipart form-data when files are attached
+            kwargs["data"] = request_data.body_params
+            kwargs["files"] = request_data.file_params
+        else:
+            # JSON body when there are no file attachments
+            kwargs["json"] = request_data.body_params
+
+        request = self.client.build_request("POST", **kwargs)
+        return await self.client.send(request, stream=True)
