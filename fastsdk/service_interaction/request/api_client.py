@@ -145,37 +145,27 @@ class APIClient:
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
         """
-        Send the prepared request to the API.
-
-        Args:
-            service_def: Service definition
-            request_data: The prepared request data
-            timeout_s: Request timeout in seconds
-
-        Returns:
-            The API response
+        Send the prepared request to the API with streaming support.
         """
-        # print(f"Sending normal API Client request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {list(request_data.file_params.keys())}")
-        # Use json parameter for JSON requests, data for form requests
+        # Prepare request arguments
+        kwargs = {
+            "url": request_data.url,
+            "params": request_data.query_params,
+            "headers": request_data.headers,
+            "timeout": timeout_s
+        }
+
         if request_data.file_params:
-            # If there are files, use multipart/form-data
-            return await self.client.post(
-                url=request_data.url,
-                params=request_data.query_params,
-                data=request_data.body_params,
-                files=request_data.file_params,
-                headers=request_data.headers,
-                timeout=timeout_s
-            )
-        
-        # If no files, send as JSON. Important, if no files are present;
-        return await self.client.post(
-            url=request_data.url,
-            params=request_data.query_params,
-            json=request_data.body_params,
-            headers=request_data.headers,
-            timeout=timeout_s
-        )
+            # If there are files, use multipart/form-data (data=)
+            kwargs["data"] = request_data.body_params
+            kwargs["files"] = request_data.file_params
+        else:
+            # If no files, send as JSON (json=)
+            kwargs["json"] = request_data.body_params
+
+        # Use build_request + send(stream=True) to support direct SSE responses
+        request = self.client.build_request("POST", **kwargs)
+        return await self.client.send(request, stream=True)
 
     async def request_url(
         self,
@@ -186,17 +176,7 @@ class APIClient:
         **kwargs
     ) -> httpx.Response:
         """
-        Submit a direct URL request.
-        
-        Args:
-            url: Target URL (can be absolute or relative)
-            method: HTTP method
-            files: Optional files to upload
-            timeout: Request timeout
-            **kwargs: Additional request parameters
-            
-        Returns:
-            The API response
+        Submit a direct URL request with streaming support.
         """
         if not self.service_def.service_address:
             raise ValueError("Service address is required to request a relative URL")
@@ -207,16 +187,16 @@ class APIClient:
         timeout = timeout or 60
 
         method = method.upper()
-        if method == "GET":
-            return await self.client.get(url=url, headers=headers, timeout=timeout, **kwargs)
-        elif method == "POST":
-            return await self.client.post(url=url, files=files, headers=headers, timeout=timeout, **kwargs)
-        elif method == "PUT":
-            return await self.client.put(url=url, files=files, headers=headers, timeout=timeout, **kwargs)
-        elif method == "DELETE":
-            return await self.client.delete(url=url, headers=headers, timeout=timeout, **kwargs)
-        else:
-            return await self.client.post(url=url, headers=headers, timeout=timeout, **kwargs)
+        # Build request manually to use send(stream=True)
+        request = self.client.build_request(
+            method=method, 
+            url=url, 
+            files=files, 
+            headers=headers, 
+            timeout=timeout, 
+            **kwargs
+        )
+        return await self.client.send(request, stream=True)
             
     async def poll_status(self, response: Union[BaseJobResponse, Any], method: str = "POST") -> httpx.Response:
         """

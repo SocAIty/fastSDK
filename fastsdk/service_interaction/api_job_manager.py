@@ -1,13 +1,17 @@
+import logging
 import time
-from typing import Any, Dict, Optional, Tuple, Callable
+from typing import Any, Dict, Optional, Callable, Tuple
+from datetime import datetime
 
-from apipod_registry.definitions.service_definitions import ServiceDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification, EndpointDefinition
+logger = logging.getLogger(__name__)
+
+from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition, ServiceAddress, RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress, ServiceSpecification
 from apipod_registry.registry import Registry
 import datetime
 from meseex import MrMeseex
 
 from fastsdk.service_interaction.api_seex import APISeex
-from meseex import MeseexBox
+from meseex import MeseexBox, MrMeseex
 from meseex.control_flow import polling_task, PollAgain
 
 from fastsdk.service_interaction.request.file_handler import FileHandler
@@ -208,19 +212,42 @@ class ApiJobManager:
 
         fh = self.file_handlers.get(job.service_def.id)
         request_data.file_params = await fh.prepare_files_for_send(request_data.file_params)
+        
+        logger.info("_send_request | Sending request to %s", request_data.url)
         response = await api_client.send_request(request_data)
+        
+        logger.info("_send_request | Received response: status=%d content_type=%s", 
+                    response.status_code, response.headers.get("Content-Type"))
 
-        error = self.response_parser.check_response_status(response)
+        error = await self.response_parser.check_response_status(response)
         if error:
+            logger.error("_send_request | Request failed: %s", error)
             raise Exception(error)
 
-        return self.response_parser.parse_response(response)
+        parsed = await self.response_parser.parse_response(response)
+        
+        # If it's a direct stream, store the raw response on the job for the forwarder
+        if isinstance(parsed, BaseJobResponse) and parsed.status == APIJobStatus.STREAMING:
+            logger.info("_send_request | Detected direct stream response")
+            job.direct_response = response
+        else:
+            # If not streaming, ensure response is closed after reading
+            if not response.is_closed:
+                await response.aclose()
+
+        logger.info("_send_request | Parsed response type: %s", type(parsed).__name__)
+        return parsed
 
     @polling_task(poll_interval_seconds=1.0, timeout_seconds=3600)
     async def _poll_status(self, job: APISeex) -> Any:
         parsed_response = job.prev_task_output
 
         if not isinstance(parsed_response, BaseJobResponse):
+            return parsed_response
+
+        # Streaming responses are terminal from the SDK's perspective.
+        # The worker's override handles forwarding chunks to Redis.
+        if parsed_response.status == APIJobStatus.STREAMING:
             return parsed_response
 
         api_client = self.api_clients[job.service_def.id]
@@ -236,11 +263,17 @@ class ApiJobManager:
             job.set_task_data({"number_of_polling_errors": n_polling_errors + 1})
             return PollAgain(f"Job status polling failed: {e}")
 
-        error = self.response_parser.check_response_status(http_response)
+        error = await self.response_parser.check_response_status(http_response)
         if error:
+            if not http_response.is_closed:
+                await http_response.aclose()
             raise ValueError(f"Job status polling failed: {error}")
 
-        parsed_response = self.response_parser.parse_response(http_response, parse_media=False)
+        parsed_response = await self.response_parser.parse_response(http_response, parse_media=False)
+        
+        # Ensure response is closed after reading
+        if not http_response.is_closed:
+            await http_response.aclose()
 
         if not isinstance(parsed_response, BaseJobResponse):
             raise ValueError(f"Expected job response but got {type(parsed_response)}")
@@ -267,6 +300,13 @@ class ApiJobManager:
     async def _process_result(self, job: APISeex) -> Any:
         result = job.prev_task_output
         if not isinstance(result, BaseJobResponse):
+            return result
+
+        # Streaming responses have no result body to parse — the
+        # actual tokens were forwarded to the StreamStore by the
+        # worker's _poll_status override.  Return a marker so the
+        # worker's _process_result knows the job was a stream.
+        if result.status == APIJobStatus.STREAMING:
             return result
 
         result = await self.response_parser.parse_media_result(result)
@@ -343,14 +383,18 @@ class ApiJobManager:
             self.api_clients[job.service_def.id].cancel_job,
             current_response,
         )
-        error = self.response_parser.check_response_status(http_response)
+        error = self._run_async_call(self.response_parser.check_response_status, http_response)
         if error:
-            parsed_error = self.response_parser.parse_response(http_response, parse_media=False)
+            parsed_error = self._run_async_call(self.response_parser.parse_response, http_response, False)
+            if not http_response.is_closed:
+                self._run_async_call(http_response.aclose)
             if isinstance(parsed_error, BaseJobResponse):
                 return parsed_error
             raise ValueError(f"Remote cancellation failed with HTTP error: {error}")
 
-        parsed = self.response_parser.parse_response(http_response, parse_media=False)
+        parsed = self._run_async_call(self.response_parser.parse_response, http_response, False)
+        if not http_response.is_closed:
+            self._run_async_call(http_response.aclose)
         return parsed if isinstance(parsed, BaseJobResponse) else None
 
     def cancel_api_job(self, job: APISeex, **kwargs) -> Any:
