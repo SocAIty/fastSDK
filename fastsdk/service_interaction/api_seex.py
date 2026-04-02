@@ -63,11 +63,11 @@ class APISeex(MrMeseex):
         if self._response_parser is None:
             raise RuntimeError("The job is not attached to a response parser")
 
-        error = self._response_parser.check_response_status(http_response)
+        error = self._run_async_call(self._response_parser.check_response_status, http_response)
         if error:
             raise ValueError(f"Job cancellation failed: {error}")
 
-        parsed_response = self._response_parser.parse_response(http_response, parse_media=False)
+        parsed_response = self._run_async_call(self._response_parser.parse_response, http_response, False)
         if isinstance(parsed_response, BaseJobResponse):
             return parsed_response
         return None
