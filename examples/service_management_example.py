@@ -7,10 +7,10 @@ This example shows how to:
 3. Create and manage service families and categories
 """
 
-from fastsdk.service_management.service_manager import Registry
 from apipod_registry.definitions.service_definitions import (
     ServiceFamily, ServiceCategory, ModelDefinition, ServiceDefinition
 )
+from apipod_registry import Registry
 
 
 def main():

@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, Union
 import httpx
+from urllib.parse import urlencode
 
 from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition
 from fastsdk.service_interaction.response.base_response import BaseJobResponse
@@ -80,9 +81,9 @@ class APIClient:
         if not self.service_def.service_address:
             return None
 
-        base_url = f"{self.service_def.service_address.url}/{endpoint.path.lstrip('/')}"
+        base_url = self.service_def.service_address.build_endpoint_url(endpoint.path)
         if query_params:
-            query_string = "&".join(f"{k}={v}" for k, v in query_params.items())
+            query_string = urlencode(query_params, doseq=True)
             return f"{base_url}?{query_string}"
         return base_url
 
@@ -154,7 +155,7 @@ class APIClient:
         Returns:
             The API response
         """
-        #print(f"Sending normal API Client request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {list(request_data.file_params.keys())}")
+        # print(f"Sending normal API Client request to {request_data.url} with query params {request_data.query_params}, body params {request_data.body_params}, and file params {list(request_data.file_params.keys())}")
         # Use json parameter for JSON requests, data for form requests
         if request_data.file_params:
             # If there are files, use multipart/form-data
@@ -188,8 +189,7 @@ class APIClient:
         Submit a direct URL request.
         
         Args:
-            service_def: Service definition
-            url: Target URL
+            url: Target URL (can be absolute or relative)
             method: HTTP method
             files: Optional files to upload
             timeout: Request timeout
@@ -198,8 +198,10 @@ class APIClient:
         Returns:
             The API response
         """
-        if not url.startswith(("http://", "https://")):
-            url = f"{self.service_def.service_address.url}/{url.lstrip('/')}"
+        if not self.service_def.service_address:
+            raise ValueError("Service address is required to request a relative URL")
+
+        url = self.service_def.service_address.resolve_url(url)
 
         headers = self._add_authorization_to_headers()
         timeout = timeout or 60

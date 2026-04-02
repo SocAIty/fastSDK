@@ -3,11 +3,12 @@ from pathlib import Path
 import json
 import httpx
 from httpx import TimeoutException, HTTPError
+
 from apipod_registry.definitions.service_definitions import ServiceDefinition
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from fastsdk.service_interaction import APISeex
+    from fastsdk.service_interaction.api_seex import APISeex
 
 
 def load_spec(spec_source: Union[str, Path, Dict[str, Any]], timeout: float = 30.0, api_key: str = None) -> Dict[str, Any]:

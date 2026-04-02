@@ -2,13 +2,13 @@ from fastsdk.fastClient import TemporaryFastClient
 from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition
 )
-from fastsdk.service_specification_loader.parsers.service_adress_parser import create_service_address
+from apipod_registry.parsers.service_adress_parser import create_service_address
 from typing import Any, Dict
 import uuid
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from fastsdk.service_interaction.api_job_manager import APISeex
+    from fastsdk.service_interaction.api_seex import APISeex
 
 
 class RunpodOpenAPILoader:
