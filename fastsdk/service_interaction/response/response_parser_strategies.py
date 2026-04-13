@@ -51,6 +51,11 @@ class SocaityResponseParser(ResponseParserStrategy):
         # Submission response: has job_id + links
         if "job_id" in data and "links" in data:
             return True
+
+        # Status response: has progress and message
+        if "progress" in data and "message" in data:
+            return True
+
         return False
 
     @staticmethod
