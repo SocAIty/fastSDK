@@ -19,23 +19,20 @@ class APIClientSocaity(APIClient):
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
         """
-        Socaity/APIPod services expect multipart/form-data when files are
-        present, but plain JSON otherwise. Supports direct streaming responses.
+        Socaity/APIPod gateway endpoints use multipart/form-data for all
+        non-LLM services (the gateway declares params with Form()).
+        LLM services use a different API client that sends JSON.
         """
         kwargs = {
             "url": request_data.url,
             "params": request_data.query_params,
             "headers": request_data.headers,
-            "timeout": timeout_s
+            "timeout": timeout_s,
+            "data": request_data.body_params,
         }
 
         if request_data.file_params:
-            # Multipart form-data when files are attached
-            kwargs["data"] = request_data.body_params
             kwargs["files"] = request_data.file_params
-        else:
-            # JSON body when there are no file attachments
-            kwargs["json"] = request_data.body_params
 
         request = self.client.build_request("POST", **kwargs)
         return await self.client.send(request, stream=True)
