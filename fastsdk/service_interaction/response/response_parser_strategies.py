@@ -2,7 +2,7 @@ from typing import Dict, Optional, Tuple
 from abc import ABC, abstractmethod
 
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from fastsdk.service_interaction.response.base_response import (
+from fastsdk.service_interaction.response.response_schemas import (
     BaseJobResponse, SocaityJobResponse,
     RunpodJobResponse, ReplicateJobResponse, FileModel
 )

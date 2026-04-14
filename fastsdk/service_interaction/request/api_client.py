@@ -3,7 +3,7 @@ import httpx
 from urllib.parse import urlencode
 
 from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition
-from fastsdk.service_interaction.response.base_response import BaseJobResponse
+from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaFile
 
 
@@ -24,10 +24,13 @@ class RequestData:
 
 
 class APIClient:
+    """Handles all HTTP interactions with APIs.
+
+    Subclasses override the ``get_*`` accessors to teach the base
+    ``poll_status`` / ``cancel_job`` methods how to extract URLs and
+    status from their provider-specific response models.
     """
-    Handles all HTTP interactions with APIs.
-    Manages HTTP clients, request preparation, sending, and polling.
-    """
+
     def __init__(self, service_def: ServiceDefinition, api_key: str = None):
         self.__client = None
         self.service_def = service_def
@@ -35,13 +38,33 @@ class APIClient:
         self.validate_api_key()
         self.poll_method = "POST"
         self.cancel_method = "POST"
-        
+
+    # ------------------------------------------------------------------
+    # Provider-specific accessors (override in subclasses)
+    # ------------------------------------------------------------------
+
+    def get_status(self, response) -> APIJobStatus:
+        return APIJobStatus.from_str(getattr(response, "status", None))
+
+    def get_poll_url(self, response) -> Optional[str]:
+        return None
+
+    def get_cancel_url(self, response) -> Optional[str]:
+        return None
+
+    def get_result(self, response) -> Any:
+        return getattr(response, "result", None)
+
+    # ------------------------------------------------------------------
+    # HTTP plumbing
+    # ------------------------------------------------------------------
+
     @property
     def client(self) -> httpx.AsyncClient:
         if self.__client is None or self.__client.is_closed:
             self.__client = httpx.AsyncClient()
         return self.__client
-    
+
     def validate_api_key(self) -> bool:
         """
         Override this method to validate the API key for specific providers.
@@ -51,36 +74,14 @@ class APIClient:
         return True
 
     def _add_authorization_to_headers(self, headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-        """
-        Add authorization headers to the request.
-        
-        Args:
-            service_def: Service definition containing API key
-            headers: Optional existing headers to add to
-        
-        Returns:
-            Dictionary of headers with authorization added if available
-        """
         headers = headers or {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
     def _build_request_url(self, endpoint: EndpointDefinition, query_params: Dict = None) -> str:
-        """
-        Build the complete request URL with query parameters.
-        
-        Args:
-            service_def: Service definition
-            endpoint: Endpoint definition
-            query_params: Query parameters to include in URL
-            
-        Returns:
-            Complete URL
-        """
         if not self.service_def.service_address:
             return None
-
         base_url = self.service_def.service_address.build_endpoint_url(endpoint.path)
         if query_params:
             query_string = urlencode(query_params, doseq=True)
@@ -88,16 +89,13 @@ class APIClient:
         return base_url
 
     def format_request_params(self, endpoint: EndpointDefinition, data: dict) -> RequestData:
-        """
-        Prepare all request parameters for the endpoint.
-        Puts the parameters from data into the right location RequestData object.
-        """
+        """Prepare all request parameters for the endpoint."""
         if not data:
             rq = RequestData()
             rq.headers = self._add_authorization_to_headers()
             rq.url = self._build_request_url(endpoint, rq.query_params)
             return rq
-        
+
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
 
@@ -116,8 +114,7 @@ class APIClient:
             if definitions is not None:
                 defs = definitions if isinstance(definitions, list) else [definitions]
                 for d in defs:
-                    fmt = getattr(d, "format", None)
-                    if fmt in {"file", "image", "video", "audio"}:
+                    if getattr(d, "format", None) in {"file", "image", "video", "audio"}:
                         is_file_param = True
                         break
 
@@ -144,10 +141,7 @@ class APIClient:
         return rq
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
-        """
-        Send the prepared request to the API with streaming support.
-        """
-        # Prepare request arguments
+        """Send the prepared request to the API with streaming support."""
         kwargs = {
             "url": request_data.url,
             "params": request_data.query_params,
@@ -173,21 +167,16 @@ class APIClient:
         method: str = "GET",
         files: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
-        **kwargs
+        **kwargs,
     ) -> httpx.Response:
-        """
-        Submit a direct URL request with streaming support.
-        """
+        """Submit a direct URL request with streaming support."""
         if not self.service_def.service_address:
             raise ValueError("Service address is required to request a relative URL")
 
         url = self.service_def.service_address.resolve_url(url)
-
         headers = self._add_authorization_to_headers()
         timeout = timeout or 60
 
-        method = method.upper()
-        # Build request manually to use send(stream=True)
         request = self.client.build_request(
             method=method, 
             url=url, 
@@ -197,42 +186,15 @@ class APIClient:
             **kwargs
         )
         return await self.client.send(request, stream=True)
-            
-    async def poll_status(self, response: Union[BaseJobResponse, Any], method: str = "POST") -> httpx.Response:
-        """
-        Poll for job completion.
-        
-        Args:
-            service_def: Service definition
-            response: Initial response from API which may be a job response
-            
-        Returns:
-            Updated response or None to continue polling
-        """
-        # If not a job-based API response, return immediately
-        if not isinstance(response, BaseJobResponse):
-            return response
-            
-        # print(" ") 
-        # print(f"Request url: {response.refresh_job_url}")
-        # Request updated status
-        return await self.request_url(
-            url=response.refresh_job_url,
-            method=self.poll_method
-        )
 
-    async def cancel_job(self, response: Union[BaseJobResponse, Any], method: str = "POST") -> httpx.Response:
-        """
-        Request cancellation for a previously created remote job.
-        """
-        if not isinstance(response, BaseJobResponse):
-            raise ValueError("Cancellation requires a job-based response")
+    async def poll_status(self, response) -> httpx.Response:
+        url = self.get_poll_url(response)
+        if not url:
+            raise ValueError("No polling URL available for this response")
+        return await self.request_url(url=url, method=self.poll_method)
 
-        if not response.cancel_job_url:
-            raise ValueError("The service response does not contain a cancel URL")
-
-        return await self.request_url(
-            url=response.cancel_job_url,
-            method=self.cancel_method
-        )
-        
+    async def cancel_job(self, response) -> httpx.Response:
+        url = self.get_cancel_url(response)
+        if not url:
+            raise ValueError("No cancel URL available for this response")
+        return await self.request_url(url=url, method=self.cancel_method)
