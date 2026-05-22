@@ -55,13 +55,9 @@ class APIClientRunpod(APIClient):
         all_params.update(request_data.query_params)
         all_params.update(request_data.file_params)
 
-        request_data.file_params = {}
-        request_data.query_params = {}
-        request_data.body_params = json.dumps({"input": all_params})
-
         return await self.client.post(
             url=request_data.url,
-            data=request_data.body_params,
+            json={"input": all_params},
             headers=request_data.headers,
             timeout=timeout_s
         )
