@@ -159,7 +159,10 @@ class APISeex(MrMeseex):
         return current_response
 
     def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
-        if self._meseex_box is None or self._api_client is None or self._response_parser is None:
+        meseex_box = getattr(self, "_meseex_box", None)
+        api_client = getattr(self, "_api_client", None)
+        response_parser = getattr(self, "_response_parser", None)
+        if meseex_box is None or api_client is None or response_parser is None:
             return super().cancel()
 
         if self.is_terminal:

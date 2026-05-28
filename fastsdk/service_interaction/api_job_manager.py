@@ -309,6 +309,7 @@ class ApiJobManager:
             name=seex_name,
             cancel_handler=self.cancel_api_job,
         )
+        job._meseex_box = self.meseex_box
         job._api_client = self.api_clients[service_id]
         job._response_parser = self._get_parser(service_id)
 
