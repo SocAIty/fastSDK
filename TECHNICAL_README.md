@@ -8,7 +8,7 @@ It has three major responsibilities:
 - generate Python SDK/client code from those models
 - execute requests, file handling, polling, and job lifecycle management for long-running APIs
 
-For job-based APIs such as FastTaskAPI, Runpod, Socaity, or Replicate, `fastsdk` delegates runtime orchestration to `meseex`.
+For job-based APIs such as APIPod, Runpod, Socaity, or Replicate, `fastsdk` delegates runtime orchestration to `meseex`.
 
 ## Mental Model
 Think of `fastsdk` as two connected subsystems:
