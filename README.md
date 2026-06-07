@@ -2,12 +2,6 @@
   <img src="docs/assets/logo.png" alt="fastSDK logo" height="200" />
 </p>
 
-<h2 align="center">fastSDK</h2>
-
-<p align="center">
-  Turn any hosted service into a typed Python client.
-</p>
-
 <p align="center">
   <a href="https://pypi.org/project/fastsdk/"><img src="https://img.shields.io/pypi/v/fastsdk?labelColor=000000&color=76B900" alt="PyPI version"></a>
   <a href="https://pypi.org/project/fastsdk/"><img src="https://img.shields.io/pypi/pyversions/fastsdk?labelColor=000000&color=76B900" alt="Python versions"></a>
