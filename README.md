@@ -1,9 +1,9 @@
 <p align="center">
   <img src="docs/assets/logo.png" alt="fastSDK logo" height="200" />
 </p>
-<p align="center">
-  <img src="docs/assets/title.png" alt="fastSDK" height="44" />
-</p>
+
+<h2 align="center">fastSDK</h2>
+
 <p align="center">
   Turn any hosted service into a typed Python client.
 </p>
