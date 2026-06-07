@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="fastSDK logo" height="220" />
+  <img src="docs/assets/logo.png" alt="fastSDK logo" height="200" />
 </p>
-
-## fastSDK
-
-Turn any hosted service into a typed Python client. Point fastSDK at an OpenAPI
-spec and get a Python SDK with a method per endpoint — typed parameters, file
-uploads, and built-in job handling for long-running calls.
+<p align="center">
+  <img src="docs/assets/title.png" alt="fastSDK" height="44" />
+</p>
+<p align="center">
+  Turn any hosted service into a typed Python client.
+</p>
 
 <p align="center">
   <a href="https://pypi.org/project/fastsdk/"><img src="https://img.shields.io/pypi/v/fastsdk?labelColor=000000&color=76B900" alt="PyPI version"></a>
