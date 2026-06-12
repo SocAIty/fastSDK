@@ -1,5 +1,5 @@
+import fastsdk
 from fastsdk.fastClient import FastClient
-from fastsdk.fastSDK import Registry
 from media_toolkit import ImageFile, MediaFile, MediaList
 from typing import Union
 from apipod_registry.definitions.service_definitions import ServiceAddress
@@ -35,23 +35,23 @@ class testFace2Face(FastClient):
         return self.submit_job("/swap-video-to-video", faces=faces, media=media, enhance_face_model=enhance_face_model, **kwargs)
 
 
-def add_service_def_localhost_runpod():
-    service_definition = Registry.add_service(
-        spec_source="test/test_files/face2face.json", service_id="face2face", specification="runpod", service_address=ServiceAddress(url="http://localhost:8020")
+def register_service_def_localhost_runpod():
+    service_definition = fastsdk.register_service(
+        "test/test_files/face2face.json", service_id="face2face", specification="runpod", service_address=ServiceAddress(url="http://localhost:8020")
     )
     return service_definition
 
 
-def add_service_def_localhost_apipod():
-    service_definition = Registry.add_service(
-        spec_source="test/test_files/face2face.json", service_id="face2face", service_address="http://localhost:8020"
+def register_service_def_localhost_apipod():
+    service_definition = fastsdk.register_service(
+        "test/test_files/face2face.json", service_id="face2face", service_address="http://localhost:8020"
     )
     return service_definition
 
 
-def add_service_def_local_socaity_backend():
-    service_definition = Registry.add_service(
-        spec_source="test/test_files/face2face.json", service_id="face2face", specification="apipod", service_address="http://localhost:8001/v1/face2face"
+def register_service_def_local_socaity_backend():
+    service_definition = fastsdk.register_service(
+        "test/test_files/face2face.json", service_id="face2face", specification="apipod", service_address="http://localhost:8001/v1/face2face"
     )
     return service_definition
 
@@ -59,9 +59,9 @@ def add_service_def_local_socaity_backend():
 def test_manual_face2face():
     # 1. load service definition from file
     # method with local runpod server
-    # service_definition = add_service_def_localhost_runpod()
-    # service_definition = add_service_def_localhost_apipod()
-    service_definition = add_service_def_local_socaity_backend()
+    # service_definition = register_service_def_localhost_runpod()
+    # service_definition = register_service_def_localhost_apipod()
+    service_definition = register_service_def_local_socaity_backend()
     assert service_definition is not None
     # 2. create client
     f2f = testFace2Face(api_key=os.getenv("SOCAITY_API_KEY"))

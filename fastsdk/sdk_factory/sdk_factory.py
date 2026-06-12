@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-from typing import Dict, List, Optional, Any, Union, Set
+from typing import Dict, List, Optional, Any, Union, Set, TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader, Template
 
@@ -8,6 +8,9 @@ from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterDefinition
 )
 from apipod_registry.utils.normalization import normalize_name_for_py
+
+if TYPE_CHECKING:
+    from fastsdk.fastStub import FastStub
 
 # Constants for improved maintainability
 MEDIA_TYPES = {
@@ -374,30 +377,26 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
     
     return file_path
 
-                
-def create_sdk(
+def generate_stub(
     service_definition: ServiceDefinition,
     save_path: Optional[str] = None,
     class_name: Optional[str] = None,
     template: Optional[str] = None
-) -> tuple[str, str, ServiceDefinition]:
+) -> FastStub:
     """
-    Creates a .py file for a given service definition in the given save_path.
+    Creates a .py client stub file for a given service definition in the given save_path.
     
     Args:
         service_definition: the service_definition including all the endpoints and models.
         save_path: Path where to save the generated file(s). Can be either:
-            - A directory path: File will be saved as {class_name.lower()}.py + {class_name.lower()}.json in this directory
+            - A directory path: File will be saved as {class_name.lower()}.py in this directory
             - A file path: File will be saved with this exact path
             Defaults to current directory.
         class_name: Name for the generated class. Defaults to the service name.
         template: Optional path to a custom template file
         
     Returns:
-        Tuple containing:
-            - Path to the generated Python file
-            - Name of the generated class (needed for import)
-            - ServiceDefinition object of the created service (if you want use the service with the Registry)
+        GeneratedStub fastStub with .path, .class_name, .service_definition and .client()
         
     Raises:
         ValueError: If service_definition is not valid
@@ -406,7 +405,7 @@ def create_sdk(
     """
     # Get service definition
     if not isinstance(service_definition, ServiceDefinition):
-        raise ValueError("service_definition must be a ServiceDefinition object. Load it with FastSDK().load_service_definition() first.")
+        raise ValueError("service_definition must be a ServiceDefinition object. Load it with fastsdk.inspect_service() first.")
 
     # Determine class name if not provided
     if not class_name:
@@ -451,7 +450,7 @@ def create_sdk(
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(rendered)
 
-        return str(file_path), class_name, service_definition
+        return FastStub(path=str(file_path), class_name=class_name, service_definition=service_definition)
     except FileNotFoundError:
         raise FileNotFoundError(f"Template file not found: {template}")
     except IOError as e:

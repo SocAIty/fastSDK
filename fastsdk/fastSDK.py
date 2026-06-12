@@ -3,20 +3,31 @@ from apipod_registry.definitions.service_definitions import ServiceDefinition, M
 from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 
+from fastsdk.fastStub import FastStub
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, load_spec
+from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref
 
-from fastsdk.sdk_factory.sdk_factory import create_sdk
-from typing import Union, Optional, Dict, Any, List, overload, TYPE_CHECKING
+from fastsdk.sdk_factory.sdk_factory import generate_stub as _generate_stub_file
+from typing import Union, Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
 import uuid
 
+
 if TYPE_CHECKING:
-    from fastsdk.fastClient import TemporaryFastClient
+    from fastsdk.fastClient import FastClient
     from fastsdk.service_interaction import ApiJob
 
 
 class FastSDK:
+    """
+    Internal facade that wires the service registry, spec loaders, the stub generator and the
+    runtime job manager together. It is a singleton, so generated stubs and clients share one
+    registry and one job manager per process.
+
+    Most users should use the module-level functions instead:
+    fastsdk.connect(), fastsdk.inspect_service(), fastsdk.generate_stub(), fastsdk.register_service()
+    """
     _instance: 'FastSDK' = None
     
     def __new__(cls) -> 'FastSDK':
@@ -55,22 +66,9 @@ class FastSDK:
     def api_job_manager(self, value: ApiJobManager):
         self._api_job_manager = value
 
-    # ---- Service Definition Loading Methods ----
-    @overload
+    # ---- Service Inspection (pure, no registry side effects) ----
     @staticmethod
-    def load_service_definition(spec_source: str) -> ServiceDefinition:
-        """Load a service definition from spec source."""
-        ...
-
-    @overload
-    @staticmethod
-    def load_service_definition(spec_source: Union[Path, Dict[str, Any]]) -> ServiceDefinition:
-        """Load a service definition from spec source."""
-        ...
-
-    @overload
-    @staticmethod
-    def load_service_definition(
+    def inspect_service(
         spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         service_id: Optional[str] = None,
         service_address: Optional[str] = None,
@@ -83,60 +81,40 @@ class FastSDK:
         api_key: Optional[str] = None
     ) -> ServiceDefinition:
         """
-        Load a service definition from various sources without adding it to the service manager.
-        Overwrite attributes loaded from spec source.
-        Args:
-            spec_source: Service definition or spec source
-            service_id: Optional service ID override
-            service_address: Optional service address override
-            service_name: Optional service name override
-            category: Optional category assignment
-            family_id: Optional family assignment
-            used_models: Optional models used by service
-            specification: Optional specification type override
-            description: Optional description override
-            api_key: Required for RunPod URLs, optional for others
-        """
-        ...
-
-    @staticmethod
-    def load_service_definition(
-        spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
-        service_id: Optional[str] = None,
-        service_address: Optional[str] = None,
-        service_name: Optional[str] = None,
-        category: Union[str, List[str]] = None,
-        family_id: Optional[str] = None,
-        used_models: Union[ModelDefinition, List[ModelDefinition], None] = None,
-        specification: Optional[str] = None,
-        description: Optional[str] = None,
-        api_key: Optional[str] = None
-    ) -> ServiceDefinition:
-        """
-        Load a service definition from various sources without adding it to the service manager.
+        Load and parse a service into a ServiceDefinition without adding it to the registry.
         
         Args:
-            spec_source: OpenAPI spec source (URL, file path, dict, or ServiceDefinition)
+            spec_source: What to inspect. Can be:
+                - a URL ("http://localhost:8009", an openapi.json URL, a RunPod endpoint URL)
+                - a Replicate model reference ("replicate:owner/name", "https://replicate.com/owner/name", "owner/name")
+                - a file path to an openapi.json
+                - an already loaded spec dict or a ServiceDefinition
             service_id: Optional service ID override
             service_address: Optional service address override
             service_name: Optional service name override
             category: Optional category assignment
             family_id: Optional family assignment
             used_models: Optional models used by service
-            specification: Optional specification type override
+            specification: Optional specification type override (e.g. "openapi", "runpod", "replicate")
             description: Optional description override
-            api_key: Required for RunPod URLs, optional for others
+            api_key: Required for RunPod and Replicate sources, optional for others
             
         Returns:
-            ServiceDefinition object ready to be added to service manager
+            ServiceDefinition - inspect it, modify it, then register it or generate a stub from it.
         """
-        # Handle ServiceDefinition objects
+        address_resolved_by_loader = False
         if isinstance(spec_source, ServiceDefinition):
             service_def = spec_source
         else:
-            # Load and parse the specification
-            loaded_spec = load_spec(spec_source, api_key=api_key)
-            service_def = parse_service_definition(loaded_spec)
+            replicate_ref = parse_replicate_model_ref(spec_source)
+            if replicate_ref:
+                from fastsdk.service_specification_loader.replicate_loader import load_replicate_service
+                service_def = load_replicate_service(replicate_ref, api_key=api_key)
+                address_resolved_by_loader = True
+            else:
+                # Load and parse the specification
+                loaded_spec = load_spec(spec_source, api_key=api_key)
+                service_def = parse_service_definition(loaded_spec)
         
         # Apply overrides
         if service_id:
@@ -154,7 +132,7 @@ class FastSDK:
 
         if service_address:
             service_def.service_address = create_service_address(service_address, service_def.specification)
-        elif isinstance(spec_source, str) and "http" in spec_source:
+        elif not address_resolved_by_loader and isinstance(spec_source, str) and "http" in spec_source:
             service_def.service_address = create_service_address(spec_source, None)
 
         if category:
@@ -175,29 +153,8 @@ class FastSDK:
         """
         return _load_from_runpod_serverless_server(runpod_url, api_key, return_api_job)
  
-    # ---- Service Adding Methods ----
-    @overload
-    def add_service(self, spec_source: str) -> ServiceDefinition:
-        """
-        Add a service from any source or file.
-        """
-        ...
-
-    @overload
-    def add_service(self, spec_source: Union[str, Path, Dict[str, Any]], api_key: Optional[str] = None) -> ServiceDefinition:
-        """
-        Add a service from spec source.
-        api_key is required for RunPod serverless endpoints if the openapi.json specification needs to be fetched from the serverless endpoint.
-        """
-        ...
-
-    @overload
-    def add_service(self, service_def: ServiceDefinition) -> ServiceDefinition:
-        """Add a service from ServiceDefinition object."""
-        ...
-
-    @overload
-    def add_service(
+    # ---- Service Registration ----
+    def register_service(
         self,
         spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         service_id: Optional[str] = None,
@@ -208,45 +165,15 @@ class FastSDK:
         used_models: Union[ModelDefinition, List[ModelDefinition], None] = None,
         specification: Optional[str] = None,
         description: Optional[str] = None,
-        api_key: Optional[str] = None
+        api_key: Optional[str] = None,
+        update_existing: bool = True
     ) -> ServiceDefinition:
         """
-        Overwrite attributes loaded from spec source when adding a service to the service manager.
-        Args:
-            spec_source: Service definition or spec source
-            service_id: Optional service ID override
-            service_address: Optional service address override
-            service_name: Optional service name override
-            category: Optional category assignment
-            family_id: Optional family assignment
-            used_models: Optional models used by service
-            specification: Optional specification type override
-            description: Optional description override
-            api_key: Required for RunPod URLs, optional for others
-            
-        Returns:
-            Added ServiceDefinition object
-        """
-        ...
-
-    def add_service(
-        self,
-        spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
-        service_id: Optional[str] = None,
-        service_address: Optional[str] = None,
-        service_name: Optional[str] = None,
-        category: Union[str, List[str], None] = None,
-        family_id: Optional[str] = None,
-        used_models: Union[ModelDefinition, List[ModelDefinition], None] = None,
-        specification: Optional[str] = None,
-        description: Optional[str] = None,
-        api_key: Optional[str] = None
-    ) -> ServiceDefinition:
-        """
-        Load and add a service to the service manager.
+        Load a service and add it to the registry. Idempotent: registering a service whose ID
+        already exists replaces the previous entry (re-running the same script never fails).
         
         Args:
-            spec_source: Service definition or spec source
+            spec_source: Service definition or spec source (see inspect_service)
             service_id: Optional service ID override
             service_address: Optional service address override
             service_name: Optional service name override
@@ -255,23 +182,33 @@ class FastSDK:
             used_models: Optional models used by service
             specification: Optional specification type override
             description: Optional description override
-            api_key: Required for RunPod URLs, optional for others
+            api_key: Required for RunPod and Replicate sources, optional for others
+            update_existing: If True and a service with the same name and spec type is already
+                registered, that entry is updated (its ID is kept) instead of adding a duplicate.
             
         Returns:
-            Added ServiceDefinition object
+            The registered ServiceDefinition object
         """
-        # If already a ServiceDefinition, add it directly
         if isinstance(spec_source, ServiceDefinition):
-            return self.service_registry.add_service(spec_source)
-        
-        # Load the service definition first
-        service_def = self.load_service_definition(
-            spec_source, service_id, service_address, service_name,
-            category, family_id, used_models, specification, description, api_key
-        )
-        
-        # Add to service manager
-        return self.service_registry.add_service(service_def)
+            service_def = spec_source
+        else:
+            service_def = self.inspect_service(
+                spec_source, service_id, service_address, service_name,
+                category, family_id, used_models, specification, description, api_key
+            )
+            # Most specs (e.g. OpenAPI) don't embed a service ID, so every parse generates a fresh
+            # one. Reuse the ID of an already registered service with the same name and spec type,
+            # so re-runs update the existing entry and previously generated stubs stay valid.
+            if update_existing and service_id is None and service_def.display_name:
+                existing = self.service_registry.get_service(service_def.display_name)
+                if existing is not None and existing.specification == service_def.specification:
+                    service_def.id = existing.id
+
+        # Upsert: replace an existing service with the same ID instead of raising.
+        if service_def.id and self.service_registry.get_service(service_def.id):
+            self.service_registry.remove_service(service_def.id)
+
+        return self.service_registry.register_service(service_def)
 
     def update_service(self, service_id_or_name: str, **kwargs) -> Optional[ServiceDefinition]:
         """
@@ -290,7 +227,7 @@ class FastSDK:
 
     def get_service(self, service_id_or_name: str) -> Optional[ServiceDefinition]:
         """
-        Get a already added service by ID or name.
+        Get an already registered service by ID or name.
         
         Args:
             service_id_or_name: Service ID or display name
@@ -300,74 +237,60 @@ class FastSDK:
         """
         return self.service_registry.get_service(service_id_or_name)
 
-    # ---- Client Creation Methods ----
-    
-    @overload
-    def create_sdk(self, spec_source: Union[Path, Dict[str, Any]], api_key: str = None) -> str:
-        """Create a client from spec source."""
-        ...
-
-    @overload
-    def create_sdk(self, service_def: ServiceDefinition, api_key: str = None) -> str:
-        """Create a client from ServiceDefinition."""
-        ...
-
-    @overload
-    def create_sdk(self, service_id_or_name: str, api_key: str = None) -> str:
-        """Create a client from service ID or name."""
-        ...
-
-    def create_sdk(
+    # ---- Client / Stub Creation ----
+    def generate_stub(
         self,
         source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         save_path: Optional[str] = None,
         class_name: Optional[str] = None,
         template: Optional[str] = None,
         **kwargs
-    ) -> tuple[str, str, ServiceDefinition]:
+    ) -> FastStub:
         """
-        Create a Python SDK file for a service.
+        Generate a Python client stub file (.py) for a service and register the service in the registry.
         
         Args:
-            source: Service source (spec, ServiceDefinition, or service ID/name)
-            save_path: Path to save the generated file
-            class_name: Name for the generated class
-            template: Optional custom template path
-            **kwargs: Additional arguments for service loading
+            source: Service source (URL, file path, spec dict, ServiceDefinition, or a registered service ID/name)
+            save_path: Path (file or directory) to save the generated file. Defaults to the current directory.
+            class_name: Name for the generated class. Defaults to the service name.
+            template: Optional custom Jinja2 template path
+            **kwargs: Additional arguments for service loading (e.g. api_key, service_name)
             
         Returns:
-            Tuple of (file_path, class_name, service_definition)
+            GeneratedStub with .path, .class_name, .service_definition and .client()
         """
         # Get or load service definition
         service_def = source
         if isinstance(source, str):
             service_def = self.get_service(source)
             if not isinstance(service_def, ServiceDefinition):
-                service_def = self.add_service(source, **kwargs)
+                service_def = self.register_service(source, **kwargs)
         else:
-            service_def = self.add_service(source, **kwargs)
+            service_def = self.register_service(source, **kwargs)
 
         if not isinstance(service_def, ServiceDefinition):
             raise ValueError("Invalid service source")
         
-        return create_sdk(service_def, save_path, class_name, template)
+        return _generate_stub_file(service_def, save_path, class_name, template)
 
-    def create_temporary_client(
+    def connect(
         self,
-        spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
+        source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         api_key: Optional[str] = None,
         **kwargs
-    ) -> 'TemporaryFastClient':
+    ) -> 'FastClient':
         """
-        Create a temporary client that will be automatically removed when deleted.
+        Connect to a service and return a ready-to-use client - no code generation involved.
+        The service is registered temporarily and removed again when the client is deleted.
         
         Args:
-            spec_source: Service source to create temporary client for
+            source: Service source (URL, file path, spec dict, ServiceDefinition or Replicate model ref)
             api_key: Optional API key for the service
             **kwargs: Additional arguments for service loading
             
         Returns:
-            TemporaryFastClient instance
+            FastClient instance. Call endpoints via client.endpoint_name(...) after stub generation,
+            or generically via client.submit_job("/endpoint", **params).
         """
-        from fastsdk.fastClient import TemporaryFastClient
-        return TemporaryFastClient(spec_source, api_key)
+        from fastsdk.fastClient import FastClient
+        return FastClient(source, api_key=api_key, temporary=True, **kwargs)

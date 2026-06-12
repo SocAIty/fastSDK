@@ -77,7 +77,7 @@ def main():
     # For example purposes, we'll use placeholder data
     try:
         # In a real application, use actual OpenAPI spec URLs
-        sd_service = manager.add_service(
+        sd_service = manager.register_service(
             "sd_service", 
             "https://api.example.com/sd_api/openapi.json"
         )
