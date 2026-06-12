@@ -1,4 +1,4 @@
-from .fastStub import GeneratedStub
+from .fastStub import FastStub
 from media_toolkit import MediaFile, ImageFile, VideoFile, AudioFile
 from meseex import gather_results, gather_results_async
 
@@ -22,7 +22,7 @@ __all__ = [
     'connect', 'inspect_service', 'generate_stub', 'register_service',
     'get_service', 'list_services', 'remove_service',
     # classes
-    'GeneratedStub', 'FastClient', 'APISeex', 'FastSDK',
+    'FastStub', 'FastClient', 'APISeex', 'FastSDK',
     # deprecated
     'create_sdk',
     # re-exports

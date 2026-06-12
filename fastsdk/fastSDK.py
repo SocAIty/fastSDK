@@ -3,7 +3,7 @@ from apipod_registry.definitions.service_definitions import ServiceDefinition, M
 from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 
-from fastsdk.fastStub import GeneratedStub
+from fastsdk.fastStub import FastStub
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, load_spec
 from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref
@@ -12,7 +12,7 @@ from fastsdk.sdk_factory.sdk_factory import generate_stub as _generate_stub_file
 from typing import Union, Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
 import uuid
-import warnings
+
 
 if TYPE_CHECKING:
     from fastsdk.fastClient import FastClient
@@ -154,7 +154,7 @@ class FastSDK:
         return _load_from_runpod_serverless_server(runpod_url, api_key, return_api_job)
  
     # ---- Service Registration ----
-    def add_service(
+    def register_service(
         self,
         spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
         service_id: Optional[str] = None,
@@ -208,7 +208,7 @@ class FastSDK:
         if service_def.id and self.service_registry.get_service(service_def.id):
             self.service_registry.remove_service(service_def.id)
 
-        return self.service_registry.add_service(service_def)
+        return self.service_registry.register_service(service_def)
 
     def update_service(self, service_id_or_name: str, **kwargs) -> Optional[ServiceDefinition]:
         """
@@ -245,7 +245,7 @@ class FastSDK:
         class_name: Optional[str] = None,
         template: Optional[str] = None,
         **kwargs
-    ) -> GeneratedStub:
+    ) -> FastStub:
         """
         Generate a Python client stub file (.py) for a service and register the service in the registry.
         
@@ -264,9 +264,9 @@ class FastSDK:
         if isinstance(source, str):
             service_def = self.get_service(source)
             if not isinstance(service_def, ServiceDefinition):
-                service_def = self.add_service(source, **kwargs)
+                service_def = self.register_service(source, **kwargs)
         else:
-            service_def = self.add_service(source, **kwargs)
+            service_def = self.register_service(source, **kwargs)
 
         if not isinstance(service_def, ServiceDefinition):
             raise ValueError("Invalid service source")
@@ -294,20 +294,3 @@ class FastSDK:
         """
         from fastsdk.fastClient import FastClient
         return FastClient(source, api_key=api_key, temporary=True, **kwargs)
-
-    # ---- Deprecated aliases (previous API surface) ----
-    @staticmethod
-    def load_service_definition(*args, **kwargs) -> ServiceDefinition:
-        """Deprecated: use inspect_service() instead."""
-        warnings.warn("load_service_definition() is deprecated, use inspect_service() instead.", DeprecationWarning, stacklevel=2)
-        return FastSDK.inspect_service(*args, **kwargs)
-
-    def create_sdk(self, *args, **kwargs) -> GeneratedStub:
-        """Deprecated: use generate_stub() instead."""
-        warnings.warn("create_sdk() is deprecated, use generate_stub() instead.", DeprecationWarning, stacklevel=2)
-        return self.generate_stub(*args, **kwargs)
-
-    def create_temporary_client(self, *args, **kwargs) -> 'FastClient':
-        """Deprecated: use connect() instead."""
-        warnings.warn("create_temporary_client() is deprecated, use connect() instead.", DeprecationWarning, stacklevel=2)
-        return self.connect(*args, **kwargs)

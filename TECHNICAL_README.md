@@ -94,7 +94,7 @@ One instance per process. It owns:
 - the `Registry` (lazy-created, in-memory by default)
 - the `ApiJobManager` (lazy-created)
 
-and implements `inspect_service`, `add_service` (upsert), `generate_stub`, `connect`.
+and implements `inspect_service`, `register_service` (upsert), `generate_stub`, `connect`.
 All clients and stubs in a process therefore share one registry and one job manager.
 Advanced users can swap the registry (e.g. for a persistent or DB-backed one) via
 `FastSDK().service_registry = Registry(service_store=...)`.
@@ -108,7 +108,7 @@ These define the internal contract for a service (from `apipod_registry`):
 
 `Registry` maps service IDs and normalized display names to definitions.
 
-**Registration is an upsert**: `FastSDK.add_service()` replaces an existing entry with the same ID
+**Registration is an upsert**: `FastSDK.register_service()` replaces an existing entry with the same ID
 instead of raising. This makes scripts idempotent — re-running `generate_stub`/`register_service`
 never fails with "already registered".
 

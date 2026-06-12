@@ -76,7 +76,7 @@ class FastClient:
         # Otherwise treat it as a spec source: load and register it.
         # Temporary clients always get their own registry entry (update_existing=False),
         # so removing it on cleanup never deletes a permanently registered service.
-        service_def = self.fsdk.add_service(service, api_key=api_key, update_existing=not self.temporary, **load_kwargs)
+        service_def = self.fsdk.register_service(service, api_key=api_key, update_existing=not self.temporary, **load_kwargs)
         self._owns_registration = True
         return service_def
 

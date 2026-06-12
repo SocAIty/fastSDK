@@ -228,7 +228,7 @@ def cmd_registry(args: argparse.Namespace):
         )
         if sd.id and registry.get_service(sd.id):
             registry.remove_service(sd.id)
-        registry.add_service(sd)
+        registry.register_service(sd)
         print(f"Registered {_service_summary(sd)}")
         print(f"Registry: {_registry_path()}")
 

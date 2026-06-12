@@ -3,12 +3,10 @@ from fastsdk.fastClient import FastClient
 
 
 import importlib.util
-from dataclasses import dataclass
 from typing import Iterator, Optional
 
 
-@dataclass
-class GeneratedStub:
+class FastStub:
     """
     Result of generate_stub(). Holds everything you need to use the generated client stub:
     - path: where the .py file was written (import it from there in your next run)
@@ -31,3 +29,15 @@ class GeneratedStub:
     def __iter__(self) -> Iterator:
         # Backwards compatibility: allows `path, class_name, sd = generate_stub(...)`
         return iter((self.path, self.class_name, self.service_definition))
+    
+    def __str__(self) -> str:
+        return f"FastStub(path={self.path}, class_name={self.class_name}, service_definition={self.service_definition})"
+    
+    def __repr__(self) -> str:
+        return self.__str__()
+    
+    def __eq__(self, other: 'FastStub') -> bool:
+        return self.path == other.path and self.class_name == other.class_name and self.service_definition == other.service_definition
+    
+    def __hash__(self) -> int:
+        return hash((self.path, self.class_name, self.service_definition))

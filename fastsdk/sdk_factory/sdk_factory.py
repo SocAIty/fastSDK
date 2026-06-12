@@ -10,7 +10,7 @@ from apipod_registry.definitions.service_definitions import (
 from apipod_registry.utils.normalization import normalize_name_for_py
 
 if TYPE_CHECKING:
-    from fastsdk.fastStub import GeneratedStub
+    from fastsdk.fastStub import FastStub
 
 # Constants for improved maintainability
 MEDIA_TYPES = {
@@ -382,7 +382,7 @@ def generate_stub(
     save_path: Optional[str] = None,
     class_name: Optional[str] = None,
     template: Optional[str] = None
-) -> GeneratedStub:
+) -> FastStub:
     """
     Creates a .py client stub file for a given service definition in the given save_path.
     
@@ -450,7 +450,7 @@ def generate_stub(
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(rendered)
 
-        return GeneratedStub(path=str(file_path), class_name=class_name, service_definition=service_definition)
+        return FastStub(path=str(file_path), class_name=class_name, service_definition=service_definition)
     except FileNotFoundError:
         raise FileNotFoundError(f"Template file not found: {template}")
     except IOError as e:
