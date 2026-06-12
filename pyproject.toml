@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsdk"
-version = "0.2.31"
-description = "Your SDK and model zoo for generative AI. Build AI-powered applications with ease."
+version = "0.3.0"
+description = "Turn any AI/web service (OpenAPI, Replicate, RunPod, APIPod) into a native-feeling Python client."
 requires-python = ">=3.8"
 authors = [
     { name = "SocAIty" }
@@ -28,6 +28,12 @@ dependencies = [
 dev = [
     "pytest"
 ]
+replicate = [
+    "replicate"
+]
+
+[project.scripts]
+fastsdk = "fastsdk.cli:main"
 
 [project.urls]
 Repository = "https://github.com/SocAIty/fastsdk"

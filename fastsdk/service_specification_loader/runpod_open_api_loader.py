@@ -1,4 +1,4 @@
-from fastsdk.fastClient import TemporaryFastClient
+from fastsdk.fastClient import FastClient
 from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition
 )
@@ -26,7 +26,7 @@ class RunpodOpenAPILoader:
         self.service_def = self._create_temp_service_definition()
         
         # Add service to manager and configure API client
-        self.client = TemporaryFastClient(self.service_def, api_key=self.api_key)
+        self.client = FastClient(self.service_def, api_key=self.api_key, temporary=True)
 
     def _create_temp_service_definition(self) -> ServiceDefinition:
         """Create a temporary service definition for the RunPod OpenAPI endpoint"""

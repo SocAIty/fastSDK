@@ -1,8 +1,9 @@
+import fastsdk
 from fastsdk import FastSDK
 import os
 from time import sleep
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from fastsdk import ServiceAddress
+from apipod_registry.definitions.service_definitions import ServiceAddress
 
 
 pod_id = "454y79ac0344xv"
@@ -19,8 +20,7 @@ def test_async_openapi_spec_fetching():
     
 
 def test_temporary_auto_client():
-    fsdk = FastSDK()
-    client = fsdk.create_temporary_client(serverless_url)
+    client = fastsdk.connect(serverless_url)
     source_img = "test/test_files/test_face_1.jpg"
     target_img = "test/test_files/test_face_2.jpg"
     response = client.submit_job("/swap-img-to-img", source_img=source_img, target_img=target_img, enhance_face_model=None)
@@ -29,21 +29,19 @@ def test_temporary_auto_client():
     result.save("test/output/test_face_1_swapped.jpg")
 
 
-def test_permanent_client():
-    fsdk = FastSDK()
-    client_sp = fsdk.create_sdk(serverless_url, "test/output/face2face.py")
-    assert client_sp is not None
+def test_generate_stub():
+    stub = fastsdk.generate_stub(serverless_url, save_path="test/output/face2face.py")
+    assert stub.path is not None
 
 
 def get_permanent_client():
-    FastSDK().add_service(
-        spec_source="test/test_files/face2face.json", 
-        service_id="face2face", specification="runpod", 
+    stub = fastsdk.generate_stub(
+        "test/test_files/face2face.json",
+        save_path="test/output/face2face.py",
+        service_id="face2face", specification="runpod",
         service_address=ServiceAddress(url=serverless_url),
     )
-    from output.face2face import face2face
-    client = face2face(api_key=os.getenv("RUNPOD_API_KEY"))
-    return client
+    return stub.client(api_key=os.getenv("RUNPOD_API_KEY"))
 
 
 def test_job_cancel_immediate():
@@ -109,7 +107,7 @@ def test_job_cancel_remote():
 if __name__ == "__main__":
    #test_async_openapi_spec_fetching()
    #test_temporary_auto_client()
-   #test_permanent_client()
+   #test_generate_stub()
    #test_job_cancel_immediate()
    #test_job_cancel_non_blocking()
    test_job_cancel_remote()

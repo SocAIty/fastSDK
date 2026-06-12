@@ -1,19 +1,17 @@
-from fastsdk import FastSDK
+import fastsdk
 import inspect
 from pprint import pprint
 
 fastapi_url = "http://localhost:8000"
 
-def test_async_openapi_spec_fetching():
-    fsdk = FastSDK()
-    openapi_spec_job = fsdk.load_service_definition(fastapi_url + "/openapi.json")
-    openapi_spec = openapi_spec_job.full_schema
+def test_openapi_spec_fetching():
+    service_def = fastsdk.inspect_service(fastapi_url + "/openapi.json")
+    openapi_spec = service_def.full_schema
     assert isinstance(openapi_spec, dict)
     return openapi_spec
 
 def test_temporary_auto_client():
-    fsdk = FastSDK()
-    client = fsdk.create_temporary_client(fastapi_url)
+    client = fastsdk.connect(fastapi_url)
     source_img = "test/test_files/test_face_1.jpg"
     target_img = "test/test_files/test_face_2.jpg"
     response = client.submit_job("/swap-img-to-img", source_img=source_img, target_img=target_img, enhance_face_model=None)
@@ -21,10 +19,10 @@ def test_temporary_auto_client():
     assert result is not None
     result.save("test/output/test_face_1_swapped.jpg")
 
-def test_permanent_client():
-    fsdk = FastSDK()
-    client_sp = fsdk.create_sdk(fastapi_url, "test/output/face2face.py")
-    assert client_sp is not None
+def test_generate_stub():
+    stub = fastsdk.generate_stub(fastapi_url, save_path="test/output/face2face.py")
+    assert stub.path is not None
+    assert stub.client() is not None
 
 def inspect_object(obj, name="object"):
     print(f"{'='*60}")
@@ -57,8 +55,7 @@ def inspect_object(obj, name="object"):
     print(f"{'='*60}\n")
 
 def test_llm_client():
-    fsdk = FastSDK()
-    llm_client = fsdk.create_temporary_client(fastapi_url)
+    llm_client = fastsdk.connect(fastapi_url)
 
     # Submit the job
     response = llm_client.submit_job("/chat", model="Qwen", messages=[{"role":"user","content":"What is the worth of a mortal's life"}], stream=True)
@@ -79,16 +76,15 @@ def test_llm_client():
     print("\n")
     
 def test_ping_client():
-    fsdk = FastSDK()
-    llm_client = fsdk.create_temporary_client(fastapi_url)
+    llm_client = fastsdk.connect(fastapi_url)
 
     response = llm_client.submit_job("/ping")
     result = response.get_result(timeout_s=10)
     print(f"Ping response: {result}")
 
 if __name__ == "__main__":
-    # test_async_openapi_spec_fetching()
+    # test_openapi_spec_fetching()
     test_ping_client()
     test_llm_client()
     # test_temporary_auto_client()
-    # test_permanent_client()
+    # test_generate_stub()
