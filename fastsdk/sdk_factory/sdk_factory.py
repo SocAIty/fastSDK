@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-from typing import Dict, List, Optional, Any, Union, Set, TYPE_CHECKING
+from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
 
@@ -8,9 +8,7 @@ from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterDefinition
 )
 from apipod_registry.utils.normalization import normalize_name_for_py
-
-if TYPE_CHECKING:
-    from fastsdk.fastStub import FastStub
+from fastsdk.fastStub import FastStub
 
 # Constants for improved maintainability
 MEDIA_TYPES = {
@@ -376,6 +374,7 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
         file_path = save_path / f"{class_name.lower()}.py"
     
     return file_path
+
 
 def generate_stub(
     service_definition: ServiceDefinition,

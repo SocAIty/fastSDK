@@ -1,11 +1,12 @@
 from apipod_registry import Registry
 from apipod_registry.definitions.service_definitions import ServiceDefinition, ModelDefinition
+from apipod_registry.definitions.service_definitions import RunpodServiceAddress, SocaityServiceAddress, ReplicateServiceAddress
 from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 
-from fastsdk.fastStub import FastStub
+
 from fastsdk.service_interaction import ApiJobManager
-from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, load_spec
+from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_url_with_fallback, _load_from_file
 from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref
 
 from fastsdk.sdk_factory.sdk_factory import generate_stub as _generate_stub_file
@@ -13,10 +14,10 @@ from typing import Union, Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
 import uuid
 
-
 if TYPE_CHECKING:
     from fastsdk.fastClient import FastClient
     from fastsdk.service_interaction import ApiJob
+    from fastsdk.fastStub import FastStub
 
 
 class FastSDK:
@@ -70,14 +71,6 @@ class FastSDK:
     @staticmethod
     def inspect_service(
         spec_source: Union[str, Path, Dict[str, Any], ServiceDefinition],
-        service_id: Optional[str] = None,
-        service_address: Optional[str] = None,
-        service_name: Optional[str] = None,
-        category: Union[str, List[str]] = None,
-        family_id: Optional[str] = None,
-        used_models: Union[ModelDefinition, List[ModelDefinition], None] = None,
-        specification: Optional[str] = None,
-        description: Optional[str] = None,
         api_key: Optional[str] = None
     ) -> ServiceDefinition:
         """
@@ -89,61 +82,41 @@ class FastSDK:
                 - a Replicate model reference ("replicate:owner/name", "https://replicate.com/owner/name", "owner/name")
                 - a file path to an openapi.json
                 - an already loaded spec dict or a ServiceDefinition
-            service_id: Optional service ID override
-            service_address: Optional service address override
-            service_name: Optional service name override
-            category: Optional category assignment
-            family_id: Optional family assignment
-            used_models: Optional models used by service
-            specification: Optional specification type override (e.g. "openapi", "runpod", "replicate")
-            description: Optional description override
             api_key: Required for RunPod and Replicate sources, optional for others
             
         Returns:
             ServiceDefinition - inspect it, modify it, then register it or generate a stub from it.
         """
-        address_resolved_by_loader = False
         if isinstance(spec_source, ServiceDefinition):
-            service_def = spec_source
-        else:
-            replicate_ref = parse_replicate_model_ref(spec_source)
-            if replicate_ref:
-                from fastsdk.service_specification_loader.replicate_loader import load_replicate_service
-                service_def = load_replicate_service(replicate_ref, api_key=api_key)
-                address_resolved_by_loader = True
-            else:
-                # Load and parse the specification
-                loaded_spec = load_spec(spec_source, api_key=api_key)
-                service_def = parse_service_definition(loaded_spec)
+            return spec_source
         
-        # Apply overrides
-        if service_id:
-            service_def.id = service_id
-        elif not service_def.id:
-            service_def.id = "gen-" + str(uuid.uuid4())
-            
-        if service_name:
-            service_def.display_name = service_name
-        elif not service_def.display_name:
-            service_def.display_name = "unnamed_service_" + service_def.id
-
-        if specification:
-            service_def.specification = specification.lower()
-
-        if service_address:
-            service_def.service_address = create_service_address(service_address, service_def.specification)
-        elif not address_resolved_by_loader and isinstance(spec_source, str) and "http" in spec_source:
-            service_def.service_address = create_service_address(spec_source, None)
-
-        if category:
-            service_def.category = [category] if isinstance(category, str) else category
-        if family_id:
-            service_def.family_id = family_id
-        if used_models:
-            service_def.used_models = [used_models] if isinstance(used_models, ModelDefinition) else used_models
-        if description:
-            service_def.description = description
-
+        # Load from local file
+        if isinstance(spec_source, Path) or isinstance(spec_source, str) and "http" not in spec_source:
+            return _load_from_file(spec_source)
+        
+        # Load replicate service
+        replicate_ref = parse_replicate_model_ref(spec_source)
+        if replicate_ref:
+            from fastsdk.service_specification_loader.replicate_loader import load_replicate_service
+            return load_replicate_service(replicate_ref, api_key=api_key)
+        
+        # Load from deployed service with address
+        service_address = create_service_address(spec_source, None)
+        if isinstance(service_address, RunpodServiceAddress):
+            loaded_spec = _load_from_runpod_serverless_server(service_address.url, api_key=api_key)
+        else:
+            loaded_spec = _load_from_url_with_fallback(service_address.url, api_key=api_key)
+   
+        # resolve service address to parser
+        sa_parser_map = {
+            SocaityServiceAddress: "socaity",
+            RunpodServiceAddress: "runpod",
+            ReplicateServiceAddress: "replicate",
+        }
+        parser = sa_parser_map.get(service_address.provider, None)
+        service_def = parse_service_definition(loaded_spec, parser)
+        service_def.service_address = service_address
+        
         return service_def
 
     @staticmethod
@@ -204,11 +177,40 @@ class FastSDK:
                 if existing is not None and existing.specification == service_def.specification:
                     service_def.id = existing.id
 
+        # Apply overrides
+        if service_id:
+            service_def.id = service_id
+        elif not service_def.id:
+            service_def.id = "gen-" + str(uuid.uuid4())
+            
+        if service_name:
+            service_def.display_name = service_name
+        elif not service_def.display_name:
+            service_def.display_name = "unnamed_service_" + service_def.id
+
+        if specification:
+            service_def.specification = specification.lower()
+
+        # Forced local overwrite for runtime modification of the service address.
+        # UseCase: You have a service-definition and then change the service-address for this service on runtime.
+        if service_address:
+            # TODO: REVISE THIS
+            service_def.service_address = create_service_address(service_address, service_def.specification)
+
+        if category:
+            service_def.category = [category] if isinstance(category, str) else category
+        if family_id:
+            service_def.family_id = family_id
+        if used_models:
+            service_def.used_models = [used_models] if isinstance(used_models, ModelDefinition) else used_models
+        if description:
+            service_def.description = description
+
         # Upsert: replace an existing service with the same ID instead of raising.
         if service_def.id and self.service_registry.get_service(service_def.id):
             self.service_registry.remove_service(service_def.id)
 
-        return self.service_registry.register_service(service_def)
+        return self.service_registry.add_service(service_def)
 
     def update_service(self, service_id_or_name: str, **kwargs) -> Optional[ServiceDefinition]:
         """
@@ -245,7 +247,7 @@ class FastSDK:
         class_name: Optional[str] = None,
         template: Optional[str] = None,
         **kwargs
-    ) -> FastStub:
+    ) -> 'FastStub':
         """
         Generate a Python client stub file (.py) for a service and register the service in the registry.
         

@@ -9,6 +9,7 @@ def test_connect():
     job = client.submit_job("/text2voice", text="Hello, world!")
     result = job.wait_for_result()
     assert result is not None
+    result.save("test/output/speechcraft.wav")
 
 
 def test_generate_stub():

@@ -1,9 +1,11 @@
 from apipod_registry.definitions.service_definitions import ServiceDefinition
-from fastsdk.fastClient import FastClient
 
 
 import importlib.util
-from typing import Iterator, Optional
+from typing import Iterator, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastsdk.fastClient import FastClient
 
 
 class FastStub:
@@ -14,9 +16,10 @@ class FastStub:
     - service_definition: the parsed service the stub was generated from
     - client(): import the generated file and return a ready-to-use client instance
     """
-    path: str
-    class_name: str
-    service_definition: ServiceDefinition
+    def __init__(self, path: str, class_name: str, service_definition: ServiceDefinition):
+        self.path: str = path
+        self.class_name: str = class_name
+        self.service_definition: ServiceDefinition = service_definition
 
     def client(self, api_key: Optional[str] = None) -> 'FastClient':
         """Import the generated stub file and return an instance of the generated client class."""

@@ -147,16 +147,14 @@ Works out of the box with:
 
 [APIPod](https://github.com/SocAIty/APIPod) builds and deploys the services; fastSDK consumes them. Two beating hearts :two_hearts: for service ↔ client interaction.
 
-## Honesty section
-
-- The package is **in active development** (pre-1.0). The API documented here is the current one; older names (`create_sdk`, `create_temporary_client`, `load_service_definition`, `TemporaryClient`) still work but are deprecated and warn.
-- The registry is in-memory by default — generated stubs find their service automatically in the same process, but a fresh process must register the service first (or regenerate the stub). The CLI uses a persistent file registry in `~/.fastsdk`.
-- Streaming responses and some provider edge cases are still rough. Bug reports are highly appreciated.
-
-For internals (job pipeline, response parsing, cancellation semantics), see the [technical README](TECHNICAL_README.md).
 
 ## Contribute
 
 We at SocAIty want to provide the best tools to bring generative AI to the cloud.
 Report bugs, ideas and feature requests in the issues section.
 fastSDK is MIT-licensed and free to use. Leave a star to support us!
+
+---
+<p align="center">
+  Made with ❤️ by <a href="https://socaity.com">SocAIty</a>
+</p>

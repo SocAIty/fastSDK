@@ -16,10 +16,10 @@ from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 from apipod_registry.definitions.service_definitions import ServiceDefinition
 
 from fastsdk.fastSDK import FastSDK
-from fastsdk.fastStub import FastStub
 
 if TYPE_CHECKING:
     from fastsdk.fastClient import FastClient
+    from fastsdk.fastStub import FastStub
 
 
 def connect(
@@ -73,7 +73,7 @@ def generate_stub(
     class_name: Optional[str] = None,
     template: Optional[str] = None,
     **kwargs
-) -> FastStub:
+) -> 'FastStub':
     """
     Generate a Python client stub file (.py) for a service. The generated class has one typed
     method per endpoint. The service is also registered in the registry, so the stub can be

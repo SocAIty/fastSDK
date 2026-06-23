@@ -102,8 +102,6 @@ def test_job_cancel_remote():
         assert cancel_info3.status.name == "CANCELLED"
 
 
-
-    
 if __name__ == "__main__":
    #test_async_openapi_spec_fetching()
    #test_temporary_auto_client()

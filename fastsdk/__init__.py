@@ -10,8 +10,7 @@ from .api import (
     get_service,
     list_services,
     remove_service,
-)
-from .sdk_factory import create_sdk  # create_sdk is a deprecated alias of generate_stub
+)  # create_sdk is a deprecated alias of generate_stub
 from .service_interaction.api_seex import APISeex
 from .fastClient import FastClient
 from .fastSDK import FastSDK
@@ -23,8 +22,6 @@ __all__ = [
     'get_service', 'list_services', 'remove_service',
     # classes
     'FastStub', 'FastClient', 'APISeex', 'FastSDK',
-    # deprecated
-    'create_sdk',
     # re-exports
     'MediaFile', 'ImageFile', 'VideoFile', 'AudioFile', 'gather_results', 'gather_results_async'
 ]

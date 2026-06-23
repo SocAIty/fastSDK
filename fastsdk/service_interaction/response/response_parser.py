@@ -6,7 +6,7 @@ Design:
   - ``ResponseParser`` is a thin dispatcher holding a provider string and
     two function references.
   - The Runpod-hosted-APIPod edge case is handled by *function composition*:
-    ``_parse_runpod_apipod`` calls ``_parse_runpod`` then ``_parse_socaity``.
+    ``_parse_apipod-serverless-runpod`` calls ``_parse_runpod`` then ``_parse_socaity``.
 """
 
 from __future__ import annotations
@@ -101,7 +101,7 @@ def _try_unwrap_apipod(output: Any) -> Optional[dict]:
     return None
 
 
-def _parse_runpod_apipod(data: dict, parse_media: bool) -> Union[SocaityJobResponse, RunpodJobResponse, dict]:
+def _parse_apipod_serverless_runpod(data: dict, parse_media: bool) -> Union[SocaityJobResponse, RunpodJobResponse, dict]:
     """Compose Runpod transport parsing with nested APIPod payload extraction.
 
     Returns SocaityJobResponse when a nested payload is found (subsequent
@@ -126,14 +126,14 @@ _JSON_PARSERS: dict[str, Callable] = {
     "apipod": _parse_socaity,
     "runpod": _parse_runpod,
     "replicate": _parse_replicate,
-    "runpod_apipod": _parse_runpod_apipod,
+    "apipod-serverless-runpod": _parse_apipod_serverless_runpod,
 }
 
 _MEDIA_PARSERS: dict[str, Callable] = {
     "socaity": _parse_media_socaity,
     "apipod": _parse_media_socaity,
     "replicate": _parse_media_replicate,
-    "runpod_apipod": _parse_media_socaity,
+    "apipod-serverless-runpod": _parse_media_socaity,
 }
 
 

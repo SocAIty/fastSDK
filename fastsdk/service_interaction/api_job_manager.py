@@ -1,9 +1,3 @@
-import logging
-import time
-from typing import Any, Dict, Optional
-
-logger = logging.getLogger(__name__)
-
 from apipod_registry.definitions.service_definitions import (
     ServiceDefinition, ServiceAddress,
     RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress,
@@ -26,6 +20,13 @@ from fastsdk.service_interaction.request import (
 from fastsdk.service_interaction.request.api_client_runpod import APIClientRunpodApipod
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaDict
+
+import logging
+import time
+from typing import Any, Dict
+
+
+logger = logging.getLogger(__name__)
 
 
 class ApiJobManager:

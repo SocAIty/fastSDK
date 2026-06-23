@@ -1,4 +1,5 @@
 """
+Note: This test should be moved to APIPodRegistry tests.
 Example demonstrating how to use the fastsdk Registry.
 
 This example shows how to:

@@ -46,7 +46,6 @@ class FastClient:
         """
         self.fsdk = FastSDK()   # singleton: all clients share one registry and job manager
         self.temporary = temporary
-        self._owns_registration = False
 
         if service is None and service_name_or_id is None:
             raise ValueError("Provide a service source (URL, file, dict, ServiceDefinition) or a registered service ID/name.")
@@ -77,7 +76,6 @@ class FastClient:
         # Temporary clients always get their own registry entry (update_existing=False),
         # so removing it on cleanup never deletes a permanently registered service.
         service_def = self.fsdk.register_service(service, api_key=api_key, update_existing=not self.temporary, **load_kwargs)
-        self._owns_registration = True
         return service_def
 
     def _get_api_key(self):
@@ -97,8 +95,7 @@ class FastClient:
 
     def close(self):
         """Remove the service from the registry if this client registered it temporarily."""
-        if self.temporary and getattr(self, '_owns_registration', False) \
-                and getattr(self, 'service_definition', None) and hasattr(self, 'fsdk'):
+        if self.temporary and getattr(self, 'service_definition', None) and hasattr(self, 'fsdk'):
             try:
                 self.fsdk.service_registry.remove_service(self.service_definition.id)
             except Exception:

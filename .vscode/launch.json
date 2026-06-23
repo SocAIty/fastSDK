@@ -44,6 +44,17 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
             }
+        },
+        {
+            "name": "Run test_localhost_services",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_localhost_services.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
+            }
         }
     ]
 } 

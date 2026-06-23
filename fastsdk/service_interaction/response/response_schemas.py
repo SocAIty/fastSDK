@@ -76,6 +76,7 @@ class RunpodJobResponse(BaseModel):
     id: str
     status: Optional[str] = None
     output: Any = None
+    progress: Optional[float] = None
     error: Optional[str] = None
     delayTime: Optional[int] = None
     executionTime: Optional[int] = None

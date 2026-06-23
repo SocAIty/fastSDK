@@ -58,7 +58,7 @@ def test_llm_client():
     llm_client = fastsdk.connect(fastapi_url)
 
     # Submit the job
-    response = llm_client.submit_job("/chat", model="Qwen", messages=[{"role":"user","content":"What is the worth of a mortal's life"}], stream=True)
+    response = llm_client.submit_job("/chat", model="Qwen", messages=[{"role": "user", "content": "What is the worth of a mortal's life"}], stream=True)
 
     
     print("="*60)

@@ -28,7 +28,7 @@ Replicate model reference (`"replicate:owner/name"`, `"https://replicate.com/own
 or — where it makes sense — an already registered service ID/name.
 
 Deprecated aliases (warn via `DeprecationWarning`, will be removed eventually):
-`create_sdk` → `generate_stub`, `create_temporary_client` → `connect`,
+`generate_stub`, `create_temporary_client` → `connect`,
 `load_service_definition` → `inspect_service`, `DynamicClient`/`TemporaryClient` → `FastClient(..., temporary=...)`.
 
 ## Mental Model
@@ -154,7 +154,8 @@ It returns a `GeneratedStub` dataclass:
 
 ### Specification Loading
 The definition layer does provider-aware parsing:
-- generic OpenAPI (`spec_loader.load_spec`: direct URL, `/openapi.json`-style fallbacks, file, dict)
+- functions to load from urls with `/openapi.json`-style 
+- from files
 - RunPod serverless (the spec itself is fetched through a RunPod job, see `runpod_open_api_loader`)
 - Replicate (see below)
 - Socaity / APIPod variants

@@ -5,6 +5,7 @@ This module provides tools to generate Python client stub code from service defi
 """
 
 from ..fastStub import FastStub
-from .sdk_factory import generate_stub, create_sdk
+from .sdk_factory import generate_stub
 
-__all__ = ['generate_stub', 'create_sdk', 'FastStub']
+
+__all__ = ['generate_stub', 'FastStub']
