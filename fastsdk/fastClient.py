@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import os
 
-from apipod_registry.definitions.service_definitions import ServiceDefinition, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress
+from apipod_registry.schemas.service_definitions import ServiceDefinition, ReplicateServiceAddress, RunpodServiceAddress, SocaityServiceAddress
 from fastsdk.fastSDK import FastSDK
 
 if TYPE_CHECKING:

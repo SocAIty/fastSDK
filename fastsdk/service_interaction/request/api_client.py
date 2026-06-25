@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional, Union
 import httpx
 from urllib.parse import urlencode
 
-from apipod_registry.definitions.service_definitions import ServiceDefinition, EndpointDefinition
+from apipod_registry.schemas.service_definitions import ServiceDefinition, EndpointDefinition
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaFile
 
@@ -178,11 +178,11 @@ class APIClient:
         timeout = timeout or 60
 
         request = self.client.build_request(
-            method=method, 
-            url=url, 
-            files=files, 
-            headers=headers, 
-            timeout=timeout, 
+            method=method,
+            url=url,
+            files=files,
+            headers=headers,
+            timeout=timeout,
             **kwargs
         )
         return await self.client.send(request, stream=True)

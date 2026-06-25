@@ -31,9 +31,9 @@ def test_inspect_and_customize():
     sd = fastsdk.inspect_service(service_url)
     assert sd.endpoints
 
-    stub = fastsdk.generate_stub(sd, save_path="test/output/affe2.py", class_name="Affe", service_name="affe")
-    assert stub.class_name == "Affe"
-    assert fastsdk.get_service("affe") is not None
+    stub = fastsdk.generate_stub(sd, save_path="test/output/custom_save_path.py", class_name="CustomService", service_name="custom_service")
+    assert stub.class_name == "CustomService"
+    assert fastsdk.get_service("custom_service") is not None
 
 
 if __name__ == "__main__":

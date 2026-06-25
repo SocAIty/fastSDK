@@ -1,7 +1,7 @@
 from typing import Optional
 
 from .api_client import APIClient, APIKeyError, RequestData
-from apipod_registry.definitions.service_definitions import (
+from apipod_registry.schemas.service_definitions import (
     EndpointDefinition,
     SocaityServiceAddress,
 )

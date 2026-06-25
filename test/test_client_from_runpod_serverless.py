@@ -3,7 +3,7 @@ from fastsdk import FastSDK
 import os
 from time import sleep
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from apipod_registry.definitions.service_definitions import ServiceAddress
+from apipod_registry.schemas.service_definitions import ServiceAddress
 
 
 pod_id = "454y79ac0344xv"

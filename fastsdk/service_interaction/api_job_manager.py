@@ -1,4 +1,4 @@
-from apipod_registry.definitions.service_definitions import (
+from apipod_registry.schemas.service_definitions import (
     ServiceDefinition, ServiceAddress,
     RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress,
 )

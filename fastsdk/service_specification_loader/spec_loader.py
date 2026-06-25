@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from fastsdk.service_interaction.api_seex import APISeex
 
 
-def _download_json(url: str, timeout: float = 10.0) -> Dict[str, Any]:
+def _download_json(url: str, timeout: float = 30.0) -> Dict[str, Any]:
     """Download a JSON file from a URL."""
     with httpx.Client(timeout=timeout) as client:
         response = client.get(url)
@@ -18,7 +18,7 @@ def _download_json(url: str, timeout: float = 10.0) -> Dict[str, Any]:
         return response.json()
 
 
-def _load_from_url_with_fallback(url: str, timeout: float) -> Dict[str, Any]:
+def _load_from_url_with_fallback(url: str, timeout: float = 30.0) -> Dict[str, Any]:
     """Load OpenAPI spec from URL with automatic path resolution and fallback."""
     # Try direct URL first
     try:

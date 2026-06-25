@@ -5,7 +5,7 @@ import json
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from fastsdk.service_interaction.response.response_schemas import SocaityJobResponse
-from apipod_registry.definitions.service_definitions import RunpodServiceAddress, EndpointDefinition
+from apipod_registry.schemas.service_definitions import RunpodServiceAddress, EndpointDefinition
 
 
 class APIClientRunpod(APIClient):

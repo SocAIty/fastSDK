@@ -13,10 +13,7 @@ sys.path.append(str(current_path))
 
 # Now we can import from fastsdk
 import fastsdk  # noqa: E402
-from apipod_registry.definitions.service_definitions import (  # noqa: E402
-    ServiceDefinition, EndpointDefinition, EndpointParameter,
-    ServiceAddress
-)
+from apipod_registry.parsers.service_adress_parser import parse_service_address
 
 
 def main():

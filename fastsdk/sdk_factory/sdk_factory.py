@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from apipod_registry.definitions.service_definitions import (
+from apipod_registry.schemas.service_definitions import (
     ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterDefinition
 )
 from apipod_registry.utils.normalization import normalize_name_for_py
@@ -409,6 +409,8 @@ def generate_stub(
     # Determine class name if not provided
     if not class_name:
         class_name = normalize_name_for_py(service_definition.display_name)
+    else:  # user provides a class_name that is not compatible with Python class names
+        class_name = normalize_name_for_py(class_name, lower_case=False)
 
     # Get file path
     file_path = _get_file_path(save_path, class_name)

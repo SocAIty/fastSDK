@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from apipod_registry.definitions.service_definitions import EndpointDefinition
+from apipod_registry.schemas.service_definitions import EndpointDefinition
 
 
 class APIClientReplicate(APIClient):
@@ -43,8 +43,10 @@ class APIClientReplicate(APIClient):
         request_data.query_params = {}
         request_data.file_params = {}
 
+        # Replicate throws errors for keys with value None and expects to remove them.
+        body = {k: v for k, v in request_data.body_params.items() if v is not None}
         # replicate formats the body as json with {"input": body_params, "version?": model_version}
-        body = {"input": request_data.body_params}
+        body = {"input": body}
         # Add version parameter for community models to get params to make predictions
         if request_data.url and "/predictions" in request_data.url:
             version = getattr(self.service_def.service_address, "version", None)

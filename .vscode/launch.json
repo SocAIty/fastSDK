@@ -13,6 +13,28 @@
             }
         },
         {
+            "name": "Run test apipod debug test services",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_apipod_debug_test_services.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
+            }
+        },
+        {
+            "name": "Run test replicate",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_replicate.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
+            }
+        },
+        {
             "name": "Test manual SDK",
             "type": "debugpy",
             "request": "launch",

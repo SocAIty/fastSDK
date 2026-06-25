@@ -10,19 +10,17 @@ and builds a ServiceDefinition with the correct service address for either schem
 """
 import os
 import re
-from pathlib import Path
 from typing import Optional
 
 import httpx
 from media_toolkit.utils.dependency_requirements import requires
 
-from apipod_registry.definitions.service_definitions import ServiceDefinition
+from apipod_registry.schemas.service_definitions import ServiceDefinition
 from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 
 
 _MODEL_REF_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$")
-_SPEC_FILE_SUFFIXES = (".json", ".yaml", ".yml")
 
 
 def parse_replicate_model_ref(source) -> Optional[str]:
@@ -63,11 +61,6 @@ def parse_replicate_model_ref(source) -> Optional[str]:
 
     if not _MODEL_REF_PATTERN.match(ref):
         return None
-
-    if not explicit:
-        # A bare "owner/name" string could also be a relative file path.
-        if ref.lower().endswith(_SPEC_FILE_SUFFIXES) or Path(ref).exists():
-            return None
 
     return ref
 

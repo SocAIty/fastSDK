@@ -1,5 +1,5 @@
 from fastsdk.fastClient import FastClient
-from apipod_registry.definitions.service_definitions import (
+from apipod_registry.schemas.service_definitions import (
     ServiceDefinition, EndpointDefinition
 )
 from apipod_registry.parsers.service_adress_parser import create_service_address

@@ -1,13 +1,14 @@
 from apipod_registry import Registry
-from apipod_registry.definitions.service_definitions import ServiceDefinition, ModelDefinition
-from apipod_registry.definitions.service_definitions import RunpodServiceAddress, SocaityServiceAddress, ReplicateServiceAddress
+from apipod_registry.schemas.service_definitions import ServiceDefinition, ModelDefinition
+from apipod_registry.schemas.service_definitions import RunpodServiceAddress, SocaityServiceAddress, ReplicateServiceAddress
 from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 
 
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_url_with_fallback, _load_from_file
-from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref
+from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref, load_replicate_service
+
 
 from fastsdk.sdk_factory.sdk_factory import generate_stub as _generate_stub_file
 from typing import Union, Optional, Dict, Any, List, TYPE_CHECKING
@@ -90,22 +91,25 @@ class FastSDK:
         if isinstance(spec_source, ServiceDefinition):
             return spec_source
         
-        # Load from local file
-        if isinstance(spec_source, Path) or isinstance(spec_source, str) and "http" not in spec_source:
-            return _load_from_file(spec_source)
+        if isinstance(spec_source, Path):
+            spec = _load_from_file(spec_source)
+            return parse_service_definition(spec)
         
-        # Load replicate service
-        replicate_ref = parse_replicate_model_ref(spec_source)
-        if replicate_ref:
-            from fastsdk.service_specification_loader.replicate_loader import load_replicate_service
-            return load_replicate_service(replicate_ref, api_key=api_key)
+        if isinstance(spec_source, str) and "http" not in spec_source:
+            # example black-forest-labs/flux-schnell:version
+            ref = parse_replicate_model_ref(spec_source)
+            if ref:
+                return load_replicate_service(ref, api_key=api_key)
+            # probably is a file path
+            spec = _load_from_file(spec_source)
+            return parse_service_definition(spec)
         
         # Load from deployed service with address
         service_address = create_service_address(spec_source, None)
         if isinstance(service_address, RunpodServiceAddress):
             loaded_spec = _load_from_runpod_serverless_server(service_address.url, api_key=api_key)
         else:
-            loaded_spec = _load_from_url_with_fallback(service_address.url, api_key=api_key)
+            loaded_spec = _load_from_url_with_fallback(service_address.url)
    
         # resolve service address to parser
         sa_parser_map = {
@@ -113,7 +117,7 @@ class FastSDK:
             RunpodServiceAddress: "runpod",
             ReplicateServiceAddress: "replicate",
         }
-        parser = sa_parser_map.get(service_address.provider, None)
+        parser = sa_parser_map.get(type(service_address), None)
         service_def = parse_service_definition(loaded_spec, parser)
         service_def.service_address = service_address
         
@@ -165,10 +169,7 @@ class FastSDK:
         if isinstance(spec_source, ServiceDefinition):
             service_def = spec_source
         else:
-            service_def = self.inspect_service(
-                spec_source, service_id, service_address, service_name,
-                category, family_id, used_models, specification, description, api_key
-            )
+            service_def = self.inspect_service(spec_source, api_key)
             # Most specs (e.g. OpenAPI) don't embed a service ID, so every parse generates a fresh
             # one. Reuse the ID of an already registered service with the same name and spec type,
             # so re-runs update the existing entry and previously generated stubs stay valid.

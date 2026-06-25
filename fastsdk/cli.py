@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from apipod_registry import Registry
-from apipod_registry.definitions.service_definitions import ServiceDefinition
+from apipod_registry.schemas.service_definitions import ServiceDefinition
 from apipod_registry.service_registry.file_system_registry import FileSystemStore
 
 
