@@ -81,10 +81,12 @@ fastsdk/
     runpod_open_api_loader.py     # fetch openapi.json through a RunPod serverless job
     replicate_loader.py           # Replicate model -> ServiceDefinition (optional `replicate` dep)
   service_interaction/
-    api_job_manager.py            # runtime orchestrator
-    api_seex.py                   # APISeex job (a specialized MrMeseex)
+    api_job_manager.py            # composition root + submit + task wiring
+    job_runtime.py                # per-job lifecycle controller (cancel/stream/assemble + guards)
+    async_bridge.py               # single async->sync bridge over the meseex loop
+    api_seex.py                   # APISeex job handle (a specialized MrMeseex)
     request/                      # APIClient + provider subclasses, FileHandler
-    response/                     # ResponseParser, BaseJobResponse, status mapping
+    response/                     # ResponseParser, BaseJobResponse, StreamSession, status mapping
 ```
 
 ## Core Building Blocks
@@ -178,30 +180,46 @@ URLs, bare `owner/name` strings that aren't local files). `load_replicate_servic
 builds the service address for the right scheme. Service IDs are stable
 (`replicate-{owner}-{name}`), so reloading the same model upserts instead of duplicating.
 
-### `ApiJobManager`
-The sole runtime orchestrator. All network I/O and job state transitions live here.
+### Lifecycle architecture: three boundaries
+Transport ownership is split across three files so each concern has one home.
 
+**`ApiJobManager`** (`api_job_manager.py`) is the process-level orchestrator and composition root.
 It owns:
 - provider-specific `APIClient` instances
 - provider-aware `FileHandler`s
-- the `ResponseParser`
+- the `ResponseParser` cache
 - a `MeseexBox` that executes request jobs
+- one `AsyncBridge` shared across jobs
 
-The `submit_job(...)` method builds an `APISeex` with the exact task list needed for a request.
+Its job is wiring and submission only: `submit_job(...)` builds an `APISeex` with the exact task
+list for the request, attaches a per-job `JobRuntime`, and summons it into the `MeseexBox`. The
+manager does not own stream slot state, cancel wait loops, or stream-open policy.
 
-### `APISeex` and `JobRuntimePort`
-`APISeex` is a job handle: identity plus a progress/result view (`response`, `runtime_info`,
-`result`). It is a ticket, not an orchestrator. Its user-facing lifecycle methods
-(`cancel()`, `stream()`, `astream()`, streaming-aware `get_result()`) are one-line delegates to a
-narrow `JobRuntimePort` (`service_interaction/job_runtime.py`).
+**`JobRuntime`** (`job_runtime.py`) is the per-job lifecycle controller, created once per job. It
+owns one job's transport state:
+- the single active `StreamSession` slot (`None` or exactly one session)
+- a readiness `Event` fed by the polling/send tasks as job state advances
+- cancellation policy (remote cancel plus terminal-state reconciliation)
+- stream teardown when a cancel resolves
 
-`ApiJobManager` implements that port, so the handle reaches the orchestrator through four methods
-(`cancel`, `stream`, `astream`, `assemble_result`) and never touches an `APIClient`, a
-`ResponseParser`, or the `MeseexBox` directly. This keeps lifecycle authority in one place: the
-handle stays a view, the manager stays the only thing that talks to the network and the kernel.
+It enforces the invariants with guards: at most one active stream per job, no stream open after a
+terminal state with no live source, and active streams close on cancel.
 
-Boundary rule: `api_seex.py` imports only the port, `meseex`, and schemas. No client or parser
-imports belong there.
+**`APISeex`** (`api_seex.py`) is the user ticket: identity plus a progress/result view (`response`,
+`runtime_info`, `result`). Its lifecycle methods (`cancel()`, `stream()`, streaming-aware
+`get_result()`) are one-line delegates to its `JobRuntime`. The handle never touches an `APIClient`,
+a `ResponseParser`, the `AsyncBridge`, or the `MeseexBox` directly.
+
+Boundary rule: `api_seex.py` imports only `meseex` and schemas (the `JobRuntime` type is a
+type-check-only import). No client, parser, or bridge imports belong there.
+
+### `AsyncBridge`
+The single async->sync bridge (`async_bridge.py`). The `MeseexBox` runs one asyncio loop in a
+background thread, and every httpx response fastsdk creates is bound to that loop, so any follow-up
+coroutine (poll, cancel, open stream, close) must run there. `AsyncBridge.run(coro_func, *args,
+timeout_s=...)` schedules the coroutine on the loop and blocks on a `concurrent.futures.Future`
+with a timeout. It is the only place that crosses the boundary, which keeps runtime logic free of
+sleep/busy-wait loops.
 
 ## Runtime Pipeline In Detail
 ### 1. Prepare request
@@ -268,21 +286,26 @@ Streaming reuses the existing job pipeline and adds one consumer abstraction. Th
 3. Job + stream link: a normal JSON job handle that also exposes a live `links.stream` (Socaity) or `urls.stream` (Replicate) while running.
 
 ### Public surface
-- ``job.stream()`` / ``job.astream()``: return a ``StreamSession`` you iterate (sync or async). The
-  session auto-selects SSE chunks or raw bytes from the response content type.
-- ``job.get_result()``: for streaming jobs, delegates to the runtime to assemble the full payload
-  (media file or joined SSE text) when the caller never invoked ``stream()``.
+One entrypoint: ``job.stream()``. It returns a ``StreamSession`` you iterate sync (``iter_*``) or
+async (``aiter_*``); the session auto-selects SSE chunks or raw bytes from the response content
+type. There is no separate ``astream()``: a single session already serves both consumer styles, so
+a second method would only duplicate semantics and invite drift.
+
+``job.get_result()`` for streaming jobs delegates to the runtime to assemble the full payload (media
+file or joined SSE text) when the caller never invoked ``stream()``.
 
 ### How it routes
-Both calls delegate to `ApiJobManager` through the port. The manager resolves the stream source in
-this order:
+`APISeex.stream()` delegates to its `JobRuntime`. The runtime resolves the stream source in this
+order:
 1. ``job.direct_response``: an open SSE/raw response captured at send time (no polling job).
 2. provider ``links.stream`` / ``urls.stream``: opened via ``APIClient.open_stream`` once the poll
    loop exposes the URL.
 
-The response is created and read on `meseex`'s background event loop. `StreamSession` hands items
-across threads through a queue, so callers consume from any thread or loop without touching that
-loop directly.
+The runtime blocks on a readiness `Event` (set by the send/poll tasks as state advances) instead of
+busy-waiting, takes the single session slot, and rejects a second concurrent `stream()`. The
+response is created and read on `meseex`'s background event loop via the `AsyncBridge`.
+`StreamSession` hands items across threads through a queue, so callers consume from any thread or
+loop without touching that loop directly.
 
 Provider transport models live in ``socaity_schemas.transport`` (imported directly, no local duplicate module).
 Byte-chunk streams are assembled via ``media_toolkit.media_from_any``.
@@ -299,17 +322,18 @@ cancel_info = job.cancel()
 ```
 
 ### Technical flow
-There is one cancel implementation: `ApiJobManager.cancel(job, wait=...)`. The handle's
-`APISeex.cancel(...)` just delegates to it through the port.
+There is one cancel implementation: `JobRuntime.cancel(wait=...)`. The handle's `APISeex.cancel(...)`
+just delegates to its runtime.
 
-1. `job` is an `APISeex`; `job.cancel(...)` calls `ApiJobManager.cancel(job, ...)`.
-2. The manager checks the latest known response.
-3. If no remote job exists yet:
+1. `job` is an `APISeex`; `job.cancel(...)` calls `JobRuntime.cancel(...)`.
+2. The runtime closes any active stream slot first.
+3. It checks the latest known response.
+4. If no remote job exists yet:
    - the local workflow is cancelled through `MeseexBox.cancel_meseex(...)`
-4. If a remote job exists and exposes a cancel URL:
-   - `APIClient.cancel_job(...)` sends the provider-specific cancel request
-   - with `wait=True`, the manager polls until the provider reports `CANCELLED`, or until another terminal state is reached
-5. Once cancellation is confirmed, `MeseexBox` finalizes the local `MrMeseex` as cancelled
+5. If a remote job exists and exposes a cancel URL:
+   - `APIClient.cancel_job(...)` sends the provider-specific cancel request (via the `AsyncBridge`)
+   - with `wait=True`, the runtime polls until the provider reports `CANCELLED`, or until another terminal state is reached
+6. Once cancellation is confirmed, `MeseexBox` finalizes the local `MrMeseex` as cancelled
 
 ### Important nuance
 Remote cancellation is not assumed just because the cancel endpoint was called.

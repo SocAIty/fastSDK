@@ -5,13 +5,12 @@ from apipod_registry.schemas.service_definitions import (
 from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
 from meseex import MrMeseex
 
-from fastsdk.service_interaction.job_runtime import JobRuntimePort
-
 from typing import Any, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
 
 if TYPE_CHECKING:
     import httpx
+    from fastsdk.service_interaction.job_runtime import JobRuntime
     from fastsdk.service_interaction.response.stream_session import StreamSession
 
 
@@ -19,8 +18,8 @@ class APISeex(MrMeseex):
     """User-facing handle for an API job: identity plus a progress/result view.
 
     A ticket, not an orchestrator. Lifecycle actions (cancel, stream) delegate to
-    a narrow ``JobRuntimePort`` owned by ``ApiJobManager``. The handle never talks
-    to HTTP clients, parsers, or the ``MeseexBox`` directly.
+    a per-job ``JobRuntime`` set by ``ApiJobManager`` at submit time. The handle
+    never talks to HTTP clients, parsers, or the ``MeseexBox`` directly.
     """
 
     def __init__(
@@ -30,12 +29,12 @@ class APISeex(MrMeseex):
         data: Any = None,
         name: str = None,
         tasks: list = None,
-        runtime: Optional[JobRuntimePort] = None,
     ):
         super().__init__(tasks, data, name)
         self.service_def = service_def
         self.endpoint_def = endpoint_def
-        self._runtime = runtime
+        # Per-job lifecycle controller, assigned by the orchestrator after creation.
+        self.runtime: Optional["JobRuntime"] = None
         # Set by the orchestrator when the initial response is a live stream.
         self.direct_response: Optional["httpx.Response"] = None
 
@@ -101,18 +100,16 @@ class APISeex(MrMeseex):
     # ------------------------------------------------------------------
 
     def cancel(self, *args, **kwargs) -> Any:
-        if self._runtime is None:
+        if self.runtime is None:
             return super().cancel(*args, **kwargs)
-        return self._runtime.cancel(self, *args, **kwargs)
+        return self.runtime.cancel(*args, **kwargs)
 
     def stream(self, **kwargs) -> "StreamSession":
-        return self._runtime.stream(self, **kwargs)
-
-    def astream(self, **kwargs) -> "StreamSession":
-        return self._runtime.astream(self, **kwargs)
+        """Open the job's live output stream. The session iterates sync or async."""
+        return self.runtime.stream(**kwargs)
 
     def get_result(self, *args, **kwargs) -> Any:
         result = super().get_result(*args, **kwargs)
-        if isinstance(result, StreamingResponse) and self._runtime is not None:
-            return self._runtime.assemble_result(self)
+        if isinstance(result, StreamingResponse) and self.runtime is not None:
+            return self.runtime.assemble_result()
         return result

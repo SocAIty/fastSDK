@@ -93,6 +93,20 @@ class StreamSession:
         except Exception:
             pass
 
+    def close(self) -> None:
+        """Close the underlying response from any thread. Idempotent.
+
+        Used for stream teardown on cancel: schedules the close on the owning
+        loop and waits briefly so the response is released before returning.
+        """
+        if self._response.is_closed:
+            return
+        try:
+            future = asyncio.run_coroutine_threadsafe(self._aclose(), self._loop)
+            future.result(timeout=5)
+        except Exception:
+            pass
+
     def _decode_sse_line(self, line: str) -> Any:
         if not line:
             return _SKIP
