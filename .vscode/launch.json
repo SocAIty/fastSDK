@@ -20,7 +20,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry;${workspaceFolder}/../socaity-schemas"
             }
         },
         {

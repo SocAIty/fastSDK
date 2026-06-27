@@ -2,17 +2,26 @@ from apipod_registry.schemas.service_definitions import (
     EndpointDefinition, ServiceDefinition,
     RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress,
 )
-from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from fastsdk.service_interaction.response.response_schemas import JOB_RESPONSE_TYPES
+from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
 from meseex import MrMeseex
 
-import time
-from typing import Any, Callable, Optional, Tuple
+from fastsdk.service_interaction.job_runtime import JobRuntimePort
+
+from typing import Any, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
+
+if TYPE_CHECKING:
+    import httpx
+    from fastsdk.service_interaction.response.stream_session import StreamSession
 
 
 class APISeex(MrMeseex):
-    """Meseex extension specifically for API job handling."""
+    """User-facing handle for an API job: identity plus a progress/result view.
+
+    A ticket, not an orchestrator. Lifecycle actions (cancel, stream) delegate to
+    a narrow ``JobRuntimePort`` owned by ``ApiJobManager``. The handle never talks
+    to HTTP clients, parsers, or the ``MeseexBox`` directly.
+    """
 
     def __init__(
         self,
@@ -21,11 +30,18 @@ class APISeex(MrMeseex):
         data: Any = None,
         name: str = None,
         tasks: list = None,
-        cancel_handler: Callable[..., Any] = None,
+        runtime: Optional[JobRuntimePort] = None,
     ):
-        super().__init__(tasks, data, name, cancel_handler)
+        super().__init__(tasks, data, name)
         self.service_def = service_def
         self.endpoint_def = endpoint_def
+        self._runtime = runtime
+        # Set by the orchestrator when the initial response is a live stream.
+        self.direct_response: Optional["httpx.Response"] = None
+
+    # ------------------------------------------------------------------
+    # Domain view
+    # ------------------------------------------------------------------
 
     @property
     def response(self):
@@ -81,130 +97,22 @@ class APISeex(MrMeseex):
         return delay_seconds, execution_seconds
 
     # ------------------------------------------------------------------
-    # Cancellation helpers
+    # Lifecycle delegation (syntactic sugar over the runtime port)
     # ------------------------------------------------------------------
 
-    def _run_async_call(self, method, *args, timeout_s: float = 30.0):
-        if self._meseex_box is None:
-            raise RuntimeError("The job is not attached to a MeseexBox runtime")
+    def cancel(self, *args, **kwargs) -> Any:
+        if self._runtime is None:
+            return super().cancel(*args, **kwargs)
+        return self._runtime.cancel(self, *args, **kwargs)
 
-        task = self._meseex_box.task_executor.submit(method, *args)
-        started_at = time.monotonic()
+    def stream(self, **kwargs) -> "StreamSession":
+        return self._runtime.stream(self, **kwargs)
 
-        while not task.is_completed:
-            if timeout_s is not None and (time.monotonic() - started_at) > timeout_s:
-                task.cancel()
-                raise TimeoutError("Timed out while waiting for cancellation request")
-            time.sleep(0.01)
+    def astream(self, **kwargs) -> "StreamSession":
+        return self._runtime.astream(self, **kwargs)
 
-        if task.error is not None:
-            raise task.error
-
-        return task.result
-
-    def _local_cancel_response(self, message: str) -> dict:
-        return {"id": self.meseex_id, "status": "CANCELLED", "error": message}
-
-    def _parse_cancel_response(self, http_response):
-        if self._response_parser is None:
-            raise RuntimeError("The job is not attached to a response parser")
-
-        error = self._run_async_call(self._response_parser.check_response_status, http_response)
-        if error:
-            raise ValueError(f"Job cancellation failed: {error}")
-
-        parsed_response = self._run_async_call(self._response_parser.parse_response, http_response, False)
-        if isinstance(parsed_response, JOB_RESPONSE_TYPES):
-            return parsed_response
-        return None
-
-    def _wait_for_remote_cancellation(
-        self,
-        cancel_response,
-        timeout_s: float = 30.0,
-        poll_interval_s: float = 0.5,
-    ):
-        current_response = cancel_response
-        deadline = time.monotonic() + timeout_s
-
-        while isinstance(current_response, JOB_RESPONSE_TYPES):
-            status = self._api_client.get_status(current_response)
-
-            if status == APIJobStatus.CANCELLED:
-                self._meseex_box.cancel_meseex(self, cancel_result=current_response)
-                return current_response
-
-            if status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            remaining_timeout = deadline - time.monotonic()
-            if remaining_timeout <= 0:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            time.sleep(min(poll_interval_s, remaining_timeout))
-            http_response = self._run_async_call(
-                self._api_client.poll_status,
-                current_response,
-                timeout_s=min(remaining_timeout, 30.0),
-            )
-            next_response = self._parse_cancel_response(http_response)
-            if next_response is None:
-                self.set_cancel_result(current_response)
-                return current_response
-
-            current_response = next_response
-
-        return current_response
-
-    def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5):
-        meseex_box = getattr(self, "_meseex_box", None)
-        api_client = getattr(self, "_api_client", None)
-        response_parser = getattr(self, "_response_parser", None)
-        if meseex_box is None or api_client is None or response_parser is None:
-            return super().cancel()
-
-        if self.is_terminal:
-            return self.cancel_result or self.response
-
-        current_response = self.response
-        has_cancel_url = (
-            isinstance(current_response, JOB_RESPONSE_TYPES)
-            and self._api_client.get_cancel_url(current_response)
-        )
-
-        if not has_cancel_url:
-            cancel_response = current_response or self._local_cancel_response("Cancelled before remote job submission")
-            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
-            return cancel_response
-
-        http_response = self._run_async_call(
-            self._api_client.cancel_job,
-            current_response,
-            timeout_s=timeout_s,
-        )
-        cancel_response = self._parse_cancel_response(http_response)
-        if cancel_response is None:
-            self.set_cancel_result(current_response)
-            return current_response
-
-        status = self._api_client.get_status(cancel_response)
-
-        if status == APIJobStatus.CANCELLED:
-            self._meseex_box.cancel_meseex(self, cancel_result=cancel_response)
-            return cancel_response
-
-        if status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT}:
-            self.set_cancel_result(cancel_response)
-            return cancel_response
-
-        self.set_cancel_result(cancel_response)
-        if not wait:
-            return cancel_response
-
-        return self._wait_for_remote_cancellation(
-            cancel_response,
-            timeout_s=timeout_s,
-            poll_interval_s=poll_interval_s,
-        )
+    def get_result(self, *args, **kwargs) -> Any:
+        result = super().get_result(*args, **kwargs)
+        if isinstance(result, StreamingResponse) and self._runtime is not None:
+            return self._runtime.assemble_result(self)
+        return result

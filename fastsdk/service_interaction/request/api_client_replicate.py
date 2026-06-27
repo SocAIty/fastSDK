@@ -33,6 +33,10 @@ class APIClientReplicate(APIClient):
         urls = getattr(response, "urls", None)
         return urls.cancel if urls else f"v1/predictions/{response.id}/cancel"
 
+    def get_stream_url(self, response) -> Optional[str]:
+        urls = getattr(response, "urls", None)
+        return urls.stream if urls else None
+
     def get_result(self, response) -> Any:
         return getattr(response, "output", None)
 

@@ -76,9 +76,8 @@ def test_replicate_execution_default_params():
 
 
 if __name__ == "__main__":
-    #test_cog()
-    #test_create_stubs()
-    #test_replicate_connect()
+    test_cog()
+    test_create_stubs()
+    test_replicate_connect()
     test_replicate_execution_default_params()
-    
     test_replicate_cancel()

@@ -17,7 +17,7 @@ from typing import Any, Callable, Optional, Union
 import httpx
 from media_toolkit import media_from_any
 
-from fastsdk.service_interaction.response.response_schemas import (
+from socaity_schemas import (
     ReplicateJobResponse,
     RunpodJobResponse,
     SocaityJobResponse,

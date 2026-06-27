@@ -31,6 +31,10 @@ class APIClient:
     status from their provider-specific response models.
     """
 
+    _FILE_FORMATS = frozenset({"file", "image", "video", "audio"})
+    _JSON_BODY_CONTENT_TYPE = "application/json"
+    _MULTIPART_BODY_CONTENT_TYPE = "multipart/form-data"
+
     def __init__(self, service_def: ServiceDefinition, api_key: str = None):
         self.__client = None
         self.service_def = service_def
@@ -50,6 +54,10 @@ class APIClient:
         return None
 
     def get_cancel_url(self, response) -> Optional[str]:
+        return None
+
+    def get_stream_url(self, response) -> Optional[str]:
+        """URL of a live output stream for an in-progress job, if the provider exposes one."""
         return None
 
     def get_result(self, response) -> Any:
@@ -88,6 +96,35 @@ class APIClient:
             return f"{base_url}?{query_string}"
         return base_url
 
+    @classmethod
+    def _param_has_file_format(cls, param) -> bool:
+        definitions = getattr(param, "definition", None)
+        if definitions is None:
+            return False
+        defs = definitions if isinstance(definitions, list) else [definitions]
+        return any(getattr(d, "format", None) in cls._FILE_FORMATS for d in defs)
+
+    @staticmethod
+    def _is_file_model_dict(value: Any) -> bool:
+        return isinstance(value, dict) and {"file_name", "content_type", "content"}.issubset(value.keys())
+
+    @classmethod
+    def _serialize_json_body_file_value(cls, value: Any) -> Any:
+        """Convert a file field to APIPod FileModel JSON for application/json bodies."""
+        if isinstance(value, MediaFile):
+            return value.to_json()
+        if cls._is_file_model_dict(value):
+            return value
+        return value
+
+    @classmethod
+    def _is_scalar_value(cls, value: Any) -> bool:
+        return isinstance(value, (str, int, float, bool)) or value is None
+
+    @classmethod
+    def _uses_json_request_body(cls, endpoint: EndpointDefinition) -> bool:
+        return getattr(endpoint, "request_body_content_type", None) == cls._JSON_BODY_CONTENT_TYPE
+
     def format_request_params(self, endpoint: EndpointDefinition, data: dict) -> RequestData:
         """Prepare all request parameters for the endpoint."""
         if not data:
@@ -100,36 +137,31 @@ class APIClient:
             raise ValueError("Data must be a dictionary")
 
         rq = RequestData()
+        embed_files_in_json_body = self._uses_json_request_body(endpoint)
+
         for param in endpoint.parameters:
             param_value = data.get(param.name, param.default)
             if param_value is None and param.required:
                 raise ValueError(f"Required parameter '{param.name}' is missing")
-            
-            # Determine characteristics
-            is_file_param = False
+
+            has_file_format = self._param_has_file_format(param)
             is_array_param = False
 
-            # Detect media/file by ParameterDefinition.format
-            definitions = getattr(param, "definition", None)
-            if definitions is not None:
-                defs = definitions if isinstance(definitions, list) else [definitions]
-                for d in defs:
-                    if getattr(d, "format", None) in {"file", "image", "video", "audio"}:
-                        is_file_param = True
-                        break
-
-            # Detect array via schema
             schema = getattr(param, "param_schema", None) or {}
             if isinstance(schema, dict) and schema.get("type") == "array":
                 is_array_param = True
 
-            # if is file type put it into file_params
-            is_file_param = is_file_param or isinstance(param_value, MediaFile)
+            is_media_file = isinstance(param_value, MediaFile)
+            is_file_upload = is_media_file or (
+                has_file_format and not self._is_scalar_value(param_value)
+            )
 
             if is_array_param and not isinstance(param_value, list):
                 param_value = [param_value]
 
-            if is_file_param:
+            if is_file_upload and embed_files_in_json_body:
+                rq.body_params[param.name] = self._serialize_json_body_file_value(param_value)
+            elif is_file_upload:
                 rq.file_params[param.name] = param_value
             elif param.location == "query":
                 rq.query_params[param.name] = param_value
@@ -150,12 +182,10 @@ class APIClient:
         }
 
         if request_data.file_params:
-            # If there are files, use multipart/form-data (data=)
             kwargs["data"] = request_data.body_params
             kwargs["files"] = request_data.file_params
         else:
-            # If no files, send as JSON (json=)
-            kwargs["json"] = request_data.body_params
+            kwargs["json"] = {k: v for k, v in request_data.body_params.items() if v is not None}
 
         # Use build_request + send(stream=True) to support direct SSE responses
         request = self.client.build_request("POST", **kwargs)
@@ -198,3 +228,13 @@ class APIClient:
         if not url:
             raise ValueError("No cancel URL available for this response")
         return await self.request_url(url=url, method=self.cancel_method)
+
+    async def open_stream(self, response) -> httpx.Response:
+        """Open the provider's live output stream for an in-progress job.
+
+        Returns an open (streaming) httpx response. The caller owns closing it.
+        """
+        url = self.get_stream_url(response)
+        if not url:
+            raise ValueError("No stream URL available for this response")
+        return await self.request_url(url=url, method="GET")

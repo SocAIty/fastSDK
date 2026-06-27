@@ -179,7 +179,7 @@ builds the service address for the right scheme. Service IDs are stable
 (`replicate-{owner}-{name}`), so reloading the same model upserts instead of duplicating.
 
 ### `ApiJobManager`
-This is the runtime orchestrator.
+The sole runtime orchestrator. All network I/O and job state transitions live here.
 
 It owns:
 - provider-specific `APIClient` instances
@@ -188,6 +188,20 @@ It owns:
 - a `MeseexBox` that executes request jobs
 
 The `submit_job(...)` method builds an `APISeex` with the exact task list needed for a request.
+
+### `APISeex` and `JobRuntimePort`
+`APISeex` is a job handle: identity plus a progress/result view (`response`, `runtime_info`,
+`result`). It is a ticket, not an orchestrator. Its user-facing lifecycle methods
+(`cancel()`, `stream()`, `astream()`, streaming-aware `get_result()`) are one-line delegates to a
+narrow `JobRuntimePort` (`service_interaction/job_runtime.py`).
+
+`ApiJobManager` implements that port, so the handle reaches the orchestrator through four methods
+(`cancel`, `stream`, `astream`, `assemble_result`) and never touches an `APIClient`, a
+`ResponseParser`, or the `MeseexBox` directly. This keeps lifecycle authority in one place: the
+handle stays a view, the manager stays the only thing that talks to the network and the kernel.
+
+Boundary rule: `api_seex.py` imports only the port, `meseex`, and schemas. No client or parser
+imports belong there.
 
 ## Runtime Pipeline In Detail
 ### 1. Prepare request
@@ -245,6 +259,34 @@ It captures:
 
 Provider-specific parsers fill this model from different wire formats.
 
+## Streaming
+
+Streaming reuses the existing job pipeline and adds one consumer abstraction. Three modes, one API:
+
+1. Direct SSE: `stream=True` on a chat-like schema returns `text/event-stream` immediately. No job, no polling.
+2. Raw binary: e.g. `SpeechRequest(stream=True)` returns audio/video bytes directly.
+3. Job + stream link: a normal JSON job handle that also exposes a live `links.stream` (Socaity) or `urls.stream` (Replicate) while running.
+
+### Public surface
+- ``job.stream()`` / ``job.astream()``: return a ``StreamSession`` you iterate (sync or async). The
+  session auto-selects SSE chunks or raw bytes from the response content type.
+- ``job.get_result()``: for streaming jobs, delegates to the runtime to assemble the full payload
+  (media file or joined SSE text) when the caller never invoked ``stream()``.
+
+### How it routes
+Both calls delegate to `ApiJobManager` through the port. The manager resolves the stream source in
+this order:
+1. ``job.direct_response``: an open SSE/raw response captured at send time (no polling job).
+2. provider ``links.stream`` / ``urls.stream``: opened via ``APIClient.open_stream`` once the poll
+   loop exposes the URL.
+
+The response is created and read on `meseex`'s background event loop. `StreamSession` hands items
+across threads through a queue, so callers consume from any thread or loop without touching that
+loop directly.
+
+Provider transport models live in ``socaity_schemas.transport`` (imported directly, no local duplicate module).
+Byte-chunk streams are assembled via ``media_toolkit.media_from_any``.
+
 ## How Cancellation Works
 Cancellation has two layers: local workflow cancellation and remote provider cancellation.
 
@@ -257,13 +299,16 @@ cancel_info = job.cancel()
 ```
 
 ### Technical flow
-1. `job` is an `APISeex`.
-2. `APISeex.cancel()` checks the latest known response.
+There is one cancel implementation: `ApiJobManager.cancel(job, wait=...)`. The handle's
+`APISeex.cancel(...)` just delegates to it through the port.
+
+1. `job` is an `APISeex`; `job.cancel(...)` calls `ApiJobManager.cancel(job, ...)`.
+2. The manager checks the latest known response.
 3. If no remote job exists yet:
    - the local workflow is cancelled through `MeseexBox.cancel_meseex(...)`
-4. If a remote job exists and exposes `cancel_job_url`:
+4. If a remote job exists and exposes a cancel URL:
    - `APIClient.cancel_job(...)` sends the provider-specific cancel request
-   - `APISeex` polls until the provider reports `CANCELLED`, or until another terminal state is reached
+   - with `wait=True`, the manager polls until the provider reports `CANCELLED`, or until another terminal state is reached
 5. Once cancellation is confirmed, `MeseexBox` finalizes the local `MrMeseex` as cancelled
 
 ### Important nuance

@@ -38,7 +38,7 @@ def _choice_message(result: dict) -> str:
 def test_connect_chat_extended():
     client = _client()
     job = client.submit_job(
-        "/chat-extended",
+        "/schemas/chat-extended",
         messages=[{"role": "user", "content": "ahoy"}],
         persona="captain",
     )
@@ -51,19 +51,19 @@ def test_connect_response_mapping_variants():
     client = _client()
     chat_payload = {"messages": [{"role": "user", "content": "hi"}]}
 
-    raw = client.submit_job("/chat-raw", **chat_payload).wait_for_result()
+    raw = client.submit_job("/schemas/chat-raw", **chat_payload).wait_for_result()
     assert raw["object"] == "chat.completion"
     assert _choice_message(raw) == "hello there"
 
-    typed = client.submit_job("/chat-typed", **chat_payload).wait_for_result()
+    typed = client.submit_job("/schemas/chat-typed", **chat_payload).wait_for_result()
     assert typed["object"] == "chat.completion"
     assert _choice_message(typed) == "hello there"
 
-    completion = client.submit_job("/completion-raw", prompt="hi").wait_for_result()
+    completion = client.submit_job("/schemas/completion-raw", prompt="hi").wait_for_result()
     assert completion["object"] == "text_completion"
     assert completion["choices"][0]["text"] == "completed"
 
-    embedding = client.submit_job("/embedding-raw", input="hi").wait_for_result()
+    embedding = client.submit_job("/schemas/embedding-raw", input="hi").wait_for_result()
     assert embedding["object"] == "list"
     assert embedding["data"][0]["embedding"] == [0.1, 0.2, 0.3]
 
@@ -71,7 +71,7 @@ def test_connect_response_mapping_variants():
 def test_connect():
     client = _client()
     job = client.submit_job(
-        "/chat-extended",
+        "/schemas/chat-extended",
         messages=[{"role": "user", "content": "ping"}],
     )
     result = job.wait_for_result()
