@@ -81,9 +81,13 @@ fastsdk/
     runpod_open_api_loader.py     # fetch openapi.json through a RunPod serverless job
     replicate_loader.py           # Replicate model -> ServiceDefinition (optional `replicate` dep)
   service_interaction/
-    api_job_manager.py            # composition root + submit + task wiring
+    api_job_manager.py            # composition root + submit + meseex wiring
+    job_tasks.py                  # meseex task implementations (prepare, poll, send, ...)
     job_runtime.py                # per-job lifecycle controller (cancel/stream/assemble + guards)
     async_bridge.py               # single async->sync bridge over the meseex loop
+    provider_factory.py           # provider type resolution + ProviderStack assembly
+    provider_stack_registry.py    # load/cache provider stacks per service id
+    pipeline_planner.py           # ordered meseex task list for one endpoint
     api_seex.py                   # APISeex job handle (a specialized MrMeseex)
     request/                      # APIClient + provider subclasses, FileHandler
     response/                     # ResponseParser, BaseJobResponse, StreamSession, status mapping
@@ -94,7 +98,8 @@ fastsdk/
 ### `FastSDK` (internal singleton)
 One instance per process. It owns:
 - the `Registry` (lazy-created, in-memory by default)
-- the `ApiJobManager` (lazy-created)
+- the `ProviderStackRegistry` (lazy-created)
+- the `ApiJobManager` (lazy-created, receives the stack registry)
 
 and implements `inspect_service`, `register_service` (upsert), `generate_stub`, `connect`.
 All clients and stubs in a process therefore share one registry and one job manager.
@@ -184,16 +189,28 @@ builds the service address for the right scheme. Service IDs are stable
 Transport ownership is split across three files so each concern has one home.
 
 **`ApiJobManager`** (`api_job_manager.py`) is the process-level orchestrator and composition root.
-It owns:
-- provider-specific `APIClient` instances
-- provider-aware `FileHandler`s
-- the `ResponseParser` cache
-- a `MeseexBox` that executes request jobs
-- one `AsyncBridge` shared across jobs
+It wires a ``MeseexBox`` with handlers from ``JobTasks``, owns one shared ``AsyncBridge``,
+and exposes ``submit_job(...)``. It does not load provider stacks, plan pipelines beyond
+delegating to ``PipelinePlanner``, or implement task bodies.
 
-Its job is wiring and submission only: `submit_job(...)` builds an `APISeex` with the exact task
-list for the request, attaches a per-job `JobRuntime`, and summons it into the `MeseexBox`. The
-manager does not own stream slot state, cancel wait loops, or stream-open policy.
+``FastClient`` loads stacks via ``FastSDK.provider_stacks.load(...)`` before submission.
+``submit_job(...)`` calls ``PipelinePlanner.plan(...)``, builds an ``APISeex``, attaches a
+per-job ``JobRuntime``, and summons it into the ``MeseexBox``.
+
+**`ProviderStackRegistry`** (`provider_stack_registry.py`) caches ``ProviderStack`` instances
+per service id. ``load(service_name_or_id, api_key)`` resolves the service from the registry
+and calls ``ProviderFactory.build(...)``. Task handlers and ``JobRuntime`` read stacks through
+this registry.
+
+**`JobTasks`** (`job_tasks.py`) implements the meseex pipeline steps: prepare request, load/upload
+files, send request, poll status, process result. Polling logic and the ``@polling_task`` decorator
+live here, not on the manager.
+
+**`ProviderFactory`** (`provider_factory.py`) resolves provider type from a ``ServiceDefinition``
+and returns a frozen ``ProviderStack``: ``APIClient``, ``FileHandler``, and cached ``ResponseParser``.
+
+**`PipelinePlanner`** (`pipeline_planner.py`) is a pure planner: given a service, endpoint, and
+optional stack, it returns the ordered task names with steps omitted when not needed.
 
 **`JobRuntime`** (`job_runtime.py`) is the per-job lifecycle controller, created once per job. It
 owns one job's transport state:

@@ -63,8 +63,8 @@ class FastClient:
 
         # try to get api key from global settings if not provided
         self.api_key = api_key or self._get_api_key()
-        # This loads the service_def and creates the api_client and the file_handler in the ApiJobManager
-        self.fsdk.api_job_manager.load_api_client(self.service_definition.id, self.api_key)
+        # Load the provider stack (client, file handler, parser) for this service.
+        self.fsdk.provider_stacks.load(self.service_definition.id, self.api_key)
 
     def _resolve_service(self, service, api_key: Optional[str], **load_kwargs) -> ServiceDefinition:
         # A plain string might be a registered service ID/name - check the registry first.

@@ -6,6 +6,7 @@ from apipod_registry.parsers.service_adress_parser import create_service_address
 
 
 from fastsdk.service_interaction import ApiJobManager
+from fastsdk.service_interaction.provider_stack_registry import ProviderStackRegistry
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_url_with_fallback, _load_from_file
 from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref, load_replicate_service
 
@@ -40,6 +41,7 @@ class FastSDK:
     def __init__(self):
         if not hasattr(self, '_initialized'):
             self._service_registry = None
+            self._provider_stacks = None
             self._api_job_manager = None
             # Default verbosity level. Set directly after first init to change it;
             # or before api_job_manager is used the first time.
@@ -55,13 +57,25 @@ class FastSDK:
     @service_registry.setter
     def service_registry(self, value: Registry):
         self._service_registry = value
+        if self._provider_stacks:
+            self._provider_stacks.registry = value
         if self._api_job_manager:
             self._api_job_manager.service_registry = value
 
     @property
+    def provider_stacks(self) -> ProviderStackRegistry:
+        if self._provider_stacks is None:
+            self._provider_stacks = ProviderStackRegistry(self.service_registry)
+        return self._provider_stacks
+
+    @property
     def api_job_manager(self) -> ApiJobManager:
         if self._api_job_manager is None:
-            self._api_job_manager = ApiJobManager(self.service_registry, progress_verbosity=self._progress_verbosity)
+            self._api_job_manager = ApiJobManager(
+                self.service_registry,
+                self.provider_stacks,
+                progress_verbosity=self._progress_verbosity,
+            )
         return self._api_job_manager
 
     @api_job_manager.setter
