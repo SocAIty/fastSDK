@@ -1,7 +1,5 @@
 """Meseex task implementations for the API job pipeline."""
 
-from __future__ import annotations
-
 import logging
 from typing import Any, Dict
 
@@ -19,13 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 class JobTasks:
-    """Async task handlers wired into ``MeseexBox`` for API jobs."""
+    """Async task handlers wired into ``MeseexBox`` for API jobs.
+
+    Meseex always passes the job ticket as the handler's first argument after
+    ``self``. Runtime type is ``APISeex``; the annotation must stay a concrete
+    ``MrMeseex`` subclass (not a string forward ref) so meseex detects it.
+    ``@polling_task`` stays on instance methods because the decorator only
+    supports ``(job)`` or ``(self, job)`` call shapes.
+    """
 
     def __init__(self, stacks: ProviderStackRegistry):
         self._stacks = stacks
 
     def as_task_map(self) -> Dict[str, Any]:
-        """Return the task-name to handler mapping for ``MeseexBox``."""
+        """Return bound handlers for ``MeseexBox``."""
         return {
             "Preparing": self.prepare_request,
             "Load files": self.load_files,
@@ -59,12 +64,27 @@ class JobTasks:
         request_data = job.prev_task_output
         stack = self._stacks.require(job.service_def.id)
 
-        if isinstance(request_data.file_params, MediaDict):
-            non_file_params = request_data.file_params.get_non_file_params(include_urls=True)
-            if non_file_params:
-                request_data.body_params.update(non_file_params)
+        if isinstance(request_data.file_params, MediaDict) and request_data.file_params:
+            if request_data.body_content_type == stack.api_client._JSON_BODY_CONTENT_TYPE:
+                for name, value in request_data.file_params.items():
+                    request_data.body_params[name] = stack.api_client._serialize_json_body_file_value(value)
+                request_data.file_params = {}
+            else:
+                non_file_params = request_data.file_params.get_non_file_params(include_urls=True)
+                if non_file_params:
+                    request_data.body_params.update(non_file_params)
 
-        request_data.file_params = await stack.file_handler.prepare_files_for_send(request_data.file_params)
+                file_model_fields, raw_files = stack.api_client.partition_media_for_multipart(
+                    job.endpoint_def, request_data.file_params
+                )
+                if file_model_fields:
+                    request_data.body_params.update(file_model_fields)
+                request_data.file_params = raw_files
+                request_data.file_params = await stack.file_handler.prepare_files_for_send(
+                    request_data.file_params
+                )
+        elif request_data.file_params:
+            request_data.file_params = await stack.file_handler.prepare_files_for_send(request_data.file_params)
 
         logger.info("send_request | Sending request to %s", request_data.url)
         response = await stack.api_client.send_request(request_data)
@@ -151,13 +171,13 @@ class JobTasks:
 
     async def process_result(self, job: APISeex) -> Any:
         response = job.prev_task_output
+        stack = self._stacks.require(job.service_def.id)
 
         if isinstance(response, StreamingResponse):
             return response
 
         if not isinstance(response, JOB_RESPONSE_TYPES):
-            return response
+            return stack.parser.parse_media(response)
 
-        stack = self._stacks.require(job.service_def.id)
         raw_result = stack.api_client.get_result(response)
         return stack.parser.parse_media(raw_result)

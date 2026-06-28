@@ -17,6 +17,8 @@ from typing import Any, AsyncIterator, Callable, Iterator, Optional
 
 import httpx
 
+from fastsdk.service_interaction.response.sse_assembly import chunk_text
+
 
 class StreamSession:
     """One open streaming response, consumable exactly once.
@@ -48,6 +50,11 @@ class StreamSession:
     @property
     def is_sse(self) -> bool:
         return "text/event-stream" in self.content_type
+
+    @staticmethod
+    def chunk_text(chunk: Any) -> str:
+        """Extract text from a stream chunk (OpenAI SSE JSON or plain string)."""
+        return chunk_text(chunk)
 
     # ------------------------------------------------------------------
     # Producer (runs on the meseex loop)
@@ -114,7 +121,7 @@ class StreamSession:
         if not line or line.startswith(":"):  # blank or comment/keep-alive
             return _SKIP
         if not line.startswith("data:"):
-            return _SKIP
+            return line
         data = line[len("data:"):].strip()
         if data == "[DONE]":
             return _DONE
