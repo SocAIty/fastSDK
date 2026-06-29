@@ -24,7 +24,7 @@ from typing import Any, Iterable, Optional
 import pytest
 
 import fastsdk
-from apipod_registry.schemas.service_definitions import (
+from socaity_schemas.service_definitions import (
     EndpointDefinition,
     EndpointParameter,
     ParameterDefinition,

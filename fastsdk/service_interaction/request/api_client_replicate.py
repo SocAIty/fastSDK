@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from apipod_registry.schemas.service_definitions import EndpointDefinition
+from socaity_schemas.service_definitions import EndpointDefinition
 
 
 class APIClientReplicate(APIClient):

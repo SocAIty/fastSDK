@@ -8,7 +8,7 @@ This example shows how to:
 3. Create and manage service families and categories
 """
 
-from apipod_registry.schemas.service_definitions import (
+from socaity_schemas.service_definitions import (
     ServiceFamily, ServiceCategory, ModelDefinition, ServiceDefinition
 )
 from apipod_registry import Registry

@@ -1,6 +1,6 @@
 from apipod_registry import Registry
-from apipod_registry.schemas.service_definitions import ServiceDefinition, ModelDefinition
-from apipod_registry.schemas.service_definitions import RunpodServiceAddress, SocaityServiceAddress, ReplicateServiceAddress
+from socaity_schemas.service_definitions import ServiceDefinition, ModelDefinition
+from socaity_schemas.service_definitions import RunpodServiceAddress, SocaityServiceAddress, ReplicateServiceAddress
 from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
-from apipod_registry.schemas.service_definitions import (
+from socaity_schemas.service_definitions import (
     ServiceDefinition,
     ServiceAddress,
     RunpodServiceAddress,

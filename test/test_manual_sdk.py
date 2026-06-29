@@ -2,7 +2,7 @@ import fastsdk
 from fastsdk.fastClient import FastClient
 from media_toolkit import ImageFile, MediaFile, MediaList
 from typing import Union
-from apipod_registry.schemas.service_definitions import ServiceAddress
+from socaity_schemas.service_definitions import ServiceAddress
 import os
 
 

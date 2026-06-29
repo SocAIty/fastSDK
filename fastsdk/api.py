@@ -13,7 +13,7 @@ These functions wrap the FastSDK singleton so users never have to deal with it d
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
-from apipod_registry.schemas.service_definitions import ServiceDefinition
+from socaity_schemas.service_definitions import ServiceDefinition
 
 from fastsdk.fastSDK import FastSDK
 

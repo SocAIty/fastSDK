@@ -156,5 +156,5 @@ fastSDK is MIT-licensed and free to use. Leave a star to support us!
 
 ---
 <p align="center">
-  Made with ❤️ by <a href="https://socaity.ai">SocAIty</a>
+  Made with ❤️ by <a href="https://www.socaity.ai?utm_source=github&utm_content=fastsdk-20-29-06-2026">SocAIty</a>
 </p>

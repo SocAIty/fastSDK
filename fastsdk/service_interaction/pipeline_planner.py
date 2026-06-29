@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from apipod_registry.schemas.service_definitions import EndpointDefinition, ServiceDefinition
+from socaity_schemas.service_definitions import EndpointDefinition, ServiceDefinition
 
 from fastsdk.service_interaction.provider_factory import ProviderStack
 

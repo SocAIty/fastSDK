@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from apipod_registry.schemas.service_definitions import (
+from socaity_schemas.service_definitions import (
     ServiceDefinition, EndpointDefinition, EndpointParameter, ParameterDefinition
 )
 from apipod_registry.utils.normalization import normalize_name_for_py

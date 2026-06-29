@@ -15,7 +15,7 @@ from typing import Optional
 import httpx
 from media_toolkit.utils.dependency_requirements import requires
 
-from apipod_registry.schemas.service_definitions import ServiceDefinition
+from socaity_schemas.service_definitions import ServiceDefinition
 from apipod_registry.parsers import parse_service_definition
 from apipod_registry.parsers.service_adress_parser import create_service_address
 

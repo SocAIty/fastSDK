@@ -3,7 +3,7 @@ import json
 import httpx
 from urllib.parse import urlencode
 
-from apipod_registry.schemas.service_definitions import ServiceDefinition, EndpointDefinition
+from socaity_schemas.service_definitions import ServiceDefinition, EndpointDefinition
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaFile, MediaDict
 

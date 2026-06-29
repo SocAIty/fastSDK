@@ -1,4 +1,4 @@
-from apipod_registry.schemas.service_definitions import ServiceDefinition
+from socaity_schemas.service_definitions import ServiceDefinition
 
 
 import importlib.util

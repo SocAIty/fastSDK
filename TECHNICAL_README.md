@@ -107,7 +107,7 @@ Advanced users can swap the registry (e.g. for a persistent or DB-backed one) vi
 `FastSDK().service_registry = Registry(service_store=...)`.
 
 ### `ServiceDefinition` and `Registry`
-These define the internal contract for a service (from `apipod_registry`):
+These define the internal contract for a service (from `socaity_schemas.service_definitions`, used by `apipod_registry`):
 - endpoints and parameters
 - provider metadata
 - service address
