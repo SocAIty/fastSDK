@@ -208,6 +208,15 @@ class APIClient:
     def _uses_json_request_body(cls, endpoint: EndpointDefinition) -> bool:
         return getattr(endpoint, "request_body_content_type", None) == cls._JSON_BODY_CONTENT_TYPE
 
+    @staticmethod
+    def _is_json_object_request_body(param) -> bool:
+        schema = getattr(param, "param_schema", None) or {}
+        if not isinstance(schema, dict):
+            return False
+        if schema.get("type") == "object" and schema.get("properties"):
+            return True
+        return bool(schema.get("properties"))
+
 
     def format_request_params(self, endpoint: EndpointDefinition, data: dict) -> RequestData:
         """Prepare all request parameters for the endpoint."""
@@ -224,6 +233,12 @@ class APIClient:
 
         rq = RequestData(body_content_type=body_content_type)
         embed_files_in_json_body = self._uses_json_request_body(endpoint)
+        body_params = [p for p in endpoint.parameters if p.location == "body"]
+        single_json_object_body = (
+            embed_files_in_json_body
+            and len(body_params) == 1
+            and self._is_json_object_request_body(body_params[0])
+        )
 
         for param in endpoint.parameters:
             param_value = data.get(param.name, param.default)
@@ -260,7 +275,17 @@ class APIClient:
                 rq.query_params[param.name] = param_value
             elif param.location == "body":
                 if param_value is not None:
-                    rq.body_params[param.name] = param_value
+                    if single_json_object_body and param.name == body_params[0].name:
+                        if isinstance(param_value, dict):
+                            rq.body_params.update(param_value)
+                        elif hasattr(param_value, "model_dump"):
+                            rq.body_params.update(
+                                param_value.model_dump(mode="json", exclude_none=True)
+                            )
+                        else:
+                            rq.body_params[param.name] = param_value
+                    else:
+                        rq.body_params[param.name] = param_value
 
         rq.url = self._build_request_url(endpoint, rq.query_params)
         rq.headers = self._add_authorization_to_headers(rq.headers)
