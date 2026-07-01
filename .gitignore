@@ -163,6 +163,7 @@ cython_debug/
 .idea/
 
 # other
+output/
 fastsdk/test/output/
 test/output/*
 
