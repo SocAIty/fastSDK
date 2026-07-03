@@ -1,19 +1,13 @@
 from typing import Optional
 
 from .api_client import APIClient, APIKeyError, RequestData
-from apipod_registry.definitions.service_definitions import (
+from socaity_schemas.service_definitions import (
     EndpointDefinition,
     SocaityServiceAddress,
 )
 import httpx
 import json
 from urllib.parse import urlparse
-# Must stay aligned with apipodgate endpoint_builder.parameter_utils (_is_llm_schema).
-_LLM_BODY_SCHEMA_TITLES = frozenset({
-    "ChatCompletionRequest",
-    "CompletionRequest",
-    "EmbeddingRequest",
-})
 
 
 class APIClientSocaity(APIClient):
@@ -39,24 +33,9 @@ class APIClientSocaity(APIClient):
         links = getattr(response, "links", None)
         return links.cancel if links else None
 
-    @staticmethod
-    def _endpoint_uses_json_body(endpoint: EndpointDefinition) -> bool:
-        """APIPod gateway uses Body(JSON) for LLM schemas and RunPod-like /run endpoints."""
-        # 1. LLM schemas
-        for param in endpoint.parameters or []:
-            if param.location != "body":
-                continue
-            schema = param.param_schema or {}
-            if isinstance(schema, dict) and schema.get("title") in _LLM_BODY_SCHEMA_TITLES:
-                return True
-
-        # 2. RunPod-like endpoints (/run, /runsync) with an 'input' parameter
-        path = (endpoint.path or "").strip("/")
-        if path in ("run", "runsync"):
-            for param in endpoint.parameters or []:
-                if param.name == "input" and param.location == "body":
-                    return True
-        return False
+    def get_stream_url(self, response) -> Optional[str]:
+        links = getattr(response, "links", None)
+        return links.stream if links else None
 
     def _endpoint_for_url(self, url: str) -> Optional[EndpointDefinition]:
         url_path = urlparse(url).path
@@ -64,7 +43,6 @@ class APIClientSocaity(APIClient):
             path = getattr(ep, "path", None) or ""
             if not path:
                 continue
-            # Match if URL path ends with endpoint path exactly
             if url_path.endswith(path):
                 return ep
         return None
@@ -76,26 +54,23 @@ class APIClientSocaity(APIClient):
             "headers": request_data.headers,
             "timeout": timeout_s,
         }
-        
-        endpoint = self._endpoint_for_url(request_data.url)
-        use_json = False
-        if not request_data.file_params:
-            if endpoint is not None and self._endpoint_uses_json_body(endpoint):
-                use_json = True
 
-        if use_json:
-            kwargs["json"] = request_data.body_params
+        endpoint = self._endpoint_for_url(request_data.url)
+        content_type = getattr(endpoint, "request_body_content_type", None) if endpoint else None
+
+        if content_type == "application/json":
+            kwargs["json"] = {k: v for k, v in request_data.body_params.items() if v is not None}
         else:
-            # SocAIty gateway expects form fields for non-LLM routes.
+            # SocAIty gateway expects form fields for routes without a JSON requestBody.
             # We manually JSON-serialize nested objects so they are valid JSON strings (double quotes).
             form_data = {}
-            for k, v in request_data.body_params.items():
-                if v is None:
+            for key, value in request_data.body_params.items():
+                if value is None:
                     continue
-                if isinstance(v, (dict, list)):
-                    form_data[k] = json.dumps(v)
+                if isinstance(value, (dict, list)):
+                    form_data[key] = json.dumps(value)
                 else:
-                    form_data[k] = v
+                    form_data[key] = value
             kwargs["data"] = form_data
             if request_data.file_params:
                 kwargs["files"] = request_data.file_params

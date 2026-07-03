@@ -1,4 +1,5 @@
 """
+Note: This test should be moved to APIPodRegistry tests.
 Example demonstrating how to use the fastsdk Registry.
 
 This example shows how to:
@@ -7,7 +8,7 @@ This example shows how to:
 3. Create and manage service families and categories
 """
 
-from apipod_registry.definitions.service_definitions import (
+from socaity_schemas.service_definitions import (
     ServiceFamily, ServiceCategory, ModelDefinition, ServiceDefinition
 )
 from apipod_registry import Registry
@@ -77,7 +78,7 @@ def main():
     # For example purposes, we'll use placeholder data
     try:
         # In a real application, use actual OpenAPI spec URLs
-        sd_service = manager.add_service(
+        sd_service = manager.register_service(
             "sd_service", 
             "https://api.example.com/sd_api/openapi.json"
         )

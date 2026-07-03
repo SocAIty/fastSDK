@@ -2,6 +2,39 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Run current file",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
+            }
+        },
+        {
+            "name": "Run test apipod debug test services",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_apipod_debug_test_services.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry;${workspaceFolder}/../socaity-schemas"
+            }
+        },
+        {
+            "name": "Run test replicate",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_replicate.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
+            }
+        },
+        {
             "name": "Test manual SDK",
             "type": "debugpy",
             "request": "launch",
@@ -28,6 +61,17 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/test_client_from_runpod_serverless.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder};${workspaceFolder}/../fastCloud;${workspaceFolder}/../media-toolkit;${workspaceFolder}/../meseex;${workspaceFolder}/../APIPodRegistry"
+            }
+        },
+        {
+            "name": "Run test_localhost_services",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_localhost_services.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {

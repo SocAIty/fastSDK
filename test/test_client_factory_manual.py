@@ -12,12 +12,8 @@ current_path = Path(__file__).parent.parent
 sys.path.append(str(current_path))
 
 # Now we can import from fastsdk
-from fastsdk.sdk_factory import create_sdk  # noqa: E402
-from apipod_registry import Registry  # noqa: E402
-from apipod_registry.definitions.service_definitions import (  # noqa: E402
-    ServiceDefinition, EndpointDefinition, EndpointParameter,
-    ServiceAddress
-)
+import fastsdk  # noqa: E402
+from apipod_registry.parsers.service_adress_parser import parse_service_address
 
 
 def main():
@@ -92,21 +88,18 @@ def main():
         ]
     )
 
-    # Register the service with the Registry
-    Registry._services[service.id] = service
-    
-    # Create a client for this service
+    # Generate a client stub for this service (also registers it in the registry)
     output_dir = Path(__file__).parent / "generated_clients"
-    client_path = create_sdk(
-        service_definition=service,
+    stub = fastsdk.generate_stub(
+        service,
         save_path=str(output_dir),
         class_name="ExampleService"
     )
     
-    print(f"Client generated at: {client_path}")
+    print(f"Client stub generated at: {stub.path}")
     
     # Print the contents of the generated file
-    with open(client_path, "r") as f:
+    with open(stub.path, "r") as f:
         print("\nGenerated client code:")
         print("-" * 50)
         print(f.read())

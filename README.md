@@ -8,120 +8,158 @@
   <a href="https://github.com/SocAIty/fastSDK"><img src="https://img.shields.io/badge/github-SocAIty%2FfastSDK-76B900?labelColor=000000" alt="GitHub"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-76B900?labelColor=000000" alt="License"></a>
 </p>
+<h3 align="center" style="margin-top:-10px">Call any AI / web service like a native Python function</h3>
 
-<h3 align="center">Turn any hosted service into a typed Python client.</h3>
+fastSDK turns any hosted service — OpenAPI/FastAPI, [APIPod](https://github.com/SocAIty/APIPod), [RunPod](https://www.runpod.io), [Replicate](https://replicate.com), [Cog](https://github.com/replicate/cog) — into a Python client that feels like a local library: typed methods, file upload/download, async job handling and parallel execution included.
 
-<p align="center">
-  Point fastSDK at an OpenAPI spec and get a Python client with a method per endpoint,<br>
-  typed parameters, file uploads, and job handling. Call web APIs like plain functions.
-</p>
+Point it at a service. Call it like a function. That's the whole idea.
 
-## Why
+```python
+import fastsdk
 
-You built a web service with [FastAPI](https://github.com/tiangolo/fastapi), Flask, [Cog](https://github.com/replicate/cog), or [APIPod](https://github.com/SocAIty/APIPod). Now you need a Python client.
+client = fastsdk.connect("http://localhost:8009")
+job = client.submit_job("/text2voice", text="hello world")
+audio = job.get_result()
+audio.save("hello.mp3")
+```
 
-Hand-writing one with `requests` works until it does not. You add endpoints. You run calls in parallel. You transfer a 1GB video and the request times out. You fall into threading and asyncio complexity, and the client drifts out of sync with the API.
+## Why fastSDK?
 
-fastSDK generates the client from your spec. Endpoints become typed methods. Files upload and stream. Long-running calls return a job you can wait on or cancel. The heavy I/O runs concurrently under the hood through [meseex](https://github.com/SocAIty/meseex), so your code stays synchronous and simple.
+Calling a web service from Python sounds trivial until you actually do it in production:
+you wait synchronously on long-running ML jobs, you hand-write request code for every endpoint, you fight with file uploads (try sending a 1 GB video through `requests`), you poll job status loops, and you reinvent threading to run requests in parallel.
 
-## Install
+fastSDK solves exactly that, and nothing else:
+
+- **One call = one job.** Every call returns a job object immediately. Get the result when you need it, run hundreds of jobs in parallel meanwhile.
+- **Files just work.** Images, audio, video are handled by [media-toolkit](https://github.com/SocAIty/media-toolkit) — local paths, URLs, bytes or numpy arrays in; media objects out. Large files are uploaded via cloud storage (S3, Azure) when configured.
+- **Job-based providers are normalized.** Replicate, RunPod serverless, APIPod and Socaity all expose "submit, then poll" APIs with different wire formats. fastSDK handles submission, polling, progress and cancellation uniformly.
+- **Codegen when you want it, not when you don't.** Use `connect()` for instant access, or `generate_stub()` to get a typed `.py` client with one method per endpoint - autocomplete and docstrings included.
+
+## Installation
 
 ```bash
-pip install fastsdk
+pip install fastsdk           # core
+pip install fastsdk[replicate]  # + Replicate model support
 ```
 
-## Quick start
+## Get started
 
-Grab your service's `openapi.json` (usually at `http://localhost:8000/openapi.json`), then generate a client:
+### Option A: connect — use a service right now
+
+No files, no codegen. Works with a URL, an `openapi.json` path, or a Replicate model reference.
 
 ```python
-from fastsdk import FastSDK
+import fastsdk
 
-# generate a client file from the spec
-FastSDK().create_sdk("openapi.json", save_path="my_service.py", class_name="MyService")
+client = fastsdk.connect("http://localhost:8009")
+job = client.submit_job("/text2voice", text="hello world")
+result = job.get_result()
 ```
 
-The generated file has one method per endpoint, with every parameter and default. Import it and call it:
+### Option B: generate_stub — typed clients for real projects
+
+Generates a `.py` file with one typed method per endpoint. This is your SDK.
 
 ```python
-from my_service import MyService
+import fastsdk
 
-client = MyService(api_key="my_api_key")
-job = client.my_method(...)          # returns a job immediately, does not block
-result = job.wait_for_result()       # typed result back
+stub = fastsdk.generate_stub("http://localhost:8009", save_path="clients/")
+print(stub.path, stub.class_name)
+
+# use it immediately ...
+client = stub.client()
+job = client.text2voice(text="hello world")
+
+# ... or import it in your next run like any other module
+# from clients.speechcraft import speechcraft
+# client = speechcraft()
 ```
 
-Need a one-off client without writing a file? Skip generation:
+Re-running `generate_stub` is safe: the file is overwritten and the service registration is updated, not duplicated.
+
+### Replicate models
+
+Official models (called via `/v1/models/{owner}/{name}/predictions`) and community models (called via `/v1/predictions` with a version) are resolved automatically — you just name the model:
 
 ```python
-from fastsdk import FastSDK
+import fastsdk  # requires: pip install fastsdk[replicate] and REPLICATE_API_KEY
 
-client = FastSDK().create_temporary_client("openapi.json", api_key="my_api_key")
+stub = fastsdk.generate_stub("replicate:black-forest-labs/flux-schnell", save_path="clients/")
+flux = stub.client()
+job = flux(prompt="a t-rex on a skateboard")
+image = job.get_result()
 ```
 
-## Jobs
-
-Every endpoint call returns a job. Start many, collect them later.
+### Working with jobs
 
 ```python
-job = client.my_method(...)
+job = client.swap_img_to_img(source_img="face1.jpg", target_img="face2.jpg")
+job.get_result()          # block until done and return the result
+job.cancel()              # cancel locally and remotely (provider permitting)
 
-job.wait_for_result()   # block until done, return the typed result
-job.cancel()            # cancel locally if queued, or ask the provider to cancel
+# run many jobs in parallel - this is where fastSDK shines
+jobs = [client.text2voice(text=t) for t in hundred_texts]
+results = fastsdk.gather_results(jobs)
 ```
 
-For job-based providers (APIPod, Runpod, Socaity, Replicate), fastSDK polls remote status and reports progress until the job reaches a terminal state.
+### API keys
 
-## Files
+Pass `api_key=...` to `connect()`, `generate_stub()` or the client constructor — or set environment variables: `REPLICATE_API_KEY`, `RUNPOD_API_KEY`, `SOCAITY_API_KEY`, or `<SERVICE_ID>_API_KEY` for your own services.
 
-File parameters accept paths or [media-toolkit](https://github.com/SocAIty/media-toolkit) objects. Large files upload to cloud storage ([Azure Blob](https://azure.microsoft.com/products/storage/blobs/), [Amazon S3](https://aws.amazon.com/s3/)) and are passed by URL; results come back as typed media objects you can save.
+## The four concepts
 
-```python
-from fastsdk import ImageFile
+| Concept | What it is |
+|---|---|
+| **Service definition** | The parsed, normalized description of a service: endpoints, parameters, address, provider type. Get one with `fastsdk.inspect_service(source)` — it has no side effects. |
+| **Registry** | An in-process directory of service definitions, shared by all clients. `register_service()` adds to it; generated stubs look their service up in it by ID. |
+| **Client** | The runtime object you call (`FastClient`). It submits jobs to the service. `connect()` gives you a generic one instantly. |
+| **Stub** | A generated `.py` file containing a client subclass with one typed method per endpoint. Made by `generate_stub()`; it's plain code — read it, version it, ship it. |
 
-job = client.swap_img_to_img("face_1.jpg", "face_2.jpg")
-result = job.wait_for_result()
-result.save("swapped.jpg")
-```
+## CLI
 
-`MediaFile`, `ImageFile`, `VideoFile`, and `AudioFile` are importable straight from the package.
+Everything above also works from the terminal — same verbs, same behavior:
 
-## API keys
+```bash
+# What can this service do?
+fastsdk inspect http://localhost:8009
 
-Pass the key when you create the client, or read it from the environment:
+# Generate a typed client stub
+fastsdk generate http://localhost:8009 -o clients/ --name SpeechCraft
+fastsdk generate replicate:black-forest-labs/flux-schnell --api-key r8_...
 
-```python
-import os
-from my_service import MyService
+# Call an endpoint without writing any code (curl for AI services)
+fastsdk call http://localhost:8009 /text2voice --text "hello world" -o hello.mp3
 
-client = MyService(api_key=os.getenv("MY_API_KEY"))
+# Keep services around by name (persisted in ~/.fastsdk/registry)
+fastsdk registry add http://localhost:8009 --name speechcraft
+fastsdk registry list
+fastsdk call speechcraft /text2voice --text "hi again"
 ```
 
 ## Service compatibility
 
 Works out of the box with:
+- [APIPod](https://github.com/SocAIty/APIPod) services (job-based, the natural counterpart to fastSDK)
+- [Replicate](https://replicate.com) models (official and community)
+- [RunPod serverless](https://www.runpod.io/serverless-gpu) endpoints
+- [Cog](https://github.com/replicate/cog) services
+- Any OpenAPI 3.0 service ([FastAPI](https://github.com/tiangolo/fastapi), [Flask](https://flask.palletsprojects.com/), ...)
+- [Socaity.ai](https://www.socaity.ai) services
 
-| Provider | Notes |
-|----------|-------|
-| OpenAPI 3.0 / REST | FastAPI, Flask, any compliant spec |
-| [APIPod](https://github.com/SocAIty/APIPod) | job-based services |
-| [Runpod](https://github.com/runpod/runpod-python) | serverless GPU endpoints |
-| [Cog](https://github.com/replicate/cog) | Replicate-style services |
-| [Socaity](https://www.socaity.ai) | hosted models |
-| [Replicate](https://www.replicate.com) | prediction APIs |
-
-## fastSDK and APIPod
+## fastSDK + APIPod
 
 <img src="https://github.com/SocAIty/APIPod/blob/main/docs/fastsdk_to_apipod.png?raw=true" width="50%" />
 
-[APIPod](https://github.com/SocAIty/APIPod) builds and deploys the services. fastSDK calls them. Two halves of the same client-to-service loop, designed for long-running ML and data workloads.
+[APIPod](https://github.com/SocAIty/APIPod) builds and deploys the services; fastSDK consumes them. Two beating hearts :two_hearts: for service ↔ client interaction.
 
-## Architecture
 
-For internals (definition layer, runtime pipeline, cancellation, how meseex fits in) see [TECHNICAL_README.md](TECHNICAL_README.md).
+## Contribute
 
-## Status
+We at SocAIty want to provide the best tools to bring generative AI to the cloud.
+Report bugs, ideas and feature requests in the issues section.
+fastSDK is MIT-licensed and free to use. Leave a star to support us!
 
-Alpha. Syntax and surface change rapidly. Bug reports, ideas, and pull requests are welcome in the issues section.
-
-fastSDK is licensed under [GPLv3](LICENSE) and free to use. Leave a star to support us.
+---
+<p align="center">
+  Made with ❤️ by <a href="https://www.socaity.ai?utm_source=github&utm_content=fastsdk-20-29-06-2026">SocAIty</a>
+</p>

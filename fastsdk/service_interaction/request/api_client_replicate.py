@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from apipod_registry.definitions.service_definitions import EndpointDefinition
+from socaity_schemas.service_definitions import EndpointDefinition
 
 
 class APIClientReplicate(APIClient):
@@ -33,6 +33,10 @@ class APIClientReplicate(APIClient):
         urls = getattr(response, "urls", None)
         return urls.cancel if urls else f"v1/predictions/{response.id}/cancel"
 
+    def get_stream_url(self, response) -> Optional[str]:
+        urls = getattr(response, "urls", None)
+        return urls.stream if urls else None
+
     def get_result(self, response) -> Any:
         return getattr(response, "output", None)
 
@@ -43,8 +47,10 @@ class APIClientReplicate(APIClient):
         request_data.query_params = {}
         request_data.file_params = {}
 
+        # Replicate throws errors for keys with value None and expects to remove them.
+        body = {k: v for k, v in request_data.body_params.items() if v is not None}
         # replicate formats the body as json with {"input": body_params, "version?": model_version}
-        body = {"input": request_data.body_params}
+        body = {"input": body}
         # Add version parameter for community models to get params to make predictions
         if request_data.url and "/predictions" in request_data.url:
             version = getattr(self.service_def.service_address, "version", None)
