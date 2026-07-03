@@ -1,0 +1,119 @@
+<!doctype html>
+<!-- fastSDK README banner, derived from the socaity SDK banner (socaity/docs/assets/banner.html),
+     re-aimed at the fastSDK developer story. Render to PNG @2x via headless Chrome:
+     "Google Chrome" --headless --screenshot=banner.png --window-size=1280,380 --force-device-scale-factor=2 \
+       --hide-scrollbars --default-background-color=00000000 banner.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* --- real brand tokens (socaity_frontend/plugins/vuetify.ts: socaityDark) --- */
+  :root{
+    --void:#000000; --surface:#0F0F0F; --surface-container:#161616;
+    --neon:#76B900; --silicon:#0A86BF; --creator:#7C3AED; --rose:#EC4899;
+    --text:#FFFFFF; --text-2:#B0B0B0; --text-3:#707070; --border:#222222;
+    --syntax-keyword:#c084fc; --syntax-function:#60a5fa; --syntax-decorator:#f472b6;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:var(--void)}
+  .banner{
+    position:relative; width:1280px; height:380px; overflow:hidden;
+    background:var(--void); display:flex; align-items:center;
+    font-family:'Roboto',system-ui,sans-serif; color:var(--text);
+  }
+  /* --- HeroGlow: dual neon+silicon radial orbs on black --- */
+  .glow{position:absolute; inset:0; pointer-events:none}
+  .glow-1{opacity:.7;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(118,185,0,.35) 0%, transparent 35%),
+      radial-gradient(circle at 70% 30%, rgba(10,134,191,.25) 0%, transparent 35%);}
+  .glow-2{opacity:.5;
+    background:
+      radial-gradient(circle at 82% 72%, rgba(10,134,191,.20) 0%, transparent 26%),
+      radial-gradient(circle at 18% 82%, rgba(118,185,0,.15) 0%, transparent 26%);}
+  .grid{position:absolute; inset:0; opacity:.04;
+    background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
+    background-size:40px 40px;}
+
+  .wrap{position:relative; z-index:1; display:flex; align-items:center; gap:48px;
+        width:100%; padding:0 56px;}
+  .left{flex:1; min-width:0}
+
+  /* pill badge (framework-badge) */
+  .badge{display:inline-flex; align-items:center; gap:8px; padding:7px 16px; border-radius:999px;
+    background:rgba(118,185,0,.08); border:1px solid rgba(118,185,0,.2); margin-bottom:22px;}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--neon);box-shadow:0 0 10px rgba(118,185,0,.9)}
+  .badge span{font:700 11px/1 'JetBrains Mono',monospace; letter-spacing:.14em; text-transform:uppercase; color:var(--text-2)}
+
+  /* logo + separator + title */
+  .titlerow{display:flex; align-items:center; margin-bottom:18px}
+  .logo{width:74px;height:74px;flex:none;filter:drop-shadow(0 0 16px rgba(118,185,0,.25))}
+  .sep{width:1px;height:90px;background:#fff;opacity:.15;margin:0 22px}
+  h1{font:700 44px/1 'Roboto',sans-serif; letter-spacing:-2px}
+  h1 .neon{color:var(--neon)}
+  h1 .creator{color:var(--creator)}
+  .tagline{font:500 17px/1 'JetBrains Mono',monospace; letter-spacing:.15em; text-transform:uppercase;
+    margin-top:10px; color:var(--text)}
+  .tagline .info{color:var(--silicon)}
+
+  .subtitle{font:500 16px/1.6 'Roboto',sans-serif; color:var(--text-2); max-width:440px; margin-top:6px}
+  .subtitle .w{color:var(--text)}
+  .subtitle .q{font-family:'JetBrains Mono',monospace; color:var(--neon); font-size:.92em}
+
+  /* macOS code window (right column) */
+  .window{flex:none; width:572px; border-radius:14px; overflow:hidden;
+    background:var(--surface-container); border:1px solid rgba(118,185,0,.3);
+    box-shadow:0 25px 50px -12px rgba(0,0,0,.5), 0 0 40px rgba(118,185,0,.12);}
+  .titlebar{display:flex; align-items:center; gap:8px; padding:11px 16px; background:var(--surface);
+    border-bottom:1px solid var(--border)}
+  .titlebar .d{width:12px;height:12px;border-radius:50%}
+  .d.r{background:#ff5f56}.d.y{background:#ffbd2e}.d.g{background:#27c93f}
+  .titlebar .fn{margin-left:10px; font:400 13px/1 'JetBrains Mono',monospace; color:rgba(255,255,255,.45)}
+  .titlebar .st{margin-left:auto; font:500 12px/1 'JetBrains Mono',monospace; color:var(--neon)}
+  .bar{height:3px;background:var(--neon);opacity:.6}
+  pre{margin:0; padding:20px 22px; background:var(--surface);
+    font:400 12px/1.9 'JetBrains Mono',monospace; color:rgba(255,255,255,.82); white-space:pre}
+  .k{color:var(--syntax-keyword)} .fn2{color:var(--syntax-function)} .s{color:var(--neon)}
+  .c{color:var(--text-3)}
+</style>
+</head>
+<body>
+  <div class="banner">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="grid"></div>
+    <div class="wrap">
+      <div class="left">
+        <div class="badge"><span class="dot"></span><span>Python SDK Generator, OpenAPI to Typed Client</span></div>
+        <div class="titlerow">
+          <img class="logo" src="./fastsdk_logo.png" alt="fastSDK">
+          <div class="sep"></div>
+          <div>
+            <h1>Any service.<br>One typed <span class="neon">client</span>.</h1>
+            <div class="tagline">pip install <span class="info">fastsdk</span></div>
+          </div>
+        </div>
+        <p class="subtitle"><span class="w">Turn any hosted service into a typed Python client.</span><br>
+          Point it at an OpenAPI spec, get autocomplete, files, and jobs.<span class="q"> Call APIs like functions.</span></p>
+      </div>
+
+      <div class="window">
+        <div class="titlebar">
+          <span class="d r"></span><span class="d y"></span><span class="d g"></span>
+          <span class="fn">quickstart.py</span><span class="st">fastsdk</span>
+        </div>
+        <div class="bar"></div>
+<pre><span class="k">from</span> fastsdk <span class="k">import</span> FastSDK
+
+FastSDK().create_sdk(<span class="s">"openapi.json"</span>, save_path=<span class="s">"my_service.py"</span>)
+
+<span class="k">from</span> my_service <span class="k">import</span> MyService
+job = MyService(api_key=<span class="s">"..."</span>).my_method(...)  <span class="c"># typed, returns a job</span></pre>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

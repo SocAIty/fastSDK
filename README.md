@@ -1,7 +1,12 @@
-
-<h1 align="center" style="margin-top:-25px">fastSDK</h1>
 <p align="center">
-  <img align="center" src="docs/fastsdk_logo.png" height="256" />
+  <img src="docs/assets/banner.png" alt="fastSDK. Any service. One typed client." width="100%" />
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/fastsdk/"><img src="https://img.shields.io/pypi/v/fastsdk?labelColor=000000&color=76B900" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/fastsdk/"><img src="https://img.shields.io/pypi/pyversions/fastsdk?labelColor=000000&color=76B900" alt="Python versions"></a>
+  <a href="https://github.com/SocAIty/fastSDK"><img src="https://img.shields.io/badge/github-SocAIty%2FfastSDK-76B900?labelColor=000000" alt="GitHub"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-76B900?labelColor=000000" alt="License"></a>
 </p>
 <h3 align="center" style="margin-top:-10px">Call any AI / web service like a native Python function</h3>
 
