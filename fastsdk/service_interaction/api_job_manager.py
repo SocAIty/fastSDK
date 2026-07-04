@@ -53,7 +53,7 @@ class ApiJobManager:
             tasks=tasks,
             name=seex_name,
         )
-        job.runtime = d(
+        job.runtime = JobRuntime(
             job=job,
             api_client=stack.api_client if stack else None,
             parser=stack.parser if stack else None,
