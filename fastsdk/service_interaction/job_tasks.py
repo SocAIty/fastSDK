@@ -41,14 +41,14 @@ class JobTasks:
         }
 
     async def prepare_request(self, job: APISeex) -> RequestData:
-        stack = self._stacks.require(job.service_def.id)
-        return stack.api_client.format_request_params(job.endpoint_def, job.input)
+        stack = self._stacks.require(job.service.id)
+        return stack.api_client.format_request_params(job.endpoint, job.input)
 
     async def load_files(self, job: APISeex) -> RequestData:
         request_data = job.prev_task_output
         if not request_data.file_params:
             return request_data
-        stack = self._stacks.require(job.service_def.id)
+        stack = self._stacks.require(job.service.id)
         request_data.file_params = await stack.file_handler.load_files_from_disk(request_data.file_params)
         return request_data
 
@@ -56,13 +56,13 @@ class JobTasks:
         request_data = job.prev_task_output
         if not request_data.file_params:
             return request_data
-        stack = self._stacks.require(job.service_def.id)
+        stack = self._stacks.require(job.service.id)
         request_data.file_params = await stack.file_handler.upload_files(request_data.file_params)
         return request_data
 
     async def send_request(self, job: APISeex) -> Any:
         request_data = job.prev_task_output
-        stack = self._stacks.require(job.service_def.id)
+        stack = self._stacks.require(job.service.id)
 
         if isinstance(request_data.file_params, MediaDict) and request_data.file_params:
             if request_data.body_content_type == stack.api_client._JSON_BODY_CONTENT_TYPE:
@@ -75,7 +75,7 @@ class JobTasks:
                     request_data.body_params.update(non_file_params)
 
                 file_model_fields, raw_files = stack.api_client.partition_media_for_multipart(
-                    job.endpoint_def, request_data.file_params
+                    job.endpoint, request_data.file_params
                 )
                 if file_model_fields:
                     request_data.body_params.update(file_model_fields)
@@ -118,7 +118,7 @@ class JobTasks:
         if not isinstance(parsed_response, JOB_RESPONSE_TYPES):
             return parsed_response
 
-        stack = self._stacks.require(job.service_def.id)
+        stack = self._stacks.require(job.service.id)
 
         try:
             http_response = await stack.api_client.poll_status(parsed_response)
@@ -171,7 +171,7 @@ class JobTasks:
 
     async def process_result(self, job: APISeex) -> Any:
         response = job.prev_task_output
-        stack = self._stacks.require(job.service_def.id)
+        stack = self._stacks.require(job.service.id)
 
         if isinstance(response, StreamingResponse):
             return response

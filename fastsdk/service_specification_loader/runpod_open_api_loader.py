@@ -1,8 +1,7 @@
 from fastsdk.fastClient import FastClient
-from socaity_schemas.service_definitions import (
-    ServiceDefinition, EndpointDefinition
-)
-from apipod_registry.parsers.service_adress_parser import create_service_address
+from apipod_registry import create_service
+from socaity_schemas.contract import Endpoint, ServiceContract
+from socaity_schemas.platform import AIService
 from typing import Any, Dict
 import uuid
 
@@ -14,45 +13,42 @@ if TYPE_CHECKING:
 class RunpodOpenAPILoader:
     """
     Simplified loader for fetching OpenAPI specifications from RunPod APIPod endpoints.
-    Polls the service_definition from the runpod serverless apipod server and creates a temporary service definition.
+    Fetches the openapi spec through a RunPod serverless job using a temporary AIService.
     Uses Registry and ApiJobManager infrastructure instead of implementing logic from scratch.
     """
-    
+
     def __init__(self, runpod_url: str, api_key: str):
         self.runpod_url = runpod_url
         self.api_key = api_key
 
-        # Create temporary service definition
-        self.service_def = self._create_temp_service_definition()
-        
-        # Add service to manager and configure API client
-        self.client = FastClient(self.service_def, api_key=self.api_key, temporary=True)
+        # Create temporary service
+        self.service = self._create_temp_service()
 
-    def _create_temp_service_definition(self) -> ServiceDefinition:
-        """Create a temporary service definition for the RunPod OpenAPI endpoint"""
-        # Create service address using existing parser
-        service_address = create_service_address(self.runpod_url, "runpod")
-        
-        # Create endpoint definition for OpenAPI spec endpoint
-        openapi_endpoint = EndpointDefinition(
-            id="openapi.json",
-            path="/openapi.json",  # Virtual path for our use case
-            timeout_s=1800.0  # Reasonable timeout for OpenAPI spec requests
+        # Add service to manager and configure API client
+        self.client = FastClient(self.service, api_key=self.api_key, temporary=True)
+
+    def _create_temp_service(self) -> AIService:
+        """Create a temporary AIService whose only endpoint fetches /openapi.json through the runtime."""
+        contract = ServiceContract(
+            title="Temp RunPod OpenAPI Loader",
+            specification="openapi",
+            has_job_queue=True,  # RunPod serverless answers /run with a job envelope
+            endpoints=[
+                Endpoint(
+                    path="/openapi.json",  # Virtual path routed through the RunPod job body
+                    method="POST",
+                    operation_id="openapi.json",
+                    timeout_hint_s=1800.0,
+                )
+            ],
         )
-        
-        # Create temporary service definition
-        service_def = ServiceDefinition(
-            id=f"temp_runpod_openapi_{uuid.uuid4().hex[:8]}",
-            display_name="Temp RunPod OpenAPI Loader",
-            service_address=service_address,
-            specification="runpod",
-            endpoints=[openapi_endpoint],
-            category=None,  # No specific category for temporary OpenAPI loader
-            family_id=None  # No family association for temporary service
+        return create_service(
+            contract,
+            address=self.runpod_url,
+            provider="runpod",
+            service_id=f"temp_runpod_openapi_{uuid.uuid4().hex[:8]}",
         )
-        
-        return service_def
-        
+
     def load_openapi_spec_async(self) -> 'APISeex':
         """
         Load OpenAPI specification asynchronously using ApiJobManager.
@@ -61,7 +57,7 @@ class RunpodOpenAPILoader:
         # Submit job through ApiJobManager with path parameter
         job = self.client.submit_job(endpoint_id="openapi.json")
         return job
-    
+
     def load_openapi_spec(self) -> Dict[str, Any]:
         """
         Load OpenAPI specification synchronously.

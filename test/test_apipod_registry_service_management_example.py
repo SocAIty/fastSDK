@@ -1,161 +1,118 @@
 """
 Note: This test should be moved to APIPodRegistry tests.
-Example demonstrating how to use the fastsdk Registry.
+Example demonstrating how to use the apipod_registry Registry.
 
 This example shows how to:
-1. Add service definitions from OpenAPI specs
-2. Query services by ID, name, family, and category
-3. Create and manage service families and categories
+1. Add AIServices built from service contracts
+2. Query services by ID, name, model, and category
+3. Create and manage models and categories
 """
 
-from socaity_schemas.service_definitions import (
-    ServiceFamily, ServiceCategory, ModelDefinition, ServiceDefinition
-)
-from apipod_registry import Registry
+from apipod_registry import Registry, create_service
+from socaity_schemas.contract import ServiceContract
+from socaity_schemas.platform import AIModel, AIService, ServiceCategory
 
 
 def main():
     # Create a service manager
     manager = Registry()
-    
+
     # Add service categories
     image_category = ServiceCategory(
         id="img_generation",
+        name="img_generation",
         display_name="Image Generation",
-        input_domain="text",
-        output_domain="image",
+        input_modalities=["text"],
+        output_modalities=["image"],
         description="Services that generate images from text prompts"
     )
     manager.add_category(image_category)
-    
+
     text_category = ServiceCategory(
         id="text_generation",
+        name="text_generation",
         display_name="Text Generation",
-        input_domain="text",
-        output_domain="text",
+        input_modalities=["text"],
+        output_modalities=["text"],
         description="Services that generate text from text prompts"
     )
     manager.add_category(text_category)
-    
-    # Add service families
-    stable_diffusion_family = ServiceFamily(
-        id="stable_diffusion",
-        display_name="Stable Diffusion",
-        description="Stable Diffusion image generation models",
-        short_desc="Text-to-image models"
-    )
-    manager.add_family(stable_diffusion_family)
-    
-    llama_family = ServiceFamily(
-        id="llama",
-        display_name="Llama",
-        description="Meta's Llama large language models",
-        short_desc="Text generation models"
-    )
-    manager.add_family(llama_family)
-    
+
     # Add models
-    sd_model = ModelDefinition(
+    sd_model = AIModel(
         id="sd_xl",
+        name="sd_xl",
         display_name="Stable Diffusion XL",
-        author="Stability AI",
-        license="CreativeML Open RAIL-M",
-        paper_url="https://arxiv.org/abs/2307.01952"
+        family="stable_diffusion",
     )
     manager.add_model(sd_model)
-    
-    llama_model = ModelDefinition(
+
+    llama_model = AIModel(
         id="llama3",
+        name="llama3",
         display_name="Llama 3",
-        author="Meta AI",
-        license="Meta Llama 3 License",
-        paper_url="https://ai.meta.com/llama/"
+        family="llama",
     )
     manager.add_model(llama_model)
-    
-    # Add services from OpenAPI specs
-    # This would typically load from a URL or file path
-    # For example purposes, we'll use placeholder data
-    try:
-        # In a real application, use actual OpenAPI spec URLs
-        sd_service = manager.register_service(
-            "sd_service", 
-            "https://api.example.com/sd_api/openapi.json"
-        )
-        print(f"Added service: {sd_service.display_name}")
-    except (ValueError, TypeError) as e:
-        # We're using a dummy URL, so this will likely fail
-        print(f"Could not add service: {e}")
-        
-        # Create a ServiceDefinition manually for demo purposes
-        sd_service = ServiceDefinition(
-            id="sd_service",
-            display_name="Stable Diffusion API",
-            description="API for generating images with Stable Diffusion",
-            specification="socaity",
-            category=["img_generation"],  # Reference to category ID
-            family_id="stable_diffusion",  # Reference to family ID
-            used_models=[sd_model]  # Reference to model
-        )
-        manager._services[sd_service.id] = sd_service
-        print(f"Created demo service: {sd_service.display_name}")
-        
-        llm_service = ServiceDefinition(
-            id="llama_service",
-            display_name="Llama API",
-            description="API for generating text with Llama models",
-            specification="socaity",
-            category=["text_generation"],  # Reference to category ID
-            family_id="llama",  # Reference to family ID
-            used_models=[llama_model]  # Reference to model
-        )
-        manager._services[llm_service.id] = llm_service
-        print(f"Created demo service: {llm_service.display_name}")
-    
+
+    # Create AIServices manually for demo purposes (usually parsed from a spec
+    # via fastsdk.register_service or apipod_registry.materialize_contract).
+    sd_service: AIService = create_service(
+        ServiceContract(title="Stable Diffusion API", description="API for generating images with Stable Diffusion"),
+        service_id="sd_service",
+    )
+    sd_service.categories = ["img_generation"]
+    sd_service.models = [sd_model]
+    manager.add_service(sd_service)
+    print(f"Created demo service: {sd_service.display_name}")
+
+    llm_service: AIService = create_service(
+        ServiceContract(title="Llama API", description="API for generating text with Llama models"),
+        service_id="llama_service",
+    )
+    llm_service.categories = ["text_generation"]
+    llm_service.models = [llama_model]
+    manager.add_service(llm_service)
+    print(f"Created demo service: {llm_service.display_name}")
+
     # Demonstrate service queries
-    
+
     # Get service by ID
     service = manager.get_service("sd_service")
     if service:
         print(f"\nService by ID: {service.display_name}")
-    
+
     # Get service by name
     service = manager.get_service("Stable Diffusion API")
     if service:
         print(f"Service by name: {service.display_name}")
-    
-    # Get services by family
-    services = manager.get_services_by_family("llama")
+
+    # Get services by model
+    services = manager.get_services_by_model("llama3")
     if services:
-        print("\nServices in Llama family:")
+        print("\nServices using Llama 3:")
         for svc in services:
             print(f"- {svc.display_name}")
-    
+
     # Get services by category
     services = manager.get_services_by_category("img_generation")
     if services:
         print("\nImage generation services:")
         for svc in services:
             print(f"- {svc.display_name}")
-    
-    # Demonstrate other features
-    
+
     # List all categories
     print("\nAll categories:")
     for category in manager.list_categories():
         print(f"- {category.display_name}")
-    
-    # List all families
-    print("\nAll families:")
-    for family in manager.list_families():
-        print(f"- {family.display_name}")
-    
-    # Update a service
-    manager.update_service("sd_service", display_name="Stable Diffusion XL API")
+
+    # Update a service (add_service is an upsert)
+    sd_service.display_name = "Stable Diffusion XL API"
+    manager.add_service(sd_service)
     service = manager.get_service("sd_service")
     if service:
         print(f"\nUpdated service name: {service.display_name}")
 
 
 if __name__ == "__main__":
-    main() 
+    main()

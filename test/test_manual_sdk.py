@@ -2,7 +2,6 @@ import fastsdk
 from fastsdk.fastClient import FastClient
 from media_toolkit import ImageFile, MediaFile, MediaList
 from typing import Union
-from socaity_schemas.service_definitions import ServiceAddress
 import os
 
 
@@ -37,7 +36,7 @@ class testFace2Face(FastClient):
 
 def register_service_def_localhost_runpod():
     service_definition = fastsdk.register_service(
-        "test/test_files/face2face.json", service_id="face2face", specification="runpod", service_address=ServiceAddress(url="http://localhost:8020")
+        "test/test_files/face2face.json", service_id="face2face", provider="runpod", service_address="http://localhost:8020"
     )
     return service_definition
 
@@ -51,7 +50,7 @@ def register_service_def_localhost_apipod():
 
 def register_service_def_local_socaity_backend():
     service_definition = fastsdk.register_service(
-        "test/test_files/face2face.json", service_id="face2face", specification="apipod", service_address="http://localhost:8001/v1/face2face"
+        "test/test_files/face2face.json", service_id="face2face", service_address="http://localhost:8001/v1/face2face"
     )
     return service_definition
 

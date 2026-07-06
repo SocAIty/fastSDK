@@ -1,4 +1,4 @@
-from socaity_schemas.service_definitions import ServiceDefinition
+from socaity_schemas.platform import AIService
 
 
 import importlib.util
@@ -13,13 +13,13 @@ class FastStub:
     Result of generate_stub(). Holds everything you need to use the generated client stub:
     - path: where the .py file was written (import it from there in your next run)
     - class_name: the name of the generated class inside that file
-    - service_definition: the parsed service the stub was generated from
+    - service: the parsed AIService the stub was generated from
     - client(): import the generated file and return a ready-to-use client instance
     """
-    def __init__(self, path: str, class_name: str, service_definition: ServiceDefinition):
+    def __init__(self, path: str, class_name: str, service: AIService):
         self.path: str = path
         self.class_name: str = class_name
-        self.service_definition: ServiceDefinition = service_definition
+        self.service: AIService = service
 
     def client(self, api_key: Optional[str] = None) -> 'FastClient':
         """Import the generated stub file and return an instance of the generated client class."""
@@ -30,17 +30,17 @@ class FastStub:
         return client_cls(api_key=api_key)
 
     def __iter__(self) -> Iterator:
-        # Backwards compatibility: allows `path, class_name, sd = generate_stub(...)`
-        return iter((self.path, self.class_name, self.service_definition))
-    
+        # Allows `path, class_name, service = generate_stub(...)`
+        return iter((self.path, self.class_name, self.service))
+
     def __str__(self) -> str:
-        return f"FastStub(path={self.path}, class_name={self.class_name}, service_definition={self.service_definition})"
-    
+        return f"FastStub(path={self.path}, class_name={self.class_name}, service={self.service})"
+
     def __repr__(self) -> str:
         return self.__str__()
-    
+
     def __eq__(self, other: 'FastStub') -> bool:
-        return self.path == other.path and self.class_name == other.class_name and self.service_definition == other.service_definition
-    
+        return self.path == other.path and self.class_name == other.class_name and self.service == other.service
+
     def __hash__(self) -> int:
-        return hash((self.path, self.class_name, self.service_definition))
+        return hash((self.path, self.class_name, self.service))

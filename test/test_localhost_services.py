@@ -16,7 +16,7 @@ def test_generate_stub():
     stub = fastsdk.generate_stub(service_url, save_path="test/output/speechcraft.py")
     assert stub.path.endswith("speechcraft.py")
     assert stub.class_name
-    assert stub.service_definition is not None
+    assert stub.service is not None
 
     # use the stub immediately, without a separate import step
     client = stub.client()
@@ -29,7 +29,7 @@ def test_generate_stub():
 
 def test_inspect_and_customize():
     sd = fastsdk.inspect_service(service_url)
-    assert sd.endpoints
+    assert sd.deployments[0].contract.endpoints
 
     stub = fastsdk.generate_stub(sd, save_path="test/output/custom_save_path.py", class_name="CustomService", service_name="custom_service")
     assert stub.class_name == "CustomService"

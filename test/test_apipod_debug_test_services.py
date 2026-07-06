@@ -13,7 +13,7 @@ Run ``debug_test_services.py`` with the **apipod** project venv, not fastsdk's.
 Use fastsdk's venv only for ``test_apipod_debug_test_services.py``.
 
 Set ``APIPOD_DEBUG_TEST_SERVICE_URL`` when the service listens elsewhere.
-``specification="apipod"`` keeps job polling correct for queue-backed launch modes.
+Job polling follows the parsed contract's ``has_job_queue`` for queue-backed launch modes.
 """
 from __future__ import annotations
 
@@ -24,12 +24,13 @@ from typing import Any, Iterable, Optional
 import pytest
 
 import fastsdk
-from socaity_schemas.service_definitions import (
-    EndpointDefinition,
+from fastsdk.service_access import service_contract
+from socaity_schemas.contract import (
+    Endpoint,
     EndpointParameter,
     ParameterDefinition,
-    ServiceDefinition,
 )
+from socaity_schemas.platform import AIService
 from media_toolkit import MediaFile, VideoFile
 
 from fastsdk.service_interaction.response.sse_assembly import assemble_stream_bytes, chunk_text
@@ -52,25 +53,25 @@ MEDIA_RETURN_PATH_MARKERS = (
 )
 
 
-def _is_native_runpod_gateway(service_def: ServiceDefinition) -> bool:
+def _is_native_runpod_gateway(service: AIService) -> bool:
     """True when the service exposes RunPod's generic /run API (APIPOD_NATIVE=true)."""
-    paths = {endpoint.path for endpoint in service_def.endpoints}
+    paths = {endpoint.path for endpoint in service_contract(service).endpoints}
     return "/run" in paths and not any("/core/" in path for path in paths)
 
 
-def _service_def() -> ServiceDefinition:
-    service_def = fastsdk.inspect_service(SERVICE_URL)
-    if _is_native_runpod_gateway(service_def):
+def _service_def() -> AIService:
+    service = fastsdk.inspect_service(SERVICE_URL)
+    if _is_native_runpod_gateway(service):
         pytest.skip(
             "Native RunPod local API (APIPOD_NATIVE=true) exposes only /run. "
             "Run the suite with serverless-runpod without APIPOD_NATIVE, or plain/serverless modes."
         )
-    return service_def
+    return service
 
 
 def _client():
     api_key = os.environ.get("APIPOD_DEBUG_TEST_SERVICE_API_KEY")
-    return fastsdk.connect(SERVICE_URL, api_key=api_key, specification="apipod")
+    return fastsdk.connect(SERVICE_URL, api_key=api_key)
 
 
 def _test_files() -> dict[str, str]:
@@ -152,7 +153,7 @@ def _param_has_file_format(param: EndpointParameter) -> bool:
     return False
 
 
-def _kwargs_for_endpoint(endpoint: EndpointDefinition, files: dict[str, str]) -> dict[str, Any]:
+def _kwargs_for_endpoint(endpoint: Endpoint, files: dict[str, str]) -> dict[str, Any]:
     kwargs = {}
     for param in endpoint.parameters:
         if param.name == "stream":
@@ -164,20 +165,20 @@ def _kwargs_for_endpoint(endpoint: EndpointDefinition, files: dict[str, str]) ->
     return kwargs
 
 
-def _endpoint_by_suffix(service_def: ServiceDefinition, suffix: str) -> Optional[EndpointDefinition]:
+def _endpoint_by_suffix(service: AIService, suffix: str) -> Optional[Endpoint]:
     normalized_suffix = suffix if suffix.startswith("/") else f"/{suffix}"
-    for endpoint in service_def.endpoints:
+    for endpoint in service_contract(service).endpoints:
         if endpoint.path.rstrip("/").endswith(normalized_suffix.rstrip("/")):
             return endpoint
     return None
 
 
-def _require_stream_endpoint(service_def: ServiceDefinition, leaf: str) -> EndpointDefinition:
+def _require_stream_endpoint(service: AIService, leaf: str) -> Endpoint:
     """Resolve /text, /video or streaming /chat without colliding with schema routes."""
     suffix = leaf if leaf.startswith("/") else f"/{leaf}"
     candidates = [
         endpoint
-        for endpoint in service_def.endpoints
+        for endpoint in service_contract(service).endpoints
         if endpoint.path.rstrip("/").endswith(suffix.rstrip("/"))
         and ("/streaming/" in f"{endpoint.path}/" or endpoint.path.count("/") == 1)
     ]
@@ -225,7 +226,7 @@ def _coalesce_bytes(value: Any) -> bytes:
     raise AssertionError(f"Expected bytes-like stream result, got {type(value)!r}")
 
 
-def _is_infrastructure_endpoint(endpoint: EndpointDefinition) -> bool:
+def _is_infrastructure_endpoint(endpoint: Endpoint) -> bool:
     """Skip job control routes exposed in OpenAPI (status/cancel/stream)."""
     path = endpoint.path.rstrip("/")
     segments = [segment for segment in path.split("/") if segment and not segment.startswith("{")]
@@ -236,7 +237,7 @@ def _is_infrastructure_endpoint(endpoint: EndpointDefinition) -> bool:
     return False
 
 
-def _is_dedicated_stream_endpoint(endpoint: EndpointDefinition) -> bool:
+def _is_dedicated_stream_endpoint(endpoint: Endpoint) -> bool:
     """Endpoints covered by test_streaming_* rather than the generic iteration loop."""
     path = endpoint.path.rstrip("/")
     if path.endswith("/health"):
@@ -250,14 +251,14 @@ def _is_dedicated_stream_endpoint(endpoint: EndpointDefinition) -> bool:
     return path.count("/") == 1
 
 
-def _returns_media(endpoint: EndpointDefinition) -> bool:
+def _returns_media(endpoint: Endpoint) -> bool:
     path = endpoint.path.rstrip("/")
     if path.endswith("-none"):
         return False
     return any(marker in path for marker in MEDIA_RETURN_PATH_MARKERS)
 
 
-def _assert_known_result(endpoint: EndpointDefinition, result: Any) -> None:
+def _assert_known_result(endpoint: Endpoint, result: Any) -> None:
     path = endpoint.path.rstrip("/")
 
     if path.endswith("/predict"):
@@ -291,7 +292,7 @@ def test_iterate_all_endpoints():
     service_def = _service_def()
     files = _test_files()
 
-    for endpoint in service_def.endpoints:
+    for endpoint in service_contract(service_def).endpoints:
         if _is_dedicated_stream_endpoint(endpoint) or _is_infrastructure_endpoint(endpoint):
             continue
 
@@ -372,7 +373,7 @@ def test_media_results_are_media_toolkit_files():
     files = _test_files()
     checked = 0
 
-    for endpoint in service_def.endpoints:
+    for endpoint in service_contract(service_def).endpoints:
         if not _returns_media(endpoint):
             continue
 

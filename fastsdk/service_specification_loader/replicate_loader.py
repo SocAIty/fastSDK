@@ -1,12 +1,12 @@
 """
-Loads Replicate models as ServiceDefinitions.
+Loads Replicate models as AIServices.
 
 Replicate has two different invocation URL schemes:
 - Official models:  POST https://api.replicate.com/v1/models/{owner}/{name}/predictions (no version needed)
 - Community models: POST https://api.replicate.com/v1/predictions with the model version id in the body
 
 This loader fetches the model's openapi schema via the `replicate` package (optional dependency)
-and builds a ServiceDefinition with the correct service address for either scheme.
+and builds an AIService with the correct service address for either scheme.
 """
 import os
 import re
@@ -15,9 +15,8 @@ from typing import Optional
 import httpx
 from media_toolkit.utils.dependency_requirements import requires
 
-from socaity_schemas.service_definitions import ServiceDefinition
-from apipod_registry.parsers import parse_service_definition
-from apipod_registry.parsers.service_adress_parser import create_service_address
+from apipod_registry import create_service, materialize_contract
+from socaity_schemas.platform import AIService
 
 
 _MODEL_REF_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$")
@@ -66,16 +65,16 @@ def parse_replicate_model_ref(source) -> Optional[str]:
 
 
 @requires("replicate")
-def load_replicate_service(model_ref: str, api_key: Optional[str] = None) -> ServiceDefinition:
+def load_replicate_service(model_ref: str, api_key: Optional[str] = None) -> AIService:
     """
-    Load a Replicate model as a ServiceDefinition by fetching its openapi schema from the Replicate API.
+    Load a Replicate model as an AIService by fetching its openapi schema from the Replicate API.
 
     Args:
         model_ref: Model reference in the form "owner/name" (see parse_replicate_model_ref).
         api_key: Replicate API key. Falls back to the REPLICATE_API_KEY environment variable.
 
     Returns:
-        ServiceDefinition with specification="replicate" and the correct service address
+        AIService with a provider="replicate" deployment and the correct service address
         for official ("models" scheme) or community ("predictions" scheme) models.
     """
     import replicate
@@ -92,12 +91,9 @@ def load_replicate_service(model_ref: str, api_key: Optional[str] = None) -> Ser
     if model.latest_version is None:
         raise ValueError(f"Replicate model '{model_ref}' has no published version; cannot load its openapi schema.")
 
-    service_def = parse_service_definition(model.latest_version.openapi_schema)
-    service_def.id = f"replicate-{model.owner}-{model.name}"
-    service_def.display_name = f"{model.owner}/{model.name}"
-    service_def.specification = "replicate"
-    if model.description:
-        service_def.description = model.description
+    # materialize_contract with provider="replicate" marks the contract job-based
+    # (Replicate wraps every model in its predictions job API).
+    contract = materialize_contract(model.latest_version.openapi_schema, provider="replicate")
 
     if _is_official_model(model, api_key):
         # Official models: version-less calls to the models endpoint.
@@ -105,9 +101,19 @@ def load_replicate_service(model_ref: str, api_key: Optional[str] = None) -> Ser
     else:
         # Community models: calls go to /v1/predictions; the version id is sent in the request body.
         address = f"https://api.replicate.com/v1/predictions/{model.latest_version.id}"
-    service_def.service_address = create_service_address(address, "replicate")
 
-    return service_def
+    service = create_service(
+        contract,
+        address=address,
+        provider="replicate",
+        service_id=f"replicate-{model.owner}-{model.name}",
+        name=f"{model.owner}/{model.name}",
+    )
+    service.display_name = f"{model.owner}/{model.name}"
+    if model.description:
+        service.description = model.description
+
+    return service
 
 
 def _is_official_model(model, api_key: str) -> bool:

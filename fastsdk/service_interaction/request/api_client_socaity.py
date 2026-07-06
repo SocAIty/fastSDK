@@ -1,10 +1,8 @@
 from typing import Optional
 
 from .api_client import APIClient, APIKeyError, RequestData
-from socaity_schemas.service_definitions import (
-    EndpointDefinition,
-    SocaityServiceAddress,
-)
+from socaity_schemas.contract import Endpoint
+from fastsdk.service_access import service_contract
 import httpx
 import json
 from urllib.parse import urlparse
@@ -16,8 +14,7 @@ class APIClientSocaity(APIClient):
         self.poll_method = "GET"
 
     def validate_api_key(self) -> bool:
-        service_address = self.service_def.service_address
-        if not isinstance(service_address, SocaityServiceAddress) or "api.socaity.ai" not in service_address.base_url:
+        if self.address is None or "api.socaity.ai" not in self.address.base_url:
             return True
         if self.api_key is None:
             raise APIKeyError("API key is required for Socaity API.", "socaity", "https://www.socaity.ai/")
@@ -37,9 +34,9 @@ class APIClientSocaity(APIClient):
         links = getattr(response, "links", None)
         return links.stream if links else None
 
-    def _endpoint_for_url(self, url: str) -> Optional[EndpointDefinition]:
+    def _endpoint_for_url(self, url: str) -> Optional[Endpoint]:
         url_path = urlparse(url).path
-        for ep in self.service_def.endpoints or []:
+        for ep in service_contract(self.service).endpoints:
             path = getattr(ep, "path", None) or ""
             if not path:
                 continue

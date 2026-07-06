@@ -4,12 +4,13 @@ import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from fastsdk.service_interaction.response.response_schemas import SocaityJobResponse
-from socaity_schemas.service_definitions import RunpodServiceAddress, EndpointDefinition
+from socaity_schemas.contract import Endpoint
+from socaity_schemas.contract.address import service_url
 
 
 class APIClientRunpod(APIClient):
     def validate_api_key(self) -> bool:
-        if not isinstance(self.service_def.service_address, RunpodServiceAddress): # pass for non officially hosted or localhost services
+        if self.address is None or "api.runpod.ai" not in self.address.base_url:  # pass for non officially hosted or localhost services
             return True
         if self.api_key is None:
             raise APIKeyError("API key is required for Runpod API.", "runpod", "https://www.runpod.io/")
@@ -17,9 +18,9 @@ class APIClientRunpod(APIClient):
             raise APIKeyError("Invalid API key. It should look like 'rpa_...'. ", "runpod", "https://www.runpod.io/")
         return True
 
-    def _build_request_url(self, endpoint: EndpointDefinition, query_params: dict | None = None) -> str:
+    def _build_request_url(self, endpoint: Endpoint, query_params: dict | None = None) -> str:
         # Overwrites the default implementation, because query parameters are not added to the url but to the body
-        url = self.service_def.service_address.url.strip("/")  # don't use strip("/run") it will remove the letters / r u and n.
+        url = service_url(self.address).strip("/")  # don't use strip("/run") it will remove the letters / r u and n.
         if url.endswith("/run"):
             url = url[:-4]  # Remove "/run" suffix
         return f"{url}/run"
@@ -33,7 +34,7 @@ class APIClientRunpod(APIClient):
     def get_result(self, response) -> Any:
         return getattr(response, "output", None)
 
-    def format_request_params(self, endpoint: EndpointDefinition, *args, **kwargs) -> RequestData:
+    def format_request_params(self, endpoint: Endpoint, *args, **kwargs) -> RequestData:
         """Prepare request parameters for Runpod API."""
         request_data = super().format_request_params(endpoint, *args, **kwargs)
 

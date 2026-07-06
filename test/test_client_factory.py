@@ -9,8 +9,8 @@ def test_apipod_client():
     stub = fastsdk.generate_stub("test/test_files/face2face.json", save_path="test/output/face2face.py", class_name="face2face")
     assert stub.class_name == "face2face"
 
-    # We assign an url to the service definition to use the local service and to be able to init it.
-    fastsdk.FastSDK().update_service(stub.service_definition.id, service_address="http://localhost:8020/", persist_changes=False)
+    # We assign an url to the service to use the local service and to be able to init it.
+    fastsdk.FastSDK().update_service(stub.service.id, service_address="http://localhost:8020/")
     f2f = stub.client()
 
     # check presence of method
