@@ -8,7 +8,7 @@ from socaity_schemas.contract.address import endpoint_url, resolve_url
 from socaity_schemas.platform import AIService
 from fastsdk.service_access import service_address
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from media_toolkit import MediaFile, MediaDict
+from media_toolkit import MediaFile, MediaDict, MediaList
 
 
 class APIKeyError(Exception):
@@ -200,6 +200,10 @@ class APIClient:
         """Convert a file field to APIPod FileModel JSON for application/json bodies."""
         if isinstance(value, MediaFile):
             return value.to_json()
+        if isinstance(value, (list, tuple, MediaList)):
+            # List-typed schema fields (e.g. images: List[ImageFileModel]) arrive
+            # as a MediaList after file loading; serialize item by item.
+            return [cls._serialize_json_body_file_value(item) for item in value]
         if cls._is_file_model_dict(value):
             return value
         return value
