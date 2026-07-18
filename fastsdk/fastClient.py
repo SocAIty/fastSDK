@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import os
 
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import AIService, PriceEstimate
 
 from fastsdk.fastSDK import FastSDK
 from fastsdk.service_access import service_provider
@@ -60,7 +60,6 @@ class FastClient:
             raise ValueError("Provide a service source (URL, file, dict, AIService) or a registered service ID/name.")
 
         if service_name_or_id is not None:
-            # Strict lookup path used by generated stubs.
             self.service = self.fsdk.service_registry.get_service(service_name_or_id)
             if not self.service:
                 raise ValueError(
@@ -72,7 +71,6 @@ class FastClient:
 
         # try to get api key from global settings if not provided
         self.api_key = api_key or self._get_api_key()
-        # Load the provider stack (client, file handler, parser) for this service.
         self.fsdk.provider_stacks.load(self.service.id, self.api_key)
 
     def _resolve_service(self, service, api_key: Optional[str], **load_kwargs) -> AIService:
@@ -87,16 +85,27 @@ class FastClient:
         return self.fsdk.register_service(service, api_key=api_key, update_existing=not self.temporary, **load_kwargs)
 
     def _get_api_key(self):
-        # for global services
         env_var = _PROVIDER_API_KEY_ENV.get(service_provider(self.service))
         if env_var:
             return os.getenv(env_var, None)
-
-        # for locals try by service_id
         return os.getenv(self.service.id.upper() + "_API_KEY", None)
 
     def submit_job(self, endpoint_id: str, **kwargs) -> 'APISeex':
         return self.fsdk.api_job_manager.submit_job(self.service.id, endpoint_id, data=kwargs)
+
+    def estimate(self, endpoint_path: str, **params) -> PriceEstimate:
+        """Estimate price and runtime. Implemented by the Socaity provider API client.
+
+        Requires ``socaity-cli`` when the provider is Socaity (signaled via ``@requires``).
+        """
+        stack = self.fsdk.provider_stacks.require(self.service.id)
+        estimate_fn = getattr(stack.api_client, "estimate", None)
+        if estimate_fn is None:
+            raise NotImplementedError(
+                "estimate() is only available for Socaity-hosted services "
+                f"(provider client: {type(stack.api_client).__name__})"
+            )
+        return estimate_fn(endpoint_path, **params)
 
     def close(self):
         """Remove the service from the registry if this client registered it temporarily."""
@@ -104,7 +113,6 @@ class FastClient:
             try:
                 self.fsdk.service_registry.remove_service(self.service.id)
             except Exception:
-                # Ignore errors during cleanup (e.g., if FastSDK is already destroyed)
                 pass
             self.temporary = False
 
