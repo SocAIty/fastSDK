@@ -13,41 +13,45 @@ sys.path.append(str(current_path))
 
 # Now we can import from fastsdk
 import fastsdk  # noqa: E402
-from apipod_registry.parsers.service_adress_parser import parse_service_address
+from apipod_registry import create_service  # noqa: E402
+from socaity_schemas.contract import (  # noqa: E402
+    Endpoint,
+    EndpointParameter,
+    ParameterDefinition,
+    ServiceContract,
+)
 
 
 def main():
     """Main function demonstrating client factory usage."""
-    # Create an example service definition
-    service = ServiceDefinition(
-        id="example-service",
-        display_name="Example Service",
+    # Create an example service from a handwritten contract
+    contract = ServiceContract(
+        title="Example Service",
         description="An example service for demonstration purposes",
-        service_address=ServiceAddress(url="https://api.example.com"),
         endpoints=[
-            EndpointDefinition(
-                id="swap-faces",
+            Endpoint(
+                operation_id="swap-faces",
                 path="/swap-img-to-img",
                 display_name="Swap Images",
                 description="Swap faces between two images",
                 parameters=[
                     EndpointParameter(
                         name="source_img",
-                        type="image",
+                        definition=ParameterDefinition(type="string", format="image"),
                         required=True,
                         location="body",
                         description="Source image containing the face(s) to swap from"
                     ),
                     EndpointParameter(
                         name="target_img",
-                        type="image",
+                        definition=ParameterDefinition(type="string", format="image"),
                         required=True,
                         location="body",
                         description="Target image containing the face(s) to swap to"
                     ),
                     EndpointParameter(
                         name="enhance_face_model",
-                        type="string",
+                        definition=ParameterDefinition(type="string"),
                         required=False,
                         default="gpen_bfr_512",
                         location="body",
@@ -55,29 +59,29 @@ def main():
                     )
                 ]
             ),
-            EndpointDefinition(
-                id="swap-video",
+            Endpoint(
+                operation_id="swap-video",
                 path="/swap-video-to-video",
                 display_name="Swap Video",
                 description="Swap faces in a video",
                 parameters=[
                     EndpointParameter(
                         name="faces",
-                        type="file",
+                        definition=ParameterDefinition(type="string", format="file"),
                         required=True,
                         location="body",
                         description="The face(s) to swap to"
                     ),
                     EndpointParameter(
                         name="media",
-                        type="file",
+                        definition=ParameterDefinition(type="string", format="file"),
                         required=True,
                         location="body",
                         description="The image or video to swap faces in"
                     ),
                     EndpointParameter(
                         name="enhance_face_model",
-                        type="string",
+                        definition=ParameterDefinition(type="string"),
                         required=False,
                         default="gpen_bfr_512",
                         location="body",
@@ -87,6 +91,7 @@ def main():
             )
         ]
     )
+    service = create_service(contract, address="https://api.example.com", service_id="example-service")
 
     # Generate a client stub for this service (also registers it in the registry)
     output_dir = Path(__file__).parent / "generated_clients"

@@ -3,9 +3,12 @@ import json
 import httpx
 from urllib.parse import urlencode
 
-from socaity_schemas.service_definitions import ServiceDefinition, EndpointDefinition
+from socaity_schemas.contract import Endpoint
+from socaity_schemas.contract.address import endpoint_url, resolve_url
+from socaity_schemas.platform import AIService
+from fastsdk.service_access import service_address
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from media_toolkit import MediaFile, MediaDict
+from media_toolkit import MediaFile, MediaDict, MediaList
 
 
 class APIKeyError(Exception):
@@ -51,9 +54,10 @@ class APIClient:
         _FORM_BODY_CONTENT_TYPE,
     )
 
-    def __init__(self, service_def: ServiceDefinition, api_key: str = None):
+    def __init__(self, service: AIService, api_key: str = None):
         self.__client = None
-        self.service_def = service_def
+        self.service = service
+        self.address = service_address(service)
         self.api_key = api_key
         self.validate_api_key()
         self.poll_method = "POST"
@@ -103,10 +107,10 @@ class APIClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
-    def _build_request_url(self, endpoint: EndpointDefinition, query_params: Dict = None) -> str:
-        if not self.service_def.service_address:
+    def _build_request_url(self, endpoint: Endpoint, query_params: Dict = None) -> str:
+        if not self.address:
             return None
-        base_url = self.service_def.service_address.build_endpoint_url(endpoint.path)
+        base_url = endpoint_url(self.address, endpoint.path)
         if query_params:
             query_string = urlencode(query_params, doseq=True)
             return f"{base_url}?{query_string}"
@@ -155,7 +159,7 @@ class APIClient:
             return True
         return cls._schema_accepts_binary_upload(param)
 
-    def partition_media_for_multipart(self, endpoint: EndpointDefinition, files: MediaDict) -> tuple[dict, MediaDict]:
+    def partition_media_for_multipart(self, endpoint: Endpoint, files: MediaDict) -> tuple[dict, MediaDict]:
         """Split loaded media into FileModel JSON body fields and raw multipart uploads."""
         file_model_body = {}
         raw_files = {}
@@ -196,6 +200,10 @@ class APIClient:
         """Convert a file field to APIPod FileModel JSON for application/json bodies."""
         if isinstance(value, MediaFile):
             return value.to_json()
+        if isinstance(value, (list, tuple, MediaList)):
+            # List-typed schema fields (e.g. images: List[ImageFileModel]) arrive
+            # as a MediaList after file loading; serialize item by item.
+            return [cls._serialize_json_body_file_value(item) for item in value]
         if cls._is_file_model_dict(value):
             return value
         return value
@@ -205,7 +213,7 @@ class APIClient:
         return isinstance(value, (str, int, float, bool)) or value is None
 
     @classmethod
-    def _uses_json_request_body(cls, endpoint: EndpointDefinition) -> bool:
+    def _uses_json_request_body(cls, endpoint: Endpoint) -> bool:
         return getattr(endpoint, "request_body_content_type", None) == cls._JSON_BODY_CONTENT_TYPE
 
     @staticmethod
@@ -218,7 +226,7 @@ class APIClient:
         return bool(schema.get("properties"))
 
 
-    def format_request_params(self, endpoint: EndpointDefinition, data: dict) -> RequestData:
+    def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
         """Prepare all request parameters for the endpoint."""
         body_content_type = getattr(endpoint, "request_body_content_type", None)
 
@@ -329,10 +337,10 @@ class APIClient:
         **kwargs,
     ) -> httpx.Response:
         """Submit a direct URL request with streaming support."""
-        if not self.service_def.service_address:
+        if not self.address:
             raise ValueError("Service address is required to request a relative URL")
 
-        url = self.service_def.service_address.resolve_url(url)
+        url = resolve_url(self.address, url)
         headers = self._add_authorization_to_headers()
         timeout = timeout or 60
 

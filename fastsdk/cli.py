@@ -18,9 +18,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from apipod_registry import Registry
-from socaity_schemas.service_definitions import ServiceDefinition
-from apipod_registry.service_registry.file_system_registry import FileSystemStore
+from apipod_registry import FileSystemStore, Registry
+from socaity_schemas.contract.address import service_url
+from socaity_schemas.platform import AIService
+
+from fastsdk.service_access import service_address, service_contract, service_provider
 
 
 DEFAULT_REGISTRY_PATH = Path.home() / ".fastsdk" / "registry"
@@ -38,8 +40,8 @@ def _open_persistent_registry() -> Registry:
     return Registry(service_store=FileSystemStore(path=str(_registry_path())))
 
 
-def _resolve_source(source: str) -> Union[str, ServiceDefinition]:
-    """If the source matches a service in the persistent CLI registry, use that definition."""
+def _resolve_source(source: str) -> Union[str, AIService]:
+    """If the source matches a service in the persistent CLI registry, use that service."""
     try:
         stored = _open_persistent_registry().get_service(source)
     except Exception:
@@ -47,27 +49,37 @@ def _resolve_source(source: str) -> Union[str, ServiceDefinition]:
     return stored or source
 
 
-def _service_summary(sd: ServiceDefinition) -> str:
-    address = getattr(sd.service_address, "url", None) or "-"
-    return f"{sd.display_name} (id: {sd.id}, spec: {sd.specification or 'openapi'}, address: {address})"
+def _address_url(service: AIService) -> str:
+    address = service_address(service)
+    return service_url(address) if address else "-"
 
 
-def _print_service(sd: ServiceDefinition, as_json: bool = False):
+def _service_summary(service: AIService) -> str:
+    contract = service_contract(service)
+    return (
+        f"{service.display_name} (id: {service.id}, spec: {contract.specification}, "
+        f"provider: {service_provider(service)}, address: {_address_url(service)})"
+    )
+
+
+def _print_service(service: AIService, as_json: bool = False):
     if as_json:
-        print(json.dumps(sd.model_dump(exclude_none=True), indent=2, default=str))
+        print(json.dumps(service.model_dump(exclude_none=True), indent=2, default=str))
         return
 
     from fastsdk.sdk_factory.sdk_factory import _get_type_hint
 
-    print(f"Service:  {sd.display_name}")
-    print(f"ID:       {sd.id}")
-    print(f"Spec:     {sd.specification or 'openapi'}")
-    print(f"Address:  {getattr(sd.service_address, 'url', None) or '-'}")
-    if sd.description:
-        desc = sd.description.strip().split("\n")[0]
+    contract = service_contract(service)
+    print(f"Service:  {service.display_name}")
+    print(f"ID:       {service.id}")
+    print(f"Spec:     {contract.specification}")
+    print(f"Provider: {service_provider(service)}")
+    print(f"Address:  {_address_url(service)}")
+    if service.description:
+        desc = service.description.strip().split("\n")[0]
         print(f"About:    {desc[:120]}")
     print("Endpoints:")
-    for endpoint in sd.endpoints:
+    for endpoint in contract.endpoints:
         print(f"  {endpoint.path}")
         for param in endpoint.parameters:
             if param.location not in ("body", "query"):
@@ -150,8 +162,8 @@ def _import_hint(stub_path: str, class_name: str) -> str:
 
 def cmd_inspect(args: argparse.Namespace):
     import fastsdk
-    sd = fastsdk.inspect_service(_resolve_source(args.source), api_key=args.api_key)
-    _print_service(sd, as_json=args.json)
+    service = fastsdk.inspect_service(_resolve_source(args.source), api_key=args.api_key)
+    _print_service(service, as_json=args.json)
 
 
 def cmd_generate(args: argparse.Namespace):
@@ -167,10 +179,9 @@ def cmd_generate(args: argparse.Namespace):
         api_key=args.api_key,
         **kwargs
     )
-    sd = stub.service_definition
     print(f"Generated {stub.path}")
     print(f"  class:   {stub.class_name}")
-    print(f"  service: {_service_summary(sd)}")
+    print(f"  service: {_service_summary(stub.service)}")
     print()
     print("Use it:")
     print(f"  {_import_hint(stub.path, stub.class_name)}")
@@ -182,17 +193,18 @@ def cmd_call(args: argparse.Namespace, extra: List[str]):
 
     params = _parse_endpoint_params(extra)
     client = FastClient(_resolve_source(args.source), api_key=args.api_key)
-    sd = client.service_definition
+    service = client.service
+    endpoints = service_contract(service).endpoints
 
     endpoint = args.endpoint
     if not endpoint:
-        if len(sd.endpoints) == 1:
-            endpoint = sd.endpoints[0].path
+        if len(endpoints) == 1:
+            endpoint = endpoints[0].path
         else:
-            paths = "\n  ".join(ep.path for ep in sd.endpoints)
+            paths = "\n  ".join(ep.path for ep in endpoints)
             raise SystemExit(f"Service has multiple endpoints, please specify one:\n  {paths}")
 
-    print(f"Calling {endpoint} on {sd.display_name} ...")
+    print(f"Calling {endpoint} on {service.display_name} ...")
     try:
         job = client.submit_job(endpoint, **params)
         result = job.wait_for_result()
@@ -216,20 +228,18 @@ def cmd_registry(args: argparse.Namespace):
         if not services:
             print(f"No services registered ({_registry_path()}).")
             return
-        for sd in services:
-            print(f"  {_service_summary(sd)}")
+        for service in services:
+            print(f"  {_service_summary(service)}")
 
     elif args.registry_command == "add":
-        sd = fastsdk.inspect_service(
+        service = fastsdk.inspect_service(
             args.source,
             service_id=args.id,
-            service_name=args.name,
+            name=args.name,
             api_key=args.api_key
         )
-        if sd.id and registry.get_service(sd.id):
-            registry.remove_service(sd.id)
-        registry.register_service(sd)
-        print(f"Registered {_service_summary(sd)}")
+        registry.add_service(service)
+        print(f"Registered {_service_summary(service)}")
         print(f"Registry: {_registry_path()}")
 
     elif args.registry_command == "remove":
@@ -239,10 +249,10 @@ def cmd_registry(args: argparse.Namespace):
             raise SystemExit(f"Service '{args.id}' not found in registry ({_registry_path()}).")
 
     elif args.registry_command == "show":
-        sd = registry.get_service(args.id)
-        if not sd:
+        service = registry.get_service(args.id)
+        if not service:
             raise SystemExit(f"Service '{args.id}' not found in registry ({_registry_path()}).")
-        _print_service(sd, as_json=args.json)
+        _print_service(service, as_json=args.json)
 
     else:
         raise SystemExit("Usage: fastsdk registry {list,add,remove,show}")

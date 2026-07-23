@@ -2,7 +2,8 @@ from typing import Any, Optional
 
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from socaity_schemas.service_definitions import EndpointDefinition
+from socaity_schemas.contract import Endpoint
+from socaity_schemas.contract.address import service_url
 
 
 class APIClientReplicate(APIClient):
@@ -19,11 +20,11 @@ class APIClientReplicate(APIClient):
 
         return True
 
-    def _build_request_url(self, endpoint: EndpointDefinition, query_params: dict | None = None) -> str:
+    def _build_request_url(self, endpoint: Endpoint, query_params: dict | None = None) -> str:
         # Overwrites the default implementation, because /endpoint_route is not attached.
         # Also query_parameters are added to body not to url.
         # (replicate always just has 1 endpoint)
-        return self.service_def.service_address.url
+        return service_url(self.address)
 
     def get_poll_url(self, response) -> Optional[str]:
         urls = getattr(response, "urls", None)
@@ -53,7 +54,7 @@ class APIClientReplicate(APIClient):
         body = {"input": body}
         # Add version parameter for community models to get params to make predictions
         if request_data.url and "/predictions" in request_data.url:
-            version = getattr(self.service_def.service_address, "version", None)
+            version = getattr(self.address, "version", None)
             if version:
                 body["version"] = version
 

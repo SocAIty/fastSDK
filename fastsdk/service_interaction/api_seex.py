@@ -1,9 +1,9 @@
-from socaity_schemas.service_definitions import (
-    EndpointDefinition, ServiceDefinition,
-    RunpodServiceAddress, ReplicateServiceAddress, SocaityServiceAddress,
-)
+from socaity_schemas.contract import Endpoint
+from socaity_schemas.platform import AIService
 from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
 from meseex import MrMeseex
+
+from fastsdk.service_access import service_provider
 
 from typing import Any, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
@@ -24,15 +24,15 @@ class APISeex(MrMeseex):
 
     def __init__(
         self,
-        service_def: ServiceDefinition,
-        endpoint_def: EndpointDefinition,
+        service: AIService,
+        endpoint: Endpoint,
         data: Any = None,
         name: str = None,
         tasks: list = None,
     ):
         super().__init__(tasks, data, name)
-        self.service_def = service_def
-        self.endpoint_def = endpoint_def
+        self.service = service
+        self.endpoint = endpoint
         # Per-job lifecycle controller, assigned by the orchestrator after creation.
         self.runtime: Optional["JobRuntime"] = None
         # Set by the orchestrator when the initial response is a live stream.
@@ -63,9 +63,9 @@ class APISeex(MrMeseex):
         if not resp:
             return None, None
 
-        addr = self.service_def.service_address
+        provider = service_provider(self.service)
 
-        if isinstance(addr, RunpodServiceAddress):
+        if provider == "runpod":
             delay_ms = getattr(resp, "delayTime", None)
             execution_ms = getattr(resp, "executionTime", None)
             if delay_ms is not None:
@@ -73,7 +73,7 @@ class APISeex(MrMeseex):
             if execution_ms is not None:
                 execution_seconds = float(execution_ms) / 1000.0
 
-        elif isinstance(addr, ReplicateServiceAddress):
+        elif provider == "replicate":
             created_str = getattr(resp, "created_at", None)
             started_str = getattr(resp, "started_at", None)
             if created_str and started_str:
@@ -87,7 +87,7 @@ class APISeex(MrMeseex):
             if exec_ms is not None:
                 execution_seconds = float(exec_ms) / 1000.0
 
-        elif isinstance(addr, SocaityServiceAddress):
+        elif provider == "socaity":
             metrics = getattr(resp, "metrics", None)
             if metrics:
                 delay_seconds = getattr(metrics, "platform_queue_time_s", None)

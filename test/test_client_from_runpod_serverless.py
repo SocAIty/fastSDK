@@ -3,7 +3,6 @@ from fastsdk import FastSDK
 import os
 from time import sleep
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from socaity_schemas.service_definitions import ServiceAddress
 
 
 pod_id = "454y79ac0344xv"
@@ -38,8 +37,8 @@ def get_permanent_client():
     stub = fastsdk.generate_stub(
         "test/test_files/face2face.json",
         save_path="test/output/face2face.py",
-        service_id="face2face", specification="runpod",
-        service_address=ServiceAddress(url=serverless_url),
+        service_id="face2face", provider="runpod",
+        service_address=serverless_url,
     )
     return stub.client(api_key=os.getenv("RUNPOD_API_KEY"))
 

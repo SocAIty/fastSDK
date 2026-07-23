@@ -10,7 +10,7 @@ from .api import (
     get_service,
     list_services,
     remove_service,
-)  # create_sdk is a deprecated alias of generate_stub
+)
 from .service_interaction.api_seex import APISeex
 from .fastClient import FastClient
 from .fastSDK import FastSDK

@@ -5,15 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
-from socaity_schemas.service_definitions import (
-    ServiceDefinition,
-    ServiceAddress,
-    RunpodServiceAddress,
-    ReplicateServiceAddress,
-    SocaityServiceAddress,
-)
+from socaity_schemas.platform import AIService
 from fastCloud import ReplicateUploadAPI
 
+from fastsdk.service_access import service_address, service_contract, service_provider
 from fastsdk.service_interaction.request import (
     APIClient,
     APIClientReplicate,
@@ -40,8 +35,11 @@ class ProviderFactory:
 
     _CLIENT_CLASSES = {
         "runpod": APIClientRunpod,
-        "runpod_apipod": APIClientRunpodApipod,
+        "apipod-serverless-runpod": APIClientRunpodApipod,
         "socaity": APIClientSocaity,
+        # The APIPod wire protocol (job envelopes + links) is the Socaity protocol,
+        # so self-hosted apipod services (e.g. localhost) use the same client.
+        "apipod": APIClientSocaity,
         "replicate": APIClientReplicate,
     }
 
@@ -49,22 +47,19 @@ class ProviderFactory:
         self._parser_cache: Dict[str, ResponseParser] = {}
 
     @staticmethod
-    def determine_provider_type(service_def: ServiceDefinition) -> str:
-        """Map a service definition to a provider key."""
-        addr = service_def.service_address
-        if isinstance(addr, RunpodServiceAddress):
-            if service_def.specification in ("apipod", "socaity"):
-                return "runpod_apipod"
-            return "runpod"
-        if isinstance(addr, SocaityServiceAddress):
+    def determine_provider_type(service: AIService) -> str:
+        """Map a service to the provider type key used by clients and response parsers."""
+        provider = service_provider(service)
+        specification = service_contract(service).specification
+
+        if provider == "runpod":
+            return "apipod-serverless-runpod" if specification == "apipod" else "runpod"
+        if provider == "socaity":
             return "socaity"
-        if isinstance(addr, ReplicateServiceAddress):
+        if provider == "replicate":
             return "replicate"
-        if isinstance(addr, ServiceAddress):
-            if service_def.specification in ("apipod", "socaity"):
-                return "socaity"
-            if service_def.specification == "runpod":
-                return "runpod"
+        if specification == "apipod":
+            return "apipod"
         return "other"
 
     def get_parser(self, provider_type: str) -> ResponseParser:
@@ -75,9 +70,9 @@ class ProviderFactory:
 
     def build_file_handler(self, provider_type: str, api_key: str = None) -> FileHandler:
         """Create the file handler configured for the provider."""
-        if provider_type == "socaity":
+        if provider_type in ("socaity", "apipod"):
             return FileHandler(file_format="httpx", upload_to_cloud_threshold_mb=0, max_upload_file_size_mb=300)
-        if provider_type in ("runpod", "runpod_apipod"):
+        if provider_type in ("runpod", "apipod-serverless-runpod"):
             return FileHandler(file_format="base64", max_upload_file_size_mb=300)
         if provider_type == "replicate":
             fast_cloud = ReplicateUploadAPI(api_key=api_key)
@@ -89,17 +84,17 @@ class ProviderFactory:
             )
         return FileHandler()
 
-    def build(self, service_def: ServiceDefinition, api_key: str = None) -> ProviderStack:
+    def build(self, service: AIService, api_key: str = None) -> ProviderStack:
         """Assemble the full provider stack for a service."""
-        if not hasattr(service_def, "service_address") or service_def.service_address is None:
+        if service_address(service) is None:
             raise ValueError(
-                f"Service {service_def.id} has no service address. "
-                "Add one with Registry.update_service(service_id, service_address=...)"
+                f"Service {service.id} has no deployment address. "
+                "Add one with fastsdk.register_service(..., service_address=...)"
             )
 
-        provider_type = self.determine_provider_type(service_def)
+        provider_type = self.determine_provider_type(service)
         client_cls = self._CLIENT_CLASSES.get(provider_type, APIClient)
-        api_client = client_cls(service_def=service_def, api_key=api_key)
+        api_client = client_cls(service=service, api_key=api_key)
         file_handler = self.build_file_handler(provider_type, api_key)
         parser = self.get_parser(provider_type)
 
