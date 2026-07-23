@@ -46,3 +46,8 @@ include = ["fastsdk*"]
 
 [tool.setuptools.package-data]
 "fastsdk.sdk_factory" = ["*.j2"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fastsdk*"]
+exclude = ["output*", "test*"]

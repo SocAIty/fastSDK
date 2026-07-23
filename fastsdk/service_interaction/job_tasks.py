@@ -46,6 +46,8 @@ class JobTasks:
 
     async def load_files(self, job: APISeex) -> RequestData:
         request_data = job.prev_task_output
+        if request_data is None:
+            raise ValueError("load_files: missing RequestData from Preparing")
         if not request_data.file_params:
             return request_data
         stack = self._stacks.require(job.service.id)
@@ -54,6 +56,8 @@ class JobTasks:
 
     async def upload_files(self, job: APISeex) -> RequestData:
         request_data = job.prev_task_output
+        if request_data is None:
+            raise ValueError("upload_files: missing RequestData from prior pipeline task")
         if not request_data.file_params:
             return request_data
         stack = self._stacks.require(job.service.id)
@@ -62,7 +66,12 @@ class JobTasks:
 
     async def send_request(self, job: APISeex) -> Any:
         request_data = job.prev_task_output
-        stack = self._stacks.require(job.service.id)
+        if request_data is None:
+            raise ValueError(
+                "send_request: missing RequestData from prior pipeline task "
+                "(Preparing / Load files / Uploading files)"
+            )
+        stack = self._stacks.require(job.service_def.id)
 
         if isinstance(request_data.file_params, MediaDict) and request_data.file_params:
             if request_data.body_content_type == stack.api_client._JSON_BODY_CONTENT_TYPE:
