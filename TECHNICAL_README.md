@@ -4,8 +4,8 @@
 `fastsdk` turns an API description into a Python client workflow that is easy to call from normal Python code.
 
 It has three major responsibilities:
-- parse API specifications into internal service models (the *definition layer*)
-- generate Python client stub code from those models (the *stub factory*)
+- parse API specifications into `AIService` objects with a `ServiceContract` (the *definition layer*, delegated to `apipod_registry`)
+- generate Python client stub code from those contracts (the *stub factory*)
 - execute requests, file handling, polling, and job lifecycle management for long-running APIs (the *runtime layer*)
 
 For job-based APIs such as APIPod, RunPod, Socaity, or Replicate, `fastsdk` delegates runtime orchestration to `meseex`.
@@ -17,27 +17,24 @@ The package exposes module-level functions (`fastsdk/api.py`). They wrap a proce
 
 | Function | Side effects | Returns |
 |---|---|---|
-| `fastsdk.inspect_service(source)` | none (pure) | `ServiceDefinition` |
-| `fastsdk.register_service(source)` | upserts into the registry | `ServiceDefinition` |
+| `fastsdk.inspect_service(source)` | none (pure) | `AIService` |
+| `fastsdk.register_service(source)` | upserts into the registry | `AIService` |
 | `fastsdk.connect(source)` | registers temporarily | `FastClient` (service deregistered when the client is deleted) |
-| `fastsdk.generate_stub(source)` | writes a `.py` file + registers the service | `GeneratedStub` |
+| `fastsdk.generate_stub(source)` | writes a `.py` file + registers the service | `FastStub` |
 | `fastsdk.get_service / list_services / remove_service` | registry reads/writes | - |
 
-`source` is always the same union: URL, `openapi.json` file path, spec dict, `ServiceDefinition`,
+`source` is always the same union: URL, `openapi.json` file path, spec dict, `AIService`,
 Replicate model reference (`"replicate:owner/name"`, `"https://replicate.com/owner/name"`, bare `"owner/name"`),
-or — where it makes sense — an already registered service ID/name.
-
-Deprecated aliases (warn via `DeprecationWarning`, will be removed eventually):
-`generate_stub`, `create_temporary_client` → `connect`,
-`load_service_definition` → `inspect_service`, `DynamicClient`/`TemporaryClient` → `FastClient(..., temporary=...)`.
+or, where it makes sense, an already registered service ID/name.
 
 ## Mental Model
 Think of `fastsdk` as two connected subsystems:
 
 1. Definition layer
    - Loads `openapi.json` or provider-specific specs
-   - Normalizes them into a `ServiceDefinition`
-   - Stores them in the `Registry`
+   - Parses them into a `ServiceContract` (`apipod_registry.materialize_contract`) and wraps it
+     in an `AIService` with one `Deployment` (`apipod_registry.create_service`)
+   - Stores the `AIService` in the `Registry`
 
 2. Runtime layer
    - Formats requests
@@ -51,8 +48,8 @@ Generated stubs and `connect()` clients are just convenient entry points into th
 ## Easy Overview
 The rough data flow is:
 
-1. A service specification is loaded (`inspect_service`) and parsed into a `ServiceDefinition` with `EndpointDefinition`s.
-2. The definition is registered in the `Registry` (`register_service`, or implicitly by `connect`/`generate_stub`).
+1. A service specification is loaded (`inspect_service`) and parsed into an `AIService` whose deployment carries a `ServiceContract` with contract `Endpoint`s.
+2. The service is registered in the `Registry` (`register_service`, or implicitly by `connect`/`generate_stub`).
 3. A client is constructed (`FastClient`) or generated (`GeneratedStub` → `.py` file with a `FastClient` subclass).
 4. Calling an endpoint creates an `APISeex` job.
 5. `ApiJobManager` executes that job through `MeseexBox`.
@@ -73,13 +70,14 @@ fastsdk/
   fastSDK.py                      # FastSDK singleton facade (registry + job manager wiring)
   fastClient.py                   # FastClient runtime client (base class of generated stubs)
   fastStub.py                     # Contains the Stub that is generated
+  service_access.py               # primary_deployment/service_contract/service_address/needs_polling helpers
   sdk_factory/
     sdk_factory.py                # generate_stub(), Jinja2-based codegen
     sdk_template.j2               # default stub template
   service_specification_loader/
     spec_loader.py                # load openapi.json from URL/file/dict (with fallbacks)
     runpod_open_api_loader.py     # fetch openapi.json through a RunPod serverless job
-    replicate_loader.py           # Replicate model -> ServiceDefinition (optional `replicate` dep)
+    replicate_loader.py           # Replicate model -> AIService (optional `replicate` dep)
   service_interaction/
     api_job_manager.py            # composition root + submit + meseex wiring
     job_tasks.py                  # meseex task implementations (prepare, poll, send, ...)
@@ -106,14 +104,21 @@ All clients and stubs in a process therefore share one registry and one job mana
 Advanced users can swap the registry (e.g. for a persistent or DB-backed one) via
 `FastSDK().service_registry = Registry(service_store=...)`.
 
-### `ServiceDefinition` and `Registry`
-These define the internal contract for a service (from `socaity_schemas.service_definitions`, used by `apipod_registry`):
-- endpoints and parameters
-- provider metadata
-- service address
-- specification type (`openapi`, `apipod`, `runpod`, `replicate`, `socaity`, ...)
+### `AIService`, `ServiceContract` and `Registry`
+The unit fastsdk works with is an `AIService` (from `socaity_schemas.platform`) with exactly one
+primary `Deployment`, created via `apipod_registry.create_service`:
+- `deployment.contract`: the `ServiceContract` (endpoints, parameters, `specification`
+  format `openapi`/`apipod`/`cog`/`cog2`, and `has_job_queue` for polling decisions)
+- `deployment.provider`: where it runs (`socaity`/`runpod`/`replicate`/`other`)
+- `deployment.address`: typed `ServiceAddress`; URL composition is done by the module
+  functions in `socaity_schemas.contract.address` (`service_url`, `endpoint_url`, `resolve_url`)
 
-`Registry` maps service IDs and normalized display names to definitions.
+`fastsdk/service_access.py` provides the accessors (`primary_deployment`, `service_contract`,
+`service_address`, `service_provider`, `needs_polling`) used across the codebase; `needs_polling`
+is `contract.has_job_queue or provider == "runpod"` (RunPod serverless always uses the
+/run + /status wire protocol).
+
+`Registry` (from `apipod_registry`) maps service IDs and normalized names to `AIService` objects.
 
 **Registration is an upsert**: `FastSDK.register_service()` replaces an existing entry with the same ID
 instead of raising. This makes scripts idempotent — re-running `generate_stub`/`register_service`
@@ -133,7 +138,7 @@ FastClient(service, api_key=None, temporary=False, service_name_or_id=None, **lo
 ```
 
 - `service`: any source. Strings are first looked up in the registry; on miss they are loaded
-  and registered as a spec source.
+  and registered as a spec source. The resolved `AIService` is available as `client.service`.
 - `service_name_or_id`: strict registry lookup (no loading). This is the path generated stubs use:
   `super().__init__(service_name_or_id="<service-id>")`. It raises with a helpful message if the
   service was never registered in this process.
@@ -146,18 +151,19 @@ FastClient(service, api_key=None, temporary=False, service_name_or_id=None, **lo
 thin typed wrappers around it.
 
 ### Stub Generation (`sdk_factory`)
-`generate_stub(service_definition, save_path, class_name, template)` renders the Jinja2 template
+`generate_stub(service, save_path, class_name, template)` renders the Jinja2 template
 into a `.py` file containing a `FastClient` subclass:
-- one method per endpoint, with type hints derived from the parameter definitions
+- one method per contract endpoint, with type hints derived from the parameter definitions
   (media formats map to `media_toolkit` types: `ImageFile`, `AudioFile`, `VideoFile`, `MediaFile`)
-- parameter defaults and docstrings from the spec
+- parameter defaults and docstrings from the spec; docstrings prefer the curated platform
+  endpoint description (`AIService.endpoints`) over the contract description when present
 - `run` and `__call__` aliases for the primary endpoint
 
-It returns a `GeneratedStub` dataclass:
-- `.path`, `.class_name`, `.service_definition`
-- `.client(api_key=None)` — imports the generated file and instantiates the class (works
+It returns a `FastStub`:
+- `.path`, `.class_name`, `.service`
+- `.client(api_key=None)`: imports the generated file and instantiates the class (works
   immediately because the service was just registered)
-- iterable for backwards compatibility (`path, name, sd = generate_stub(...)`)
+- iterable (`path, name, service = generate_stub(...)`)
 
 ### Specification Loading
 The definition layer does provider-aware parsing:
@@ -206,8 +212,10 @@ this registry.
 files, send request, poll status, process result. Polling logic and the ``@polling_task`` decorator
 live here, not on the manager.
 
-**`ProviderFactory`** (`provider_factory.py`) resolves provider type from a ``ServiceDefinition``
-and returns a frozen ``ProviderStack``: ``APIClient``, ``FileHandler``, and cached ``ResponseParser``.
+**`ProviderFactory`** (`provider_factory.py`) resolves the provider type from
+``deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
+``apipod-serverless-runpod``) and returns a frozen ``ProviderStack``: ``APIClient``,
+``FileHandler``, and cached ``ResponseParser``.
 
 **`PipelinePlanner`** (`pipeline_planner.py`) is a pure planner: given a service, endpoint, and
 optional stack, it returns the ordered task names with steps omitted when not needed.

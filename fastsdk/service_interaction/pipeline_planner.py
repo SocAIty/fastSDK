@@ -4,20 +4,21 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from socaity_schemas.service_definitions import EndpointDefinition, ServiceDefinition
+from socaity_schemas.contract import Endpoint
+from socaity_schemas.platform import AIService
 
+from fastsdk.service_access import needs_polling
 from fastsdk.service_interaction.provider_factory import ProviderStack
 
 _FILE_FORMATS = frozenset({"file", "image", "video", "audio"})
-_POLLING_SPECIFICATIONS = frozenset({"apipod", "socaity", "runpod", "replicate"})
 
 
 class PipelinePlanner:
     """Derive the ordered task list for one endpoint invocation."""
 
     @staticmethod
-    def _endpoint_has_file_params(endpoint_def: EndpointDefinition) -> bool:
-        for param in endpoint_def.parameters:
+    def _endpoint_has_file_params(endpoint: Endpoint) -> bool:
+        for param in endpoint.parameters:
             definitions = getattr(param, "definition", None)
             if definitions is None:
                 continue
@@ -36,14 +37,14 @@ class PipelinePlanner:
     @classmethod
     def plan(
         cls,
-        service_def: ServiceDefinition,
-        endpoint_def: EndpointDefinition,
+        service: AIService,
+        endpoint: Endpoint,
         stack: Optional[ProviderStack] = None,
     ) -> List[str]:
         """Return the ordered meseex task names for this submission."""
         tasks = ["Preparing"]
 
-        if cls._endpoint_has_file_params(endpoint_def):
+        if cls._endpoint_has_file_params(endpoint):
             tasks.append("Load files")
 
         if cls._needs_upload(stack):
@@ -51,7 +52,7 @@ class PipelinePlanner:
 
         tasks.append("Sending request")
 
-        if service_def.specification in _POLLING_SPECIFICATIONS:
+        if needs_polling(service):
             tasks.append("Polling")
 
         tasks.append("Processing result")

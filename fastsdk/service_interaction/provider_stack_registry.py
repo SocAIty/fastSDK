@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Dict, Optional
 
 from apipod_registry.registry import Registry
-from socaity_schemas.service_definitions import ServiceDefinition
+from socaity_schemas.platform import AIService
 
 from fastsdk.service_interaction.provider_factory import ProviderFactory, ProviderStack
 from fastsdk.service_interaction.request.file_handler import FileHandler
@@ -39,21 +39,21 @@ class ProviderStackRegistry:
         if service_id in self._stacks:
             return self._stacks[service_id]
 
-        service_def = self.registry.get_service(service_id)
-        if not service_def:
+        service = self.registry.get_service(service_id)
+        if not service:
             raise ValueError(f"Service {service_id} not found")
 
-        self._stacks[service_id] = self._factory.build(service_def, api_key)
+        self._stacks[service_id] = self._factory.build(service, api_key)
         return self._stacks[service_id]
 
-    def load(self, service_name_or_id: str, api_key: str = None) -> ServiceDefinition:
+    def load(self, service_name_or_id: str, api_key: str = None) -> AIService:
         """Resolve a service from the registry and ensure its provider stack is loaded."""
-        service_def = self.registry.get_service(service_name_or_id)
-        if not service_def:
+        service = self.registry.get_service(service_name_or_id)
+        if not service:
             raise ValueError(f"Service {service_name_or_id} not found")
 
-        self.ensure(service_def.id, api_key)
-        return service_def
+        self.ensure(service.id, api_key)
+        return service
 
     def set_file_handler(self, service_id: str, file_handler: FileHandler) -> ProviderStack:
         """Replace the file handler on an existing stack."""
@@ -65,11 +65,11 @@ class ProviderStackRegistry:
     def rebuild_file_handler(self, service_id: str, api_key: str = None) -> ProviderStack:
         """Rebuild the provider-default file handler on an existing stack."""
         stack = self.require(service_id)
-        service_def = self.registry.get_service(service_id)
-        if not service_def:
+        service = self.registry.get_service(service_id)
+        if not service:
             raise ValueError(f"Service {service_id} not found")
 
-        provider_type = self._factory.determine_provider_type(service_def)
+        provider_type = self._factory.determine_provider_type(service)
         handler = self._factory.build_file_handler(provider_type, api_key)
         updated = replace(stack, file_handler=handler)
         self._stacks[service_id] = updated

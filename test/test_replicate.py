@@ -44,7 +44,7 @@ def test_create_stubs():
 def test_replicate_connect():
     """Replicate models also work without code generation via connect()."""
     client = fastsdk.connect("replicate:black-forest-labs/flux-schnell")
-    assert client.service_definition.specification == "replicate"
+    assert client.service.deployments[0].provider == "replicate"
 
 
 def test_replicate_cancel():

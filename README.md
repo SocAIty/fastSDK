@@ -110,8 +110,8 @@ Pass `api_key=...` to `connect()`, `generate_stub()` or the client constructor �
 
 | Concept | What it is |
 |---|---|
-| **Service definition** | The parsed, normalized description of a service: endpoints, parameters, address, provider type. Get one with `fastsdk.inspect_service(source)` — it has no side effects. |
-| **Registry** | An in-process directory of service definitions, shared by all clients. `register_service()` adds to it; generated stubs look their service up in it by ID. |
+| **Service** | An `AIService` (from socaity-schemas) with one deployment: hosting provider, address, and the parsed `ServiceContract` (endpoints, parameters, whether responses are polled jobs). Get one with `fastsdk.inspect_service(source)`, it has no side effects. |
+| **Registry** | An in-process directory of services, shared by all clients. `register_service()` adds to it; generated stubs look their service up in it by ID. |
 | **Client** | The runtime object you call (`FastClient`). It submits jobs to the service. `connect()` gives you a generic one instantly. |
 | **Stub** | A generated `.py` file containing a client subclass with one typed method per endpoint. Made by `generate_stub()`; it's plain code — read it, version it, ship it. |
 
