@@ -216,6 +216,14 @@ class APIClient:
     def _uses_json_request_body(cls, endpoint: Endpoint) -> bool:
         return getattr(endpoint, "request_body_content_type", None) == cls._JSON_BODY_CONTENT_TYPE
 
+    @staticmethod
+    def _is_json_object_request_body(param) -> bool:
+        schema = getattr(param, "param_schema", None) or {}
+        if not isinstance(schema, dict):
+            return False
+        if schema.get("type") == "object" and schema.get("properties"):
+            return True
+        return bool(schema.get("properties"))
 
     def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
         """Prepare all request parameters for the endpoint."""
@@ -232,22 +240,26 @@ class APIClient:
 
         rq = RequestData(body_content_type=body_content_type)
         embed_files_in_json_body = self._uses_json_request_body(endpoint)
+        body_params = [p for p in endpoint.parameters if p.location == "body"]
+        # Sole JSON object body (e.g. ChatCompletionRequest as ``request``):
+        # spread model fields onto the wire root. Callers still pass request={...}.
+        single_json_object_body = (
+            embed_files_in_json_body
+            and len(body_params) == 1
+            and self._is_json_object_request_body(body_params[0])
+        )
 
         for param in endpoint.parameters:
             param_value = data.get(param.name, param.default)
-            schema = getattr(param, "param_schema", None) or {}
-            sole_json_object_body = (
-                embed_files_in_json_body
-                and param.location == "body"
-                and isinstance(schema, dict)
-                and schema.get("type") == "object"
-                and sum(1 for p in endpoint.parameters if p.location == "body") == 1
-            )
-            if param_value is None and param.required and not sole_json_object_body:
+            if param_value is None and param.required:
                 raise ValueError(f"Required parameter '{param.name}' is missing")
 
             has_file_format = self._param_has_file_format(param)
-            is_array_param = isinstance(schema, dict) and schema.get("type") == "array"
+            is_array_param = False
+
+            schema = getattr(param, "param_schema", None) or {}
+            if isinstance(schema, dict) and schema.get("type") == "array":
+                is_array_param = True
 
             is_file_model = self._param_is_file_model(param)
             accepts_raw_upload = self._param_accepts_raw_upload(param)
@@ -272,36 +284,21 @@ class APIClient:
                 rq.query_params[param.name] = param_value
             elif param.location == "body":
                 if param_value is not None:
-                    rq.body_params[param.name] = param_value
-                elif sole_json_object_body:
-                    # Flat OpenAPI body: callers may pass schema properties at
-                    # the top level instead of nested under the param name.
-                    props = schema.get("properties") or {}
-                    flat = {k: data[k] for k in props if k in data}
-                    if flat:
-                        rq.body_params[param.name] = flat
-                    elif param.required:
-                        raise ValueError(f"Required parameter '{param.name}' is missing")
+                    if single_json_object_body and param.name == body_params[0].name:
+                        if isinstance(param_value, dict):
+                            rq.body_params.update(param_value)
+                        elif hasattr(param_value, "model_dump"):
+                            rq.body_params.update(
+                                param_value.model_dump(mode="json", exclude_none=True)
+                            )
+                        else:
+                            rq.body_params[param.name] = param_value
+                    else:
+                        rq.body_params[param.name] = param_value
 
         rq.url = self._build_request_url(endpoint, rq.query_params)
         rq.headers = self._add_authorization_to_headers(rq.headers)
         return rq
-
-    @staticmethod
-    def _json_body_payload(body_params: dict) -> dict:
-        """JSON wire body for HTTP APIs.
-
-        Registry endpoints keep a JSON request schema as one body parameter
-        (often ``request``). FastAPI/Socaity expect that schema at the wire
-        root. RunPod clients keep the nested param map (function kwargs) and
-        override ``send_request``, so this unwrap only affects HTTP JSON.
-        """
-        if (
-            len(body_params) == 1
-            and isinstance(next(iter(body_params.values())), dict)
-        ):
-            return next(iter(body_params.values()))
-        return {k: v for k, v in body_params.items() if v is not None}
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
         """Send the prepared request to the API with streaming support."""
@@ -326,7 +323,7 @@ class APIClient:
         elif request_data.body_content_type == self._FORM_BODY_CONTENT_TYPE:
             kwargs["data"] = self._encode_form_fields(request_data.body_params)
         else:
-            kwargs["json"] = self._json_body_payload(request_data.body_params)
+            kwargs["json"] = {k: v for k, v in request_data.body_params.items() if v is not None}
 
         # Use build_request + send(stream=True) to support direct SSE responses
         request = self.client.build_request("POST", **kwargs)
