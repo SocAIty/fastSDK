@@ -73,7 +73,9 @@ class APIClientSocaity(APIClient):
         content_type = getattr(endpoint, "request_body_content_type", None) if endpoint else None
 
         if content_type == "application/json":
-            kwargs["json"] = {k: v for k, v in request_data.body_params.items() if v is not None}
+            # Sole object body params (e.g. ChatCompletionRequest as ``request``)
+            # are unwrapped to the OpenAPI wire root for FastAPI/gateway.
+            kwargs["json"] = self._json_body_payload(request_data.body_params)
         else:
             form_data = {}
             for key, value in request_data.body_params.items():
