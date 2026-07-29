@@ -12,6 +12,7 @@ Design:
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Callable, Optional, Union
 
 import httpx
@@ -29,8 +30,29 @@ from socaity_schemas import (
 # ---------------------------------------------------------------------------
 
 
+def _materialize_media() -> bool:
+    """When false (MCP / agents), keep FileModel URLs instead of downloading bytes."""
+    return os.environ.get("FASTSDK_MATERIALIZE_MEDIA", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
 def _looks_like_file_model_dict(value: dict) -> bool:
     return "content" in value and ("content_type" in value or "file_name" in value)
+
+
+def _file_ref_from_model(value: dict) -> dict:
+    content = value.get("content")
+    return {
+        "url": content if isinstance(content, str) else None,
+        "content": content if isinstance(content, str) else None,
+        "content_type": value.get("content_type"),
+        "file_name": value.get("file_name"),
+        "file_size": value.get("file_size"),
+    }
 
 
 def _parse_media_socaity(result: Any) -> Any:
@@ -42,12 +64,16 @@ def _parse_media_socaity(result: Any) -> Any:
     if callable(model_dump):
         dumped = model_dump()
         if isinstance(dumped, dict) and _looks_like_file_model_dict(dumped):
+            if not _materialize_media():
+                return _file_ref_from_model(dumped)
             try:
                 return media_from_any(dumped, allow_reads_from_disk=False)
             except Exception:
                 pass
     if isinstance(result, dict):
         if _looks_like_file_model_dict(result):
+            if not _materialize_media():
+                return _file_ref_from_model(result)
             try:
                 return media_from_any(result, allow_reads_from_disk=False)
             except Exception:
@@ -58,6 +84,8 @@ def _parse_media_socaity(result: Any) -> Any:
 
 def _parse_media_replicate(result: Any) -> Any:
     if isinstance(result, str) and "https://replicate.delivery" in result:
+        if not _materialize_media():
+            return {"url": result, "content": result}
         try:
             return media_from_any(result, allow_reads_from_disk=False)
         except Exception:

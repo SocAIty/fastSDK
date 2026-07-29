@@ -40,10 +40,10 @@ fastsdk = "fastsdk.cli:main"
 Repository = "https://github.com/SocAIty/fastsdk"
 Homepage = "https://www.socaity.ai"
 
-[tool.setuptools.package-data]
-"fastsdk.sdk_factory" = ["*.j2"]
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["fastsdk*"]
 exclude = ["output*", "test*"]
+
+[tool.setuptools.package-data]
+"fastsdk.sdk_factory" = ["*.j2"]

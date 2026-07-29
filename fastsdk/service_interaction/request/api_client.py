@@ -225,7 +225,6 @@ class APIClient:
             return True
         return bool(schema.get("properties"))
 
-
     def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
         """Prepare all request parameters for the endpoint."""
         body_content_type = getattr(endpoint, "request_body_content_type", None)
@@ -242,6 +241,8 @@ class APIClient:
         rq = RequestData(body_content_type=body_content_type)
         embed_files_in_json_body = self._uses_json_request_body(endpoint)
         body_params = [p for p in endpoint.parameters if p.location == "body"]
+        # Sole JSON object body (e.g. ChatCompletionRequest as ``request``):
+        # spread model fields onto the wire root. Callers still pass request={...}.
         single_json_object_body = (
             embed_files_in_json_body
             and len(body_params) == 1

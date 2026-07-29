@@ -17,6 +17,7 @@ Job polling follows the parsed contract's ``has_job_queue`` for queue-backed lau
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -189,6 +190,15 @@ def _require_stream_endpoint(service: AIService, leaf: str) -> Endpoint:
 
 def _choice_message(result: dict) -> str:
     return result["choices"][0]["message"]["content"]
+
+
+def _collect_chunks(job) -> list[dict]:
+    """Collect the decoded ChatCompletionChunk dicts of one SSE stream."""
+    session = job.stream()
+    try:
+        return [chunk for chunk in session.iter_chunks() if isinstance(chunk, dict)]
+    finally:
+        session.close()
 
 
 def _collect_stream_text(job) -> str:
@@ -398,6 +408,98 @@ def test_media_results_are_media_toolkit_files():
         pytest.skip("No media-returning endpoints are exposed by the current service launch")
 
 
+WEATHER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Current weather for a city.",
+        "parameters": {
+            "type": "object",
+            "properties": {"location": {"type": "string"}},
+            "required": ["location"],
+        },
+    },
+}
+
+
+def test_chat_tool_call():
+    """Tool round trip: tool_calls result, streamed tool delta, tool-result turn."""
+    client = _client()
+    endpoint = _require_stream_endpoint(_service_def(), "/chat")
+    messages = [{"role": "user", "content": "What is the weather in Boston?"}]
+
+    # Non-stream: parsed function call and finish_reason=tool_calls.
+    result = client.submit_job(
+        endpoint.path, messages=messages, tools=[WEATHER_TOOL], stream=False,
+    ).wait_for_result(timeout_s=JOB_TIMEOUT_S)
+    choice = result["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    call = choice["message"]["tool_calls"][0]
+    assert call["function"]["name"] == "get_weather"
+    assert "location" in json.loads(call["function"]["arguments"])
+
+    # Stream: a chunk carries the tool_calls delta; the stream closes with tool_calls.
+    stream_job = client.submit_job(endpoint.path, messages=messages, tools=[WEATHER_TOOL], stream=True)
+    chunks = _collect_chunks(stream_job)
+    tool_deltas = [c for c in chunks if c["choices"][0].get("delta", {}).get("tool_calls")]
+    assert tool_deltas, "no tool_calls delta in stream"
+    assert tool_deltas[0]["choices"][0]["delta"]["tool_calls"][0]["function"]["name"] == "get_weather"
+    finish_reasons = [c["choices"][0].get("finish_reason") for c in chunks if c["choices"][0].get("finish_reason")]
+    assert finish_reasons[-1] == "tool_calls"
+
+    # Tool-result turn: the assistant answers from the tool output.
+    follow_up = messages + [
+        {"role": "assistant", "content": None, "tool_calls": [call]},
+        {"role": "tool", "tool_call_id": call["id"], "content": "sunny, 21 degrees"},
+    ]
+    result = client.submit_job(
+        endpoint.path, messages=follow_up, tools=[WEATHER_TOOL], stream=False,
+    ).wait_for_result(timeout_s=JOB_TIMEOUT_S)
+    assert _choice_message(result)
+
+
+def test_chat_logprobs():
+    """logprobs=True returns per-token entries with top_logprobs."""
+    client = _client()
+    endpoint = _require_stream_endpoint(_service_def(), "/chat")
+
+    result = client.submit_job(
+        endpoint.path,
+        messages=[{"role": "user", "content": "hi"}],
+        logprobs=True,
+        top_logprobs=2,
+        stream=False,
+    ).wait_for_result(timeout_s=JOB_TIMEOUT_S)
+
+    entries = result["choices"][0]["logprobs"]["content"]
+    assert entries, "empty logprobs content"
+    first = entries[0]
+    assert first["token"]
+    assert isinstance(first["logprob"], float) and first["logprob"] <= 0.0
+    assert first.get("top_logprobs"), "top_logprobs missing"
+
+
+def test_chat_reasoning():
+    """Reasoning (<think>) output lands in reasoning_content, not in content."""
+    client = _client()
+    endpoint = _require_stream_endpoint(_service_def(), "/chat")
+    messages = [{"role": "user", "content": "hi, please think first"}]
+
+    result = client.submit_job(
+        endpoint.path, messages=messages, stream=False,
+    ).wait_for_result(timeout_s=JOB_TIMEOUT_S)
+    message = result["choices"][0]["message"]
+    assert message["reasoning_content"]
+    assert message["content"] and "<think>" not in message["content"]
+
+    stream_job = client.submit_job(endpoint.path, messages=messages, stream=True)
+    chunks = _collect_chunks(stream_job)
+    reasoning = "".join(c["choices"][0].get("delta", {}).get("reasoning_content") or "" for c in chunks)
+    content = "".join(c["choices"][0].get("delta", {}).get("content") or "" for c in chunks)
+    assert reasoning
+    assert content and "<think>" not in content
+
+
 def test_connect_chat_extended():
     client = _client()
     endpoint = _endpoint_by_suffix(_service_def(), "/chat-extended")
@@ -417,6 +519,9 @@ def _main_tests() -> Iterable[str]:
         "test_streaming_text",
         "test_streaming_video",
         "test_streaming_chat_schema",
+        "test_chat_tool_call",
+        "test_chat_logprobs",
+        "test_chat_reasoning",
         "test_media_results_are_media_toolkit_files",
         "test_connect_chat_extended",
     )

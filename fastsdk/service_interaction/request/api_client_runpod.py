@@ -35,14 +35,42 @@ class APIClientRunpod(APIClient):
         return getattr(response, "output", None)
 
     def format_request_params(self, endpoint: Endpoint, *args, **kwargs) -> RequestData:
-        """Prepare request parameters for Runpod API."""
+        """Prepare request parameters for Runpod API.
+
+        Shared ``APIClient`` spreads a sole JSON object body onto the wire root
+        for HTTP. RunPod ``input`` is function kwargs, so re-nest that object
+        under the schema param name (usually ``request``) and keep ``path``.
+        """
         request_data = super().format_request_params(endpoint, *args, **kwargs)
+        request_data.body_params = self._renest_sole_json_object_body(
+            endpoint, request_data.body_params
+        )
 
         # adding path to the body for runpod apipod services
         if endpoint.path:
             request_data.body_params["path"] = endpoint.path
 
         return request_data
+
+    @classmethod
+    def _renest_sole_json_object_body(cls, endpoint: Endpoint, body_params: dict) -> dict:
+        body_defs = [p for p in (endpoint.parameters or []) if p.location == "body"]
+        if (
+            len(body_defs) != 1
+            or not cls._is_json_object_request_body(body_defs[0])
+        ):
+            return body_params
+
+        name = body_defs[0].name
+        if name in body_params:
+            return body_params
+
+        reserved = {"path"}
+        nested = {k: v for k, v in body_params.items() if k not in reserved}
+        keep = {k: v for k, v in body_params.items() if k in reserved}
+        if not nested:
+            return body_params
+        return {name: nested, **keep}
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
         """
