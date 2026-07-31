@@ -71,14 +71,27 @@ class APIClientSocaity(APIClient):
 
         endpoint = self._endpoint_for_url(request_data.url)
         content_type = getattr(endpoint, "request_body_content_type", None) if endpoint else None
+        # Registered chat/LLM schemas must stay JSON even when a legacy contract
+        # advertised form/urlencoded (flattened messages would be stringified).
+        standard_schema = getattr(endpoint, "standard_schema", None) if endpoint else None
+        body = {k: v for k, v in request_data.body_params.items() if v is not None}
+        has_nested = any(isinstance(v, (dict, list)) for v in body.values())
+        use_json = (
+            content_type == "application/json"
+            or (isinstance(standard_schema, str) and standard_schema.endswith("Request"))
+            or (
+                # Nested objects/arrays cannot round-trip through urlencoded forms
+                # without being JSON-stringified; prefer a real JSON body instead.
+                has_nested
+                and content_type != "multipart/form-data"
+            )
+        )
 
-        if content_type == "application/json":
-            kwargs["json"] = {k: v for k, v in request_data.body_params.items() if v is not None}
+        if use_json:
+            kwargs["json"] = body
         else:
             form_data = {}
-            for key, value in request_data.body_params.items():
-                if value is None:
-                    continue
+            for key, value in body.items():
                 if isinstance(value, (dict, list)):
                     form_data[key] = json.dumps(value)
                 else:

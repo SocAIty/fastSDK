@@ -12,6 +12,7 @@ Design:
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Callable, Optional, Union
 
 import httpx
@@ -27,6 +28,16 @@ from socaity_schemas import (
 # ---------------------------------------------------------------------------
 # Media helpers (pure, stateless)
 # ---------------------------------------------------------------------------
+
+
+def _materialize_media() -> bool:
+    """When false (MCP / agents), keep FileModel URLs instead of downloading bytes."""
+    return os.environ.get("FASTSDK_MATERIALIZE_MEDIA", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
 
 
 def _looks_like_file_model_dict(value: dict) -> bool:
