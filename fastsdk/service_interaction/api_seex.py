@@ -11,6 +11,7 @@ from datetime import datetime
 if TYPE_CHECKING:
     import httpx
     from fastsdk.service_interaction.job_runtime import JobRuntime
+    from fastsdk.service_interaction.provider_factory import ProviderStack
     from fastsdk.service_interaction.response.stream_session import StreamSession
 
 
@@ -29,14 +30,31 @@ class APISeex(MrMeseex):
         data: Any = None,
         name: str = None,
         tasks: list = None,
+        stack: Optional["ProviderStack"] = None,
+        materialize_media: bool = True,
     ):
         super().__init__(tasks, data, name)
         self.service = service
         self.endpoint = endpoint
+        # Credential-bound provider wiring, resolved once at submit time so no
+        # pipeline task re-resolves it (and cannot pick up another tenant's key).
+        self.stack = stack
+        # When False, media results stay URL references instead of being downloaded.
+        self.materialize_media = materialize_media
         # Per-job lifecycle controller, assigned by the orchestrator after creation.
         self.runtime: Optional["JobRuntime"] = None
         # Set by the orchestrator when the initial response is a live stream.
         self.direct_response: Optional["httpx.Response"] = None
+
+    @property
+    def provider_stack(self) -> "ProviderStack":
+        """The stack bound at submit time; raises when the job was never wired."""
+        if self.stack is None:
+            raise ValueError(
+                f"No provider stack bound to job for service {self.service.id}. "
+                "Submit through ApiJobManager.submit_job()."
+            )
+        return self.stack
 
     # ------------------------------------------------------------------
     # Domain view

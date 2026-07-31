@@ -8,7 +8,6 @@ from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
 from media_toolkit import MediaDict
 
 from fastsdk.service_interaction.api_seex import APISeex
-from fastsdk.service_interaction.provider_stack_registry import ProviderStackRegistry
 from fastsdk.service_interaction.request import RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 
@@ -24,10 +23,10 @@ class JobTasks:
     ``MrMeseex`` subclass (not a string forward ref) so meseex detects it.
     ``@polling_task`` stays on instance methods because the decorator only
     supports ``(job)`` or ``(self, job)`` call shapes.
-    """
 
-    def __init__(self, stacks: ProviderStackRegistry):
-        self._stacks = stacks
+    Handlers read the provider stack from the job, which binds it at submit
+    time. Re-resolving per task could hand a job another tenant's credential.
+    """
 
     def as_task_map(self) -> Dict[str, Any]:
         """Return bound handlers for ``MeseexBox``."""
@@ -41,7 +40,7 @@ class JobTasks:
         }
 
     async def prepare_request(self, job: APISeex) -> RequestData:
-        stack = self._stacks.require(job.service.id)
+        stack = job.provider_stack
         return stack.api_client.format_request_params(job.endpoint, job.input)
 
     async def load_files(self, job: APISeex) -> RequestData:
@@ -50,7 +49,7 @@ class JobTasks:
             raise ValueError("load_files: missing RequestData from Preparing")
         if not request_data.file_params:
             return request_data
-        stack = self._stacks.require(job.service.id)
+        stack = job.provider_stack
         request_data.file_params = await stack.file_handler.load_files_from_disk(request_data.file_params)
         return request_data
 
@@ -60,7 +59,7 @@ class JobTasks:
             raise ValueError("upload_files: missing RequestData from prior pipeline task")
         if not request_data.file_params:
             return request_data
-        stack = self._stacks.require(job.service.id)
+        stack = job.provider_stack
         request_data.file_params = await stack.file_handler.upload_files(request_data.file_params)
         return request_data
 
@@ -71,7 +70,7 @@ class JobTasks:
                 "send_request: missing RequestData from prior pipeline task "
                 "(Preparing / Load files / Uploading files)"
             )
-        stack = self._stacks.require(job.service.id)
+        stack = job.provider_stack
 
         if isinstance(request_data.file_params, MediaDict) and request_data.file_params:
             if request_data.body_content_type == stack.api_client._JSON_BODY_CONTENT_TYPE:
@@ -107,7 +106,7 @@ class JobTasks:
             logger.error("send_request | Request failed: %s", error)
             raise Exception(error)
 
-        parsed = await stack.parser.parse_response(response)
+        parsed = await stack.parser.parse_response(response, materialize_media=job.materialize_media)
 
         if isinstance(parsed, StreamingResponse):
             logger.info("send_request | Detected direct stream response")
@@ -127,7 +126,7 @@ class JobTasks:
         if not isinstance(parsed_response, JOB_RESPONSE_TYPES):
             return parsed_response
 
-        stack = self._stacks.require(job.service.id)
+        stack = job.provider_stack
 
         try:
             http_response = await stack.api_client.poll_status(parsed_response)
@@ -180,13 +179,13 @@ class JobTasks:
 
     async def process_result(self, job: APISeex) -> Any:
         response = job.prev_task_output
-        stack = self._stacks.require(job.service.id)
+        stack = job.provider_stack
 
         if isinstance(response, StreamingResponse):
             return response
 
         if not isinstance(response, JOB_RESPONSE_TYPES):
-            return stack.parser.parse_media(response)
+            return stack.parser.parse_media(response, job.materialize_media)
 
         raw_result = stack.api_client.get_result(response)
-        return stack.parser.parse_media(raw_result)
+        return stack.parser.parse_media(raw_result, job.materialize_media)

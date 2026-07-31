@@ -40,6 +40,7 @@ class FastClient:
         api_key: Optional[str] = None,
         temporary: bool = False,
         service_name_or_id: Optional[str] = None,
+        materialize_media: bool = True,
         **load_kwargs
     ):
         """
@@ -51,10 +52,13 @@ class FastClient:
             temporary: If True, the service is removed from the registry when the client is deleted.
             service_name_or_id: Strict registry lookup by ID/name (used by generated stubs).
                 Raises if the service is not registered.
+            materialize_media: If False, media results stay URL references instead of being
+                downloaded. Agent hosts (MCP) use this to avoid pulling bytes they only forward.
             **load_kwargs: Additional arguments for service loading (see fastsdk.inspect_service).
         """
         self.fsdk = FastSDK()   # singleton: all clients share one registry and job manager
         self.temporary = temporary
+        self.materialize_media = materialize_media
 
         if service is None and service_name_or_id is None:
             raise ValueError("Provide a service source (URL, file, dict, AIService) or a registered service ID/name.")
@@ -91,14 +95,20 @@ class FastClient:
         return os.getenv(self.service.id.upper() + "_API_KEY", None)
 
     def submit_job(self, endpoint_id: str, **kwargs) -> 'APISeex':
-        return self.fsdk.api_job_manager.submit_job(self.service.id, endpoint_id, data=kwargs)
+        return self.fsdk.api_job_manager.submit_job(
+            self.service.id,
+            endpoint_id,
+            data=kwargs,
+            api_key=self.api_key,
+            materialize_media=self.materialize_media,
+        )
 
     def estimate(self, endpoint_path: str, **params) -> PriceEstimate:
         """Estimate price and runtime. Implemented by the Socaity provider API client.
 
         Requires ``socaity-cli`` when the provider is Socaity (signaled via ``@requires``).
         """
-        stack = self.fsdk.provider_stacks.require(self.service.id)
+        stack = self.fsdk.provider_stacks.require(self.service.id, self.api_key)
         estimate_fn = getattr(stack.api_client, "estimate", None)
         if estimate_fn is None:
             raise NotImplementedError(

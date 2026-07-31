@@ -26,14 +26,21 @@ class ApiJobManager:
     ):
         self.service_registry = service_registry
         self.stacks = stacks
-        self._job_tasks = JobTasks(stacks)
+        self._job_tasks = JobTasks()
         self.meseex_box = MeseexBox(
             task_methods=self._job_tasks.as_task_map(),
             progress_verbosity=progress_verbosity,
         )
         self._bridge = AsyncBridge(self.meseex_box.task_executor.async_executor)
 
-    def submit_job(self, service_id: str, endpoint_id: str, data: dict) -> APISeex:
+    def submit_job(
+        self,
+        service_id: str,
+        endpoint_id: str,
+        data: dict,
+        api_key: str = None,
+        materialize_media: bool = True,
+    ) -> APISeex:
         service = self.service_registry.get_service(service_id)
         if not service:
             raise ValueError(f"Service {service_id} not found")
@@ -42,7 +49,7 @@ class ApiJobManager:
         if not endpoint:
             raise ValueError(f"Endpoint {endpoint_id} not found in service {service_id}")
 
-        stack = self.stacks.get(service_id)
+        stack = self.stacks.ensure(service_id, api_key)
         tasks = PipelinePlanner.plan(service, endpoint, stack)
         seex_name = f"{service.display_name}.{endpoint.path}"
 
@@ -52,11 +59,13 @@ class ApiJobManager:
             data=data,
             tasks=tasks,
             name=seex_name,
+            stack=stack,
+            materialize_media=materialize_media,
         )
         job.runtime = JobRuntime(
             job=job,
-            api_client=stack.api_client if stack else None,
-            parser=stack.parser if stack else None,
+            api_client=stack.api_client,
+            parser=stack.parser,
             meseex_box=self.meseex_box,
             bridge=self._bridge,
         )
