@@ -12,7 +12,6 @@ Design:
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Callable, Optional, Union
 
 import httpx
@@ -30,16 +29,6 @@ from socaity_schemas import (
 # ---------------------------------------------------------------------------
 
 
-def _materialize_media() -> bool:
-    """When false (MCP / agents), keep FileModel URLs instead of downloading bytes."""
-    return os.environ.get("FASTSDK_MATERIALIZE_MEDIA", "1").strip().lower() not in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }
-
-
 def _looks_like_file_model_dict(value: dict) -> bool:
     return "content" in value and ("content_type" in value or "file_name" in value)
 
@@ -55,16 +44,16 @@ def _file_ref_from_model(value: dict) -> dict:
     }
 
 
-def _parse_media_socaity(result: Any) -> Any:
+def _parse_media_socaity(result: Any, materialize: bool = True) -> Any:
     if result is None:
         return result
     if isinstance(result, list):
-        return [_parse_media_socaity(item) for item in result]
+        return [_parse_media_socaity(item, materialize) for item in result]
     model_dump = getattr(result, "model_dump", None)
     if callable(model_dump):
         dumped = model_dump()
         if isinstance(dumped, dict) and _looks_like_file_model_dict(dumped):
-            if not _materialize_media():
+            if not materialize:
                 return _file_ref_from_model(dumped)
             try:
                 return media_from_any(dumped, allow_reads_from_disk=False)
@@ -72,28 +61,28 @@ def _parse_media_socaity(result: Any) -> Any:
                 pass
     if isinstance(result, dict):
         if _looks_like_file_model_dict(result):
-            if not _materialize_media():
+            if not materialize:
                 return _file_ref_from_model(result)
             try:
                 return media_from_any(result, allow_reads_from_disk=False)
             except Exception:
                 pass
-        return {key: _parse_media_socaity(value) for key, value in result.items()}
+        return {key: _parse_media_socaity(value, materialize) for key, value in result.items()}
     return result
 
 
-def _parse_media_replicate(result: Any) -> Any:
+def _parse_media_replicate(result: Any, materialize: bool = True) -> Any:
     if isinstance(result, str) and "https://replicate.delivery" in result:
-        if not _materialize_media():
+        if not materialize:
             return {"url": result, "content": result}
         try:
             return media_from_any(result, allow_reads_from_disk=False)
         except Exception:
             return result
     if isinstance(result, list):
-        return [_parse_media_replicate(item) for item in result]
+        return [_parse_media_replicate(item, materialize) for item in result]
     if isinstance(result, dict):
-        return {k: _parse_media_replicate(v) for k, v in result.items()}
+        return {k: _parse_media_replicate(v, materialize) for k, v in result.items()}
     return result
 
 
@@ -102,7 +91,7 @@ def _parse_media_replicate(result: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _parse_socaity(data: dict, parse_media: bool) -> Union[SocaityJobResponse, dict]:
+def _parse_socaity(data: dict, parse_media: bool, materialize_media: bool = True) -> Union[SocaityJobResponse, dict]:
     if "job_id" not in data:
         return data
 
@@ -113,23 +102,23 @@ def _parse_socaity(data: dict, parse_media: bool) -> Union[SocaityJobResponse, d
         payload["message"] = progress.get("message")
 
     if parse_media:
-        payload["result"] = _parse_media_socaity(payload.get("result"))
+        payload["result"] = _parse_media_socaity(payload.get("result"), materialize_media)
 
     return SocaityJobResponse(**payload)
 
 
-def _parse_runpod(data: dict, parse_media: bool) -> Union[RunpodJobResponse, dict]:
+def _parse_runpod(data: dict, parse_media: bool, materialize_media: bool = True) -> Union[RunpodJobResponse, dict]:
     if "id" not in data or "status" not in data:
         return data
     return RunpodJobResponse(**data)
 
 
-def _parse_replicate(data: dict, parse_media: bool) -> Union[ReplicateJobResponse, dict]:
+def _parse_replicate(data: dict, parse_media: bool, materialize_media: bool = True) -> Union[ReplicateJobResponse, dict]:
     urls = data.get("urls") or {}
     if "id" not in data or "get" not in urls:
         return data
     if parse_media:
-        data = {**data, "output": _parse_media_replicate(data.get("output"))}
+        data = {**data, "output": _parse_media_replicate(data.get("output"), materialize_media)}
     return ReplicateJobResponse(**data)
 
 
@@ -145,7 +134,9 @@ def _try_unwrap_apipod(output: Any) -> Optional[dict]:
     return None
 
 
-def _parse_apipod_serverless_runpod(data: dict, parse_media: bool) -> Union[SocaityJobResponse, RunpodJobResponse, dict]:
+def _parse_apipod_serverless_runpod(
+    data: dict, parse_media: bool, materialize_media: bool = True
+) -> Union[SocaityJobResponse, RunpodJobResponse, dict]:
     """Compose Runpod transport parsing with nested APIPod payload extraction.
 
     Returns SocaityJobResponse when a nested payload is found (subsequent
@@ -156,7 +147,7 @@ def _parse_apipod_serverless_runpod(data: dict, parse_media: bool) -> Union[Soca
 
     nested = _try_unwrap_apipod(data.get("output"))
     if nested:
-        return _parse_socaity(nested, parse_media=parse_media)
+        return _parse_socaity(nested, parse_media=parse_media, materialize_media=materialize_media)
 
     return RunpodJobResponse(**data)
 
@@ -198,7 +189,7 @@ class ResponseParser:
         self._media_parser = _MEDIA_PARSERS.get(provider)
 
     async def parse_response(
-        self, response: httpx.Response, parse_media: bool = True
+        self, response: httpx.Response, parse_media: bool = True, materialize_media: bool = True
     ) -> Union[SocaityJobResponse, RunpodJobResponse, ReplicateJobResponse, StreamingResponse, bytes, None, dict]:
         if not response:
             return None
@@ -222,13 +213,17 @@ class ResponseParser:
             return response.content
 
         if self._json_parser:
-            return self._json_parser(data, parse_media)
+            return self._json_parser(data, parse_media, materialize_media)
         return data
 
-    def parse_media(self, raw_result: Any) -> Any:
-        """Apply provider-specific media processing to a raw result value."""
+    def parse_media(self, raw_result: Any, materialize_media: bool = True) -> Any:
+        """Apply provider-specific media processing to a raw result value.
+
+        With ``materialize_media=False`` media stays a URL reference instead of
+        being downloaded, which is what agent hosts (MCP) want.
+        """
         if self._media_parser:
-            return self._media_parser(raw_result)
+            return self._media_parser(raw_result, materialize_media)
         return raw_result
 
     @staticmethod

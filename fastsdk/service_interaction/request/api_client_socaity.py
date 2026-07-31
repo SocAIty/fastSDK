@@ -104,7 +104,9 @@ class APIClientSocaity(APIClient):
         input_data = self._estimate_input(endpoint, params)
         endpoint_id = self._platform_endpoint_id(endpoint.path)
 
-        result = SocaityBackendClient().estimate(
+        # The client's own key, not the ambient one: a multi-tenant host (MCP) must not
+        # estimate under a process-wide credential that belongs to someone else.
+        result = SocaityBackendClient(api_key=self.api_key).estimate(
             deployment_id=deployment.id,
             endpoint_id=endpoint_id,
             input_data=input_data,

@@ -204,9 +204,12 @@ delegating to ``PipelinePlanner``, or implement task bodies.
 per-job ``JobRuntime``, and summons it into the ``MeseexBox``.
 
 **`ProviderStackRegistry`** (`provider_stack_registry.py`) caches ``ProviderStack`` instances
-per service id. ``load(service_name_or_id, api_key)`` resolves the service from the registry
-and calls ``ProviderFactory.build(...)``. Task handlers and ``JobRuntime`` read stacks through
-this registry.
+per ``(service id, api key)`` pair. The key includes the credential because the stack carries
+it on every request; caching per service id alone would hand the first caller's key to every
+later caller, which breaks multi-tenant hosts such as the MCP server.
+``load(service_name_or_id, api_key)`` resolves the service and calls ``ProviderFactory.build(...)``.
+``submit_job(...)`` binds the resolved stack onto the ``APISeex``, so task handlers and
+``JobRuntime`` read it from the job instead of re-resolving.
 
 **`JobTasks`** (`job_tasks.py`) implements the meseex pipeline steps: prepare request, load/upload
 files, send request, poll status, process result. Polling logic and the ``@polling_task`` decorator
@@ -277,6 +280,12 @@ If the response is job-based, `_poll_status(...)` keeps polling through `@pollin
 - `BaseJobResponse`
 - media objects
 - plain Python results
+
+`FastClient(..., materialize_media=False)` turns off the download step: file results stay as
+`{"url", "content_type", "file_name", "file_size"}` references instead of media-toolkit objects.
+The flag travels `FastClient` → `ApiJobManager.submit_job(...)` → `APISeex` → `ResponseParser`,
+so it is per client, not global. Hosts that only forward URLs (the MCP server) use it to avoid
+pulling bytes they never read.
 
 ## How `meseex` Fits In
 `fastsdk` does not implement its own thread/event-loop orchestration.
