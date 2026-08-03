@@ -7,9 +7,6 @@ from fastsdk.service_interaction.response.response_schemas import SocaityJobResp
 from socaity_schemas.contract import Endpoint
 from socaity_schemas.contract.address import service_url
 
-# Keys that are transport/worker metadata, never part of a schema request body.
-_RESERVED_INPUT_KEYS = frozenset({"path", "task_id"})
-
 
 class APIClientRunpod(APIClient):
     def validate_api_key(self) -> bool:
@@ -37,21 +34,15 @@ class APIClientRunpod(APIClient):
     def get_result(self, response) -> Any:
         return getattr(response, "output", None)
 
-    def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
+    def format_request_params(self, endpoint: Endpoint, *args, **kwargs) -> RequestData:
         """Prepare request parameters for Runpod API.
 
         Shared ``APIClient`` spreads a sole JSON object body onto the wire root
         for HTTP. RunPod ``input`` is function kwargs, so re-nest that object
         under the schema param name (usually ``request``) and keep ``path``.
-
-        Also accepts flat schema fields when the catalog still lists one object
-        body param (callers pass ``messages=...`` instead of ``request={...}``),
-        and nests flattened ``standard_schema`` contracts under ``request``.
-        Plain multi-arg endpoints are left untouched.
         """
-        data = self._coalesce_flat_schema_input(endpoint, data)
-        request_data = super().format_request_params(endpoint, data)
-        request_data.body_params = self._renest_schema_body_for_runpod(
+        request_data = super().format_request_params(endpoint, *args, **kwargs)
+        request_data.body_params = self._renest_sole_json_object_body(
             endpoint, request_data.body_params
         )
 
@@ -62,75 +53,24 @@ class APIClientRunpod(APIClient):
         return request_data
 
     @classmethod
-    def _sole_json_object_body_param(cls, endpoint: Endpoint):
+    def _renest_sole_json_object_body(cls, endpoint: Endpoint, body_params: dict) -> dict:
         body_defs = [p for p in (endpoint.parameters or []) if p.location == "body"]
-        if len(body_defs) == 1 and cls._is_json_object_request_body(body_defs[0]):
-            return body_defs[0]
-        return None
-
-    @classmethod
-    def _coalesce_flat_schema_input(cls, endpoint: Endpoint, data: dict) -> dict:
-        """Wrap flat schema fields into the sole body param before HTTP-style formatting.
-
-        Example: catalog has ``request: ChatCompletionRequest``, caller passes
-        ``{messages: [...]}`` → ``{request: {messages: [...]}}``.
-        """
-        if not isinstance(data, dict) or not data:
-            return data
-
-        body_param = cls._sole_json_object_body_param(endpoint)
-        if body_param is None:
-            return data
-
-        name = body_param.name
-        if name in data:
-            return data
-
-        schema = getattr(body_param, "param_schema", None) or {}
-        schema_props = set(schema.get("properties") or {})
-        flat = {
-            k: v for k, v in data.items()
-            if k not in _RESERVED_INPUT_KEYS and k != name
-        }
-        if not flat:
-            return data
-        if schema_props and not (set(flat) & schema_props):
-            return data
-
-        keep = {k: v for k, v in data.items() if k in _RESERVED_INPUT_KEYS}
-        return {name: flat, **keep}
-
-    @classmethod
-    def _renest_schema_body_for_runpod(cls, endpoint: Endpoint, body_params: dict) -> dict:
-        """Ensure RunPod kwargs include the schema object param when applicable."""
-        if not body_params:
+        if (
+            len(body_defs) != 1
+            or not cls._is_json_object_request_body(body_defs[0])
+        ):
             return body_params
 
-        body_param = cls._sole_json_object_body_param(endpoint)
-        if body_param is not None:
-            return cls._renest_under(body_param.name, body_params)
-
-        # Legacy flattened catalog for a standardized LLM schema: nest under request.
-        if not getattr(endpoint, "standard_schema", None):
-            return body_params
-        if "request" in body_params:
-            return body_params
-        return cls._renest_under("request", body_params)
-
-    @classmethod
-    def _renest_under(cls, name: str, body_params: dict) -> dict:
+        name = body_defs[0].name
         if name in body_params:
             return body_params
-        nested = {k: v for k, v in body_params.items() if k not in _RESERVED_INPUT_KEYS}
-        keep = {k: v for k, v in body_params.items() if k in _RESERVED_INPUT_KEYS}
+
+        reserved = {"path"}
+        nested = {k: v for k, v in body_params.items() if k not in reserved}
+        keep = {k: v for k, v in body_params.items() if k in reserved}
         if not nested:
             return body_params
         return {name: nested, **keep}
-
-    # Back-compat alias used by older tests / callers.
-    @classmethod
-    def _renest_sole_json_object_body(cls, endpoint: Endpoint, body_params: dict) -> dict:
-        return cls._renest_schema_body_for_runpod(endpoint, body_params)
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
         """
