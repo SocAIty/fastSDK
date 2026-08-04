@@ -134,7 +134,14 @@ def _parse_replicate(data: dict, parse_media: bool, materialize_media: bool = Tr
 
 
 def _try_unwrap_apipod(output: Any) -> Optional[dict]:
-    """Try to extract a nested APIPod/Socaity payload from Runpod output."""
+    """Try to extract a nested APIPod/Socaity payload from Runpod output.
+
+    Non-stream APIPod handlers yield a single JobResult (JSON string or dict).
+    With ``return_aggregate_stream=True``, RunPod wraps that as a one-element
+    list — unwrap it here so polling can switch to Socaity links.
+    """
+    if isinstance(output, list) and len(output) == 1:
+        output = output[0]
     if isinstance(output, str):
         try:
             output = json.loads(output)

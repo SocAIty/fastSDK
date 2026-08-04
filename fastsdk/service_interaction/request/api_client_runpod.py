@@ -31,6 +31,16 @@ class APIClientRunpod(APIClient):
     def get_cancel_url(self, response) -> Optional[str]:
         return f"cancel/{response.id}"
 
+    def get_stream_url(self, response) -> Optional[str]:
+        """RunPod live stream for generator handlers: ``/stream/{job_id}``."""
+        job_id = getattr(response, "id", None)
+        if not job_id:
+            return None
+        base = service_url(self.address).strip("/")
+        if base.endswith("/run"):
+            base = base[:-4]
+        return f"{base}/stream/{job_id}"
+
     def get_result(self, response) -> Any:
         return getattr(response, "output", None)
 
