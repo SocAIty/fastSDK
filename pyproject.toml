@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsdk"
-version = "0.4.9"
+version = "0.4.10"
 description = "Turn any AI/web service (OpenAPI, Replicate, RunPod, APIPod) into a native-feeling Python client."
 requires-python = ">=3.8"
 authors = [
