@@ -152,6 +152,38 @@ def _try_unwrap_apipod(output: Any) -> Optional[dict]:
     return None
 
 
+def normalize_provider_result(value: Any) -> Any:
+    """Peel RunPod aggregate lists and nested APIPod JobResult envelopes.
+
+    ``get_result`` should return the inference payload (e.g. chat.completion),
+    not ``[{job_id, result: ...}]`` left over from ``return_aggregate_stream``.
+    """
+    current = value
+    for _ in range(3):
+        if isinstance(current, list) and len(current) == 1:
+            only = current[0]
+            if isinstance(only, str):
+                try:
+                    only = json.loads(only)
+                except (json.JSONDecodeError, TypeError):
+                    break
+            if isinstance(only, dict) and "job_id" in only:
+                current = only
+                continue
+            break
+        if isinstance(current, str):
+            try:
+                current = json.loads(current)
+            except (json.JSONDecodeError, TypeError):
+                break
+            continue
+        if isinstance(current, dict) and "job_id" in current and "result" in current:
+            current = current.get("result")
+            continue
+        break
+    return current
+
+
 def _parse_apipod_serverless_runpod(
     data: dict, parse_media: bool, materialize_media: bool = True
 ) -> Union[SocaityJobResponse, RunpodJobResponse, dict]:

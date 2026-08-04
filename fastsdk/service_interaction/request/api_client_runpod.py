@@ -42,7 +42,10 @@ class APIClientRunpod(APIClient):
         return f"{base}/stream/{job_id}"
 
     def get_result(self, response) -> Any:
-        return getattr(response, "output", None)
+        from fastsdk.service_interaction.response.response_parser import (
+            normalize_provider_result,
+        )
+        return normalize_provider_result(getattr(response, "output", None))
 
     def format_request_params(self, endpoint: Endpoint, *args, **kwargs) -> RequestData:
         """Prepare request parameters for Runpod API.
@@ -121,8 +124,11 @@ class APIClientRunpodApipod(APIClientRunpod):
         return super().get_cancel_url(response)
 
     def get_result(self, response) -> Any:
+        from fastsdk.service_interaction.response.response_parser import (
+            normalize_provider_result,
+        )
         if isinstance(response, SocaityJobResponse):
-            return response.result
+            return normalize_provider_result(response.result)
         return super().get_result(response)
 
     def get_status(self, response) -> APIJobStatus:

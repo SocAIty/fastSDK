@@ -81,7 +81,10 @@ class APIClient:
         return None
 
     def get_result(self, response) -> Any:
-        return getattr(response, "result", None)
+        from fastsdk.service_interaction.response.response_parser import (
+            normalize_provider_result,
+        )
+        return normalize_provider_result(getattr(response, "result", None))
 
     # ------------------------------------------------------------------
     # HTTP plumbing
