@@ -95,7 +95,9 @@ class JobTasks:
             request_data.file_params = await stack.file_handler.prepare_files_for_send(request_data.file_params)
 
         logger.info("send_request | Sending request to %s", request_data.url)
-        response = await stack.api_client.send_request(request_data)
+        timeout_hint = getattr(job.endpoint, "timeout_hint_s", None)
+        timeout_s = float(timeout_hint) if timeout_hint else 60.0
+        response = await stack.api_client.send_request(request_data, timeout_s=timeout_s)
         logger.info(
             "send_request | Received response: status=%d content_type=%s",
             response.status_code, response.headers.get("Content-Type"),
