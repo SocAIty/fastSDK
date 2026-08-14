@@ -14,6 +14,20 @@ from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 
 logger = logging.getLogger(__name__)
 
+# Provider status GETs (Replicate in particular) return 503/429 while the
+# prediction already exists. Treat those like transport errors: PollAgain,
+# not a failed Socaity job.
+TRANSIENT_POLL_HTTP_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+def retry_poll_or_raise(job: APISeex, error: BaseException) -> PollAgain:
+    data = job.get_task_data() or {}
+    n_polling_errors = data.get("number_of_polling_errors", 0) if isinstance(data, dict) else 0
+    if n_polling_errors > 3:
+        raise error
+    job.set_task_data({"number_of_polling_errors": n_polling_errors + 1})
+    return PollAgain(f"Job status polling failed: {error}")
+
 
 class JobTasks:
     """Async task handlers wired into ``MeseexBox`` for API jobs.
@@ -133,19 +147,19 @@ class JobTasks:
         try:
             http_response = await stack.api_client.poll_status(parsed_response)
         except Exception as e:
-            n_errors = job.get_task_data() or {}
-            n_polling_errors = n_errors.get("number_of_polling_errors", 0) if isinstance(n_errors, dict) else 0
-            if n_polling_errors > 3:
-                raise e
-            job.set_task_data({"number_of_polling_errors": n_polling_errors + 1})
-            return PollAgain(f"Job status polling failed: {e}")
+            return retry_poll_or_raise(job, e)
 
         error = await stack.parser.check_response_status(http_response)
         if error:
+            status_code = getattr(http_response, "status_code", 0)
             if not http_response.is_closed:
                 await http_response.aclose()
-            raise ValueError(f"Job status polling failed: {error}")
+            wrapped = ValueError(f"Job status polling failed: {error}")
+            if status_code in TRANSIENT_POLL_HTTP_STATUSES:
+                return retry_poll_or_raise(job, wrapped)
+            raise wrapped
 
+        job.set_task_data({"number_of_polling_errors": 0})
         parsed_response = await stack.parser.parse_response(http_response, parse_media=False)
 
         if not http_response.is_closed:
