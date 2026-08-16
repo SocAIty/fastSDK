@@ -31,8 +31,21 @@ class APIClientRunpod(APIClient):
     def get_cancel_url(self, response) -> Optional[str]:
         return f"cancel/{response.id}"
 
+    def get_stream_url(self, response) -> Optional[str]:
+        """RunPod live stream for generator handlers: ``/stream/{job_id}``."""
+        job_id = getattr(response, "id", None)
+        if not job_id:
+            return None
+        base = service_url(self.address).strip("/")
+        if base.endswith("/run"):
+            base = base[:-4]
+        return f"{base}/stream/{job_id}"
+
     def get_result(self, response) -> Any:
-        return getattr(response, "output", None)
+        from fastsdk.service_interaction.response.response_parser import (
+            normalize_provider_result,
+        )
+        return normalize_provider_result(getattr(response, "output", None))
 
     def format_request_params(self, endpoint: Endpoint, *args, **kwargs) -> RequestData:
         """Prepare request parameters for Runpod API.
@@ -111,8 +124,11 @@ class APIClientRunpodApipod(APIClientRunpod):
         return super().get_cancel_url(response)
 
     def get_result(self, response) -> Any:
+        from fastsdk.service_interaction.response.response_parser import (
+            normalize_provider_result,
+        )
         if isinstance(response, SocaityJobResponse):
-            return response.result
+            return normalize_provider_result(response.result)
         return super().get_result(response)
 
     def get_status(self, response) -> APIJobStatus:

@@ -134,7 +134,14 @@ def _parse_replicate(data: dict, parse_media: bool, materialize_media: bool = Tr
 
 
 def _try_unwrap_apipod(output: Any) -> Optional[dict]:
-    """Try to extract a nested APIPod/Socaity payload from Runpod output."""
+    """Try to extract a nested APIPod/Socaity payload from Runpod output.
+
+    Non-stream APIPod handlers yield a single JobResult (JSON string or dict).
+    With ``return_aggregate_stream=True``, RunPod wraps that as a one-element
+    list — unwrap it here so polling can switch to Socaity links.
+    """
+    if isinstance(output, list) and len(output) == 1:
+        output = output[0]
     if isinstance(output, str):
         try:
             output = json.loads(output)
@@ -143,6 +150,38 @@ def _try_unwrap_apipod(output: Any) -> Optional[dict]:
     if isinstance(output, dict) and "job_id" in output:
         return output
     return None
+
+
+def normalize_provider_result(value: Any) -> Any:
+    """Peel RunPod aggregate lists and nested APIPod JobResult envelopes.
+
+    ``get_result`` should return the inference payload (e.g. chat.completion),
+    not ``[{job_id, result: ...}]`` left over from ``return_aggregate_stream``.
+    """
+    current = value
+    for _ in range(3):
+        if isinstance(current, list) and len(current) == 1:
+            only = current[0]
+            if isinstance(only, str):
+                try:
+                    only = json.loads(only)
+                except (json.JSONDecodeError, TypeError):
+                    break
+            if isinstance(only, dict) and "job_id" in only:
+                current = only
+                continue
+            break
+        if isinstance(current, str):
+            try:
+                current = json.loads(current)
+            except (json.JSONDecodeError, TypeError):
+                break
+            continue
+        if isinstance(current, dict) and "job_id" in current and "result" in current:
+            current = current.get("result")
+            continue
+        break
+    return current
 
 
 def _parse_apipod_serverless_runpod(
