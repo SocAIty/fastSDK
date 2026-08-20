@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="fastSDK. Any service. One typed client." width="100%" />
+  <img src="docs/assets/logo.png" alt="fastSDK logo" height="200" />
 </p>
 
 <p align="center">
