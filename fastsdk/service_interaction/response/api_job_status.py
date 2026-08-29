@@ -33,11 +33,12 @@ class APIJobStatus(Enum):
     FAILED = "FAILED"
     TIMEOUT = "TIMEOUT"
     CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
     UNKNOWN = "UNKNOWN"
 
     @property
     def is_terminal(self) -> bool:
-        return self in {self.FINISHED, self.FAILED, self.TIMEOUT, self.CANCELLED}
+        return self in {self.FINISHED, self.FAILED, self.TIMEOUT, self.CANCELLED, self.REJECTED}
 
     @staticmethod
     def map_runpod_status(status: str) -> 'APIJobStatus':
