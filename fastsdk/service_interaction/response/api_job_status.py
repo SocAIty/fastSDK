@@ -1,5 +1,6 @@
 from enum import Enum
 
+# Foreign provider strings. Mapped at this boundary only.
 RUNPOD_STATUS_MAPPINGS = {
     "IN_QUEUE": "QUEUED",
     "IN_PROGRESS": "PROCESSING",
@@ -25,7 +26,6 @@ class APIJobStatus(Enum):
     Unified status enum for jobs across multiple server providers.
     Describes the status the job has on the service (server-side).
     """
-    PENDING = "PENDING"
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     STREAMING = "STREAMING"
