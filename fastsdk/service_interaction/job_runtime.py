@@ -147,8 +147,18 @@ class JobRuntime:
     # Cancellation (single source of truth for cancel semantics)
     # ------------------------------------------------------------------
 
-    def cancel(self, wait: bool = False, timeout_s: float = 30.0, poll_interval_s: float = 0.5) -> Any:
-        """Cancel the job remotely (provider permitting) and locally via the kernel."""
+    def cancel(
+        self,
+        wait: bool = False,
+        timeout_s: float = 30.0,
+        poll_interval_s: float = 0.5,
+        action: Optional[str] = None,
+    ) -> Any:
+        """Cancel the job remotely (provider permitting) and locally via the kernel.
+
+        ``action`` reaches Socaity/APIPod cancel endpoints: ``cancel`` (default,
+        user stop) or ``interrupt`` (HIT: keep child jobs, resumable checkpoint).
+        """
         self._close_active_stream()
 
         job = self.job
@@ -171,7 +181,7 @@ class JobRuntime:
             return cancel_response
 
         try:
-            http_response = self._bridge.run(self._api_client.cancel_job, current_response, timeout_s=timeout_s)
+            http_response = self._bridge.run(self._api_client.cancel_job, current_response, action, timeout_s=timeout_s)
             cancel_response = self._parse_cancel_response(http_response)
         except Exception as e:
             logger.warning("Remote cancellation for job %s failed: %s. Job will continue.", job.meseex_id, e)
