@@ -407,3 +407,13 @@ The package is optimized for a common real-world scenario:
 - some requests also require file preprocessing and uploads
 
 Using `meseex` lets `fastsdk` expose a simple sync-friendly API while still executing request-heavy work efficiently.
+
+## Planned (SPAINE Phase 7)
+
+Not implemented here. Platform concept: `socaity_backend/agents/SPAINE/connectors_concept.md`.
+
+- At send time, read OpenAPI `components.securitySchemes` + `security` and apply auth. Catalog `service_credential_requirements` stores scheme **names** only, not placement.
+- One `apply_auth` path. Presets when the spec is silent: socaity / runpod / replicate / apipod → HTTP bearer. `connect(..., api_key=)` stays the single secret.
+- `send_request` uses `Endpoint.method` (stop hardcoding POST).
+- Catalog rename: `AIService` → `Service`. FastSDK's working unit becomes `ServiceDetails` (address + contract), not the hosting `Deployment` row.
+- Do not rewrite `ApiJobManager` / meseex. `PipelinePlanner` already skips polling when `has_job_queue` is false.

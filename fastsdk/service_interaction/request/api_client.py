@@ -364,11 +364,14 @@ class APIClient:
             raise ValueError("No polling URL available for this response")
         return await self.request_url(url=url, method=self.poll_method)
 
-    async def cancel_job(self, response) -> httpx.Response:
+    async def cancel_job(self, response, action: Optional[str] = None) -> httpx.Response:
+        """Cancel a job. ``action`` (``cancel`` | ``interrupt``) is a Socaity/APIPod
+        query parameter; ``interrupt`` keeps a resumable checkpoint on agent jobs."""
         url = self.get_cancel_url(response)
         if not url:
             raise ValueError("No cancel URL available for this response")
-        return await self.request_url(url=url, method=self.cancel_method)
+        params = {"action": action} if action else None
+        return await self.request_url(url=url, method=self.cancel_method, params=params)
 
     async def open_stream(self, response) -> httpx.Response:
         """Open the provider's live output stream for an in-progress job.

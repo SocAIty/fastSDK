@@ -179,7 +179,7 @@ class JobTasks:
             job.mark_cancelled(cancel_result=parsed_response)
             job.runtime.refresh_stream_state()
             return parsed_response
-        if status == APIJobStatus.FAILED:
+        if status in (APIJobStatus.FAILED, APIJobStatus.REJECTED, APIJobStatus.TIMEOUT):
             err = getattr(parsed_response, "error", None)
             raise ValueError(err or f"Job failed with status: {getattr(parsed_response, 'status', 'unknown')}")
 
