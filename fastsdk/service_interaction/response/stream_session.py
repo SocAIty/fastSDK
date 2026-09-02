@@ -17,6 +17,7 @@ from typing import Any, AsyncIterator, Callable, Iterator, Optional
 
 import httpx
 
+from fastsdk.profiling import event as profile_event
 from fastsdk.service_interaction.response.sse_assembly import chunk_text
 
 
@@ -28,6 +29,7 @@ class StreamSession:
         loop: The asyncio loop that owns the response (meseex's background loop).
         parse_chunk: Optional callable applied to each decoded SSE JSON object.
         content_type: Override for the response content type (else read from headers).
+        job_id: Optional id used in PROFILE logs (time to first token).
     """
 
     _SENTINEL = object()
@@ -38,6 +40,7 @@ class StreamSession:
         loop: asyncio.AbstractEventLoop,
         parse_chunk: Optional[Callable[[Any], Any]] = None,
         content_type: Optional[str] = None,
+        job_id: Optional[str] = None,
     ):
         self._response = response
         self._loop = loop
@@ -46,6 +49,8 @@ class StreamSession:
         self._queue: "queue.Queue[Any]" = queue.Queue()
         self._started = False
         self._error: Optional[BaseException] = None
+        self._job_id = job_id
+        self._first_logged = False
 
     @property
     def is_sse(self) -> bool:
@@ -137,6 +142,13 @@ class StreamSession:
     # Consumer (sync, any thread)
     # ------------------------------------------------------------------
 
+    def _log_first(self, item: Any) -> None:
+        if self._first_logged:
+            return
+        self._first_logged = True
+        nbytes = len(item) if isinstance(item, (bytes, bytearray, str)) else None
+        profile_event("sdk", "first_token", self._job_id, ttft=True, bytes=nbytes)
+
     def _drain(self) -> Iterator[Any]:
         while True:
             item = self._queue.get()
@@ -144,6 +156,7 @@ class StreamSession:
                 if self._error is not None:
                     raise self._error
                 return
+            self._log_first(item)
             yield item
 
     def __iter__(self) -> Iterator[Any]:
@@ -172,6 +185,7 @@ class StreamSession:
                 if self._error is not None:
                     raise self._error
                 return
+            self._log_first(item)
             yield item
 
     def __aiter__(self) -> AsyncIterator[Any]:

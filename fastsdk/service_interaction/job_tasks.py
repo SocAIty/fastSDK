@@ -7,6 +7,7 @@ from meseex.control_flow import polling_task, PollAgain
 from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
 from media_toolkit import MediaDict
 
+from fastsdk.profiling import event as profile_event, start as profile_start
 from fastsdk.service_interaction.api_seex import APISeex
 from fastsdk.service_interaction.request import RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
@@ -111,10 +112,19 @@ class JobTasks:
         logger.info("send_request | Sending request to %s", request_data.url)
         timeout_hint = getattr(job.endpoint, "timeout_hint_s", None)
         timeout_s = float(timeout_hint) if timeout_hint else 60.0
+        job_id = getattr(job, "name", None) or getattr(job, "meseex_id", None)
+        profile_start(job_id)
         response = await stack.api_client.send_request(request_data, timeout_s=timeout_s)
         logger.info(
             "send_request | Received response: status=%d content_type=%s",
             response.status_code, response.headers.get("Content-Type"),
+        )
+        profile_event(
+            "sdk",
+            "provider_headers",
+            job_id,
+            status=response.status_code,
+            content_type=(response.headers.get("Content-Type") or "").replace(" ", ""),
         )
 
         error = await stack.parser.check_response_status(response)
@@ -128,6 +138,7 @@ class JobTasks:
             logger.info("send_request | Detected direct stream response")
             job.direct_response = response
             job.runtime.refresh_stream_state()
+            profile_event("sdk", "direct_stream", job_id)
         else:
             if not response.is_closed:
                 await response.aclose()
