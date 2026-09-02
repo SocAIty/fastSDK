@@ -3,9 +3,9 @@ from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import os
 
 from socaity_schemas.platform import AIService, PriceEstimate
-
 from fastsdk.fastSDK import FastSDK
 from fastsdk.service_access import service_provider
+
 
 if TYPE_CHECKING:
     from fastsdk.service_interaction.api_seex import APISeex
