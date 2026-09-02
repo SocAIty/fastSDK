@@ -22,7 +22,6 @@ from typing import Any, Optional, TYPE_CHECKING
 
 from socaity_schemas import JOB_RESPONSE_TYPES
 
-from fastsdk.profiling import event as profile_event
 from fastsdk.service_interaction.response.sse_assembly import assemble_stream_bytes
 from fastsdk.service_interaction.response.stream_session import StreamSession
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
@@ -117,10 +116,8 @@ class JobRuntime:
 
     def _resolve_source(self) -> Optional[StreamSession]:
         """Return a session for a direct response or a discovered stream URL."""
-        job_id = getattr(self.job, "name", None) or getattr(self.job, "meseex_id", None)
         if self.job.direct_response is not None:
-            profile_event("sdk", "stream_open", job_id, source="direct")
-            return StreamSession(self.job.direct_response, self._bridge.loop, job_id=job_id)
+            return StreamSession(self.job.direct_response, self._bridge.loop)
 
         current = self.job.response
         if (
@@ -129,8 +126,7 @@ class JobRuntime:
             and self._api_client.get_stream_url(current)
         ):
             response = self._bridge.run(self._api_client.open_stream, current)
-            profile_event("sdk", "stream_open", job_id, source="url")
-            return StreamSession(response, self._bridge.loop, job_id=job_id)
+            return StreamSession(response, self._bridge.loop)
         return None
 
     def assemble_result(self) -> Any:
