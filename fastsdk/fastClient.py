@@ -95,6 +95,8 @@ class FastClient:
         return os.getenv(self.service.id.upper() + "_API_KEY", None)
 
     def submit_job(self, endpoint_id: str, **kwargs) -> 'APISeex':
+        if self.fsdk.service_registry.get_service(self.service.id) is None:
+            self.fsdk.service_registry.add_service(self.service)
         return self.fsdk.api_job_manager.submit_job(
             self.service.id,
             endpoint_id,
@@ -118,10 +120,10 @@ class FastClient:
         return estimate_fn(endpoint_path, **params)
 
     def close(self):
-        """Remove the service from the registry if this client registered it temporarily."""
+        """Drop a temporary registry entry. Keep the on-disk SDK cache."""
         if self.temporary and getattr(self, 'service', None) and hasattr(self, 'fsdk'):
             try:
-                self.fsdk.service_registry.remove_service(self.service.id)
+                self.fsdk.service_registry.remove_service(self.service.id, persist=False)
             except Exception:
                 pass
             self.temporary = False
