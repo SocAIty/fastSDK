@@ -1,4 +1,8 @@
+from apipod_registry import create_service
 from apipod_registry.registry import Registry
+from socaity_schemas import JobLinks, SocaityJobResponse
+from socaity_schemas.contract import Endpoint, ServiceContract
+from socaity_schemas.contract.address import SocaityServiceAddress
 
 from fastsdk.service_interaction.api_seex import APISeex
 from fastsdk.service_interaction.job_runtime import JobRuntime
@@ -7,6 +11,36 @@ from fastsdk.service_interaction.provider_stack_registry import ProviderStackReg
 from fastsdk.service_interaction.pipeline_planner import PipelinePlanner
 from fastsdk.service_interaction.job_tasks import JobTasks
 from meseex import MeseexBox
+
+_GATEWAY_PREFIX = "_socaity_gateway"
+
+
+def _gateway_service(origin: str):
+    """Minimal AIService for a gateway origin. Not a catalog row."""
+    origin = origin.rstrip("/")
+    contract = ServiceContract(
+        title="Socaity gateway",
+        specification="apipod",
+        has_job_queue=True,
+        endpoints=[],
+    )
+    return create_service(
+        contract,
+        address=SocaityServiceAddress(base_url=origin, path=""),
+        provider="socaity",
+        service_id=f"{_GATEWAY_PREFIX}:{origin}",
+        name="socaity_gateway",
+    )
+
+
+def _factory_endpoint(path: str) -> Endpoint:
+    normalized = path if path.startswith("/") else f"/{path}"
+    return Endpoint(
+        path=normalized,
+        method="POST",
+        request_body_content_type="application/json",
+        supports_streaming=True,
+    )
 
 
 class ApiJobManager:
@@ -62,6 +96,9 @@ class ApiJobManager:
             stack=stack,
             materialize_media=materialize_media,
         )
+        return self._wire(job, stack)
+
+    def _wire(self, job: APISeex, stack) -> APISeex:
         job.runtime = JobRuntime(
             job=job,
             api_client=stack.api_client,
@@ -70,3 +107,64 @@ class ApiJobManager:
             bridge=self._bridge,
         )
         return self.meseex_box.summon_meseex(job)
+
+    def submit_factory(
+        self,
+        path: str,
+        data: dict,
+        *,
+        address: str,
+        api_key: str = None,
+        materialize_media: bool = True,
+    ) -> APISeex:
+        """Submit a job to a gateway factory path (no catalog service).
+
+        Same poll, cancel, and stream runtime as ``submit_job``.
+        ``path`` is rooted at ``address``, e.g. ``/v1/workflows/{id}/run``.
+        """
+        service = _gateway_service(address)
+        endpoint = _factory_endpoint(path)
+        stack = self.stacks.ensure_for(service, api_key)
+        tasks = PipelinePlanner.plan(service, endpoint, stack)
+        job = APISeex(
+            service=service,
+            endpoint=endpoint,
+            data=data or {},
+            tasks=tasks,
+            name=path,
+            stack=stack,
+            materialize_media=materialize_media,
+        )
+        return self._wire(job, stack)
+
+    def track_job(
+        self,
+        job_id: str,
+        *,
+        address: str,
+        api_key: str = None,
+        materialize_media: bool = True,
+    ) -> APISeex:
+        """Re-attach to a running gateway job and poll until it is terminal."""
+        service = _gateway_service(address)
+        endpoint = _factory_endpoint(f"/status/{job_id}")
+        stack = self.stacks.ensure_for(service, api_key)
+        envelope = SocaityJobResponse(
+            job_id=job_id,
+            status="queued",
+            links=JobLinks(
+                status=f"/status/{job_id}",
+                cancel=f"/cancel/{job_id}",
+                stream=f"/stream/{job_id}",
+            ),
+        )
+        job = APISeex(
+            service=service,
+            endpoint=endpoint,
+            data=envelope,
+            tasks=["Attach", "Polling", "Processing result"],
+            name=f"track:{job_id}",
+            stack=stack,
+            materialize_media=materialize_media,
+        )
+        return self._wire(job, stack)

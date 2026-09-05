@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict
 
 from meseex.control_flow import polling_task, PollAgain
-from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
+from socaity_schemas import JOB_RESPONSE_TYPES, SocaityJobResponse, StreamingResponse
 from media_toolkit import MediaDict
 
 from fastsdk.service_interaction.api_seex import APISeex
@@ -49,9 +49,24 @@ class JobTasks:
             "Load files": self.load_files,
             "Uploading files": self.upload_files,
             "Sending request": self.send_request,
+            "Attach": self.attach_job,
             "Polling": self.poll_status,
             "Processing result": self.process_result,
         }
+
+    async def attach_job(self, job: APISeex) -> Any:
+        """Seed polling from an existing job envelope (``track_job``)."""
+        envelope = job.input
+        if isinstance(envelope, JOB_RESPONSE_TYPES):
+            attached = envelope
+        elif isinstance(envelope, dict):
+            attached = SocaityJobResponse.model_validate(envelope)
+        else:
+            raise ValueError("Attach requires a job envelope (dict or SocaityJobResponse)")
+        job_id = getattr(attached, "job_id", None) or getattr(attached, "id", None)
+        if job_id:
+            job.notify_started(str(job_id))
+        return attached
 
     async def prepare_request(self, job: APISeex) -> RequestData:
         stack = job.provider_stack
@@ -133,6 +148,9 @@ class JobTasks:
                 await response.aclose()
 
         logger.info("send_request | Parsed response type: %s", type(parsed).__name__)
+        job_id = getattr(parsed, "job_id", None) or getattr(parsed, "id", None)
+        if job_id:
+            job.notify_started(str(job_id))
         return parsed
 
     @polling_task(poll_interval_seconds=1.0, timeout_seconds=3600)
@@ -173,15 +191,22 @@ class JobTasks:
 
         status = stack.api_client.get_status(parsed_response)
 
+        job_id = getattr(parsed_response, "job_id", None) or getattr(parsed_response, "id", None)
+        if job_id:
+            job.notify_started(str(job_id))
+
         if status == APIJobStatus.FINISHED:
             return parsed_response
         if status == APIJobStatus.CANCELLED:
             job.mark_cancelled(cancel_result=parsed_response)
             job.runtime.refresh_stream_state()
+            job.notify_finished(parsed_response)
             return parsed_response
         if status in (APIJobStatus.FAILED, APIJobStatus.REJECTED, APIJobStatus.TIMEOUT):
             err = getattr(parsed_response, "error", None)
-            raise ValueError(err or f"Job failed with status: {getattr(parsed_response, 'status', 'unknown')}")
+            wrapped = ValueError(err or f"Job failed with status: {getattr(parsed_response, 'status', 'unknown')}")
+            job.notify_error(wrapped)
+            raise wrapped
 
         progress = getattr(parsed_response, "progress", None)
         message = getattr(parsed_response, "message", None)
@@ -191,6 +216,7 @@ class JobTasks:
         progress_msg += f": {message}" if message else f" status: {raw_status}"
 
         job.set_task_progress(progress, progress_msg)
+        job.notify_progress(progress, message or progress_msg, str(raw_status))
         return PollAgain(f"Job status: {raw_status}")
 
     async def process_result(self, job: APISeex) -> Any:
@@ -198,10 +224,15 @@ class JobTasks:
         stack = job.provider_stack
 
         if isinstance(response, StreamingResponse):
+            job.notify_finished(response)
             return response
 
         if not isinstance(response, JOB_RESPONSE_TYPES):
-            return stack.parser.parse_media(response, job.materialize_media)
+            result = stack.parser.parse_media(response, job.materialize_media)
+            job.notify_finished(result)
+            return result
 
         raw_result = stack.api_client.get_result(response)
-        return stack.parser.parse_media(raw_result, job.materialize_media)
+        result = stack.parser.parse_media(raw_result, job.materialize_media)
+        job.notify_finished(result)
+        return result

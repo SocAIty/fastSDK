@@ -105,6 +105,23 @@ class FastClient:
             materialize_media=self.materialize_media,
         )
 
+    def track_job(self, job_id: str) -> 'APISeex':
+        """Re-attach to a running job on this client's gateway origin."""
+        from fastsdk.service_access import service_address
+
+        address = service_address(self.service)
+        origin = getattr(address, "base_url", None) if address is not None else None
+        if not origin:
+            raise ValueError(
+                f"Service '{self.service.id}' has no address to track jobs against."
+            )
+        return self.fsdk.api_job_manager.track_job(
+            job_id,
+            address=origin,
+            api_key=self.api_key,
+            materialize_media=self.materialize_media,
+        )
+
     def estimate(self, endpoint_path: str, **params) -> PriceEstimate:
         """Estimate price and runtime. Implemented by the Socaity provider API client.
 

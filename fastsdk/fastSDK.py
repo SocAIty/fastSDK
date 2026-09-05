@@ -317,3 +317,30 @@ class FastSDK:
         """
         from fastsdk.fastClient import FastClient
         return FastClient(source, api_key=api_key, temporary=True, **kwargs)
+
+    def submit_factory(
+        self,
+        path: str,
+        data: dict,
+        *,
+        address: str,
+        api_key: str = None,
+        materialize_media: bool = True,
+    ):
+        """Submit a gateway factory job. Returns ``APISeex`` (same handle as catalog jobs)."""
+        return self.api_job_manager.submit_factory(
+            path, data, address=address, api_key=api_key, materialize_media=materialize_media
+        )
+
+    def track_job(
+        self,
+        job_id: str,
+        *,
+        address: str,
+        api_key: str = None,
+        materialize_media: bool = True,
+    ):
+        """Re-attach to a running gateway job by id."""
+        return self.api_job_manager.track_job(
+            job_id, address=address, api_key=api_key, materialize_media=materialize_media
+        )

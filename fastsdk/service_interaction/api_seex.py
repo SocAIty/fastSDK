@@ -5,7 +5,9 @@ from meseex import MrMeseex
 
 from fastsdk.service_access import service_provider
 
-from typing import Any, Optional, Tuple, TYPE_CHECKING
+from dataclasses import dataclass
+from threading import Lock
+from typing import Any, Callable, List, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
 
 if TYPE_CHECKING:
@@ -13,6 +15,25 @@ if TYPE_CHECKING:
     from fastsdk.service_interaction.job_runtime import JobRuntime
     from fastsdk.service_interaction.provider_factory import ProviderStack
     from fastsdk.service_interaction.response.stream_session import StreamSession
+
+
+Unsubscribe = Callable[[], None]
+JobCallback = Callable[["JobEvent"], None]
+
+
+@dataclass
+class JobEvent:
+    """Lifecycle event of an ``APISeex`` job.
+
+    ``kind`` is one of ``started``, ``progress``, ``finished``, ``error``.
+    """
+
+    kind: str
+    job_id: Optional[str] = None
+    progress: Optional[float] = None
+    message: Optional[str] = None
+    result: Any = None
+    error: Optional[BaseException] = None
 
 
 class APISeex(MrMeseex):
@@ -45,6 +66,12 @@ class APISeex(MrMeseex):
         self.runtime: Optional["JobRuntime"] = None
         # Set by the orchestrator when the initial response is a live stream.
         self.direct_response: Optional["httpx.Response"] = None
+        self._sub_lock = Lock()
+        self._subscribers: List[dict] = []
+        self._started_event: Optional[JobEvent] = None
+        self._progress_event: Optional[JobEvent] = None
+        self._terminal_event: Optional[JobEvent] = None
+        self._progress_key: Optional[tuple] = None
 
     @property
     def provider_stack(self) -> "ProviderStack":
@@ -69,7 +96,15 @@ class APISeex(MrMeseex):
         resp = self.get_task_output("Polling")
         if resp is not None:
             return resp
-        return self.get_task_output("Sending request")
+        sent = self.get_task_output("Sending request")
+        if sent is not None:
+            return sent
+        attached = self.get_task_output("Attach")
+        if attached is not None:
+            return attached
+        if isinstance(self.input, JOB_RESPONSE_TYPES):
+            return self.input
+        return None
 
     @property
     def runtime_info(self) -> Tuple[Optional[float], Optional[float]]:
@@ -112,6 +147,143 @@ class APISeex(MrMeseex):
                 execution_seconds = getattr(metrics, "execution_time_s", None)
 
         return delay_seconds, execution_seconds
+
+    @property
+    def platform_job_id(self) -> Optional[str]:
+        """Platform job id once the gateway assigned one."""
+        resp = self.response
+        if resp is None:
+            return None
+        return getattr(resp, "job_id", None) or getattr(resp, "id", None)
+
+    def subscribe(
+        self,
+        on_started: Optional[JobCallback] = None,
+        on_progress: Optional[JobCallback] = None,
+        on_finished: Optional[JobCallback] = None,
+        on_error: Optional[JobCallback] = None,
+        replay: bool = True,
+    ) -> Unsubscribe:
+        """Subscribe to job lifecycle events. Thread-safe; callbacks never fail the job.
+
+        ``started`` means the platform job id is available. Progress fires when the
+        progress message or status changes, not on percentage-only ticks. Success or
+        error is emitted exactly once. ``replay=True`` delivers the current start,
+        progress, and terminal events to a late subscriber.
+        """
+        entry = {
+            "on_started": on_started,
+            "on_progress": on_progress,
+            "on_finished": on_finished,
+            "on_error": on_error,
+        }
+        with self._sub_lock:
+            self._subscribers.append(entry)
+            snapshot = (
+                self._started_event,
+                self._progress_event,
+                self._terminal_event,
+            ) if replay else (None, None, None)
+        if replay:
+            started, progress, terminal = snapshot
+            if started is not None:
+                self._safe_call(on_started, started)
+            if progress is not None:
+                self._safe_call(on_progress, progress)
+            if terminal is not None:
+                if terminal.kind == "error":
+                    self._safe_call(on_error, terminal)
+                else:
+                    self._safe_call(on_finished, terminal)
+
+        def unsubscribe() -> None:
+            with self._sub_lock:
+                try:
+                    self._subscribers.remove(entry)
+                except ValueError:
+                    pass
+
+        return unsubscribe
+
+    def notify_started(self, job_id: Optional[str] = None) -> None:
+        """Emit ``started`` once the platform job id is known."""
+        job_id = job_id or self.platform_job_id
+        if not job_id:
+            return
+        event = JobEvent(kind="started", job_id=job_id)
+        with self._sub_lock:
+            if self._started_event is not None:
+                return
+            self._started_event = event
+            listeners = [entry.get("on_started") for entry in self._subscribers]
+        for callback in listeners:
+            self._safe_call(callback, event)
+
+    def notify_progress(
+        self,
+        progress: Optional[float] = None,
+        message: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> None:
+        """Emit ``progress`` when the message or status changes."""
+        key = (message, status)
+        with self._sub_lock:
+            if key == self._progress_key:
+                return
+            self._progress_key = key
+            event = JobEvent(
+                kind="progress",
+                job_id=self.platform_job_id,
+                progress=progress,
+                message=message or status,
+            )
+            self._progress_event = event
+            listeners = [entry.get("on_progress") for entry in self._subscribers]
+        for callback in listeners:
+            self._safe_call(callback, event)
+
+    def notify_finished(self, result: Any = None) -> None:
+        """Emit terminal success exactly once."""
+        event = JobEvent(
+            kind="finished",
+            job_id=self.platform_job_id,
+            result=result if result is not None else self.result,
+        )
+        listeners = self._store_terminal(event)
+        for callback in listeners:
+            self._safe_call(callback, event)
+
+    def notify_error(self, error: BaseException) -> None:
+        """Emit terminal failure exactly once."""
+        event = JobEvent(
+            kind="error",
+            job_id=self.platform_job_id,
+            error=error,
+        )
+        with self._sub_lock:
+            if self._terminal_event is not None:
+                return
+            self._terminal_event = event
+            listeners = [entry.get("on_error") for entry in self._subscribers]
+        for callback in listeners:
+            self._safe_call(callback, event)
+
+    def _store_terminal(self, event: JobEvent) -> list:
+        with self._sub_lock:
+            if self._terminal_event is not None:
+                return []
+            self._terminal_event = event
+            key = "on_error" if event.kind == "error" else "on_finished"
+            return [entry.get(key) for entry in self._subscribers]
+
+    @staticmethod
+    def _safe_call(callback: Optional[JobCallback], event: JobEvent) -> None:
+        if callback is None:
+            return
+        try:
+            callback(event)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Lifecycle delegation (syntactic sugar over the runtime port)

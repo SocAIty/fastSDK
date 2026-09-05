@@ -22,6 +22,8 @@ The package exposes module-level functions (`fastsdk/api.py`). They wrap a proce
 | `fastsdk.connect(source)` | registers temporarily | `FastClient` (service deregistered when the client is deleted) |
 | `fastsdk.generate_stub(source)` | writes a `.py` file + registers the service | `FastStub` |
 | `fastsdk.get_service / list_services / remove_service` | registry reads/writes | - |
+| `fastsdk.submit_factory(path, data, address=...)` | POST a gateway factory path | `APISeex` |
+| `fastsdk.track_job(job_id, address=...)` | re-attach to a running job | `APISeex` |
 
 `source` is always the same union: URL, `openapi.json` file path, spec dict, `AIService`,
 Replicate model reference (`"replicate:owner/name"`, `"https://replicate.com/owner/name"`, bare `"owner/name"`),
@@ -196,7 +198,8 @@ Transport ownership is split across three files so each concern has one home.
 
 **`ApiJobManager`** (`api_job_manager.py`) is the process-level orchestrator and composition root.
 It wires a ``MeseexBox`` with handlers from ``JobTasks``, owns one shared ``AsyncBridge``,
-and exposes ``submit_job(...)``. It does not load provider stacks, plan pipelines beyond
+and exposes ``submit_job(...)``, ``submit_factory(...)``, and ``track_job(...)``.
+It does not load provider stacks, plan pipelines beyond
 delegating to ``PipelinePlanner``, or implement task bodies.
 
 ``FastClient`` loads stacks via ``FastSDK.provider_stacks.load(...)`` before submission.
@@ -212,8 +215,8 @@ later caller, which breaks multi-tenant hosts such as the MCP server.
 ``JobRuntime`` read it from the job instead of re-resolving.
 
 **`JobTasks`** (`job_tasks.py`) implements the meseex pipeline steps: prepare request, load/upload
-files, send request, poll status, process result. Polling logic and the ``@polling_task`` decorator
-live here, not on the manager.
+files, send request, attach (resume from an existing envelope), poll status, process result.
+Polling logic and the ``@polling_task`` decorator live here, not on the manager.
 
 **`ProviderFactory`** (`provider_factory.py`) resolves the provider type from
 ``deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
@@ -235,8 +238,12 @@ terminal state with no live source, and active streams close on cancel.
 
 **`APISeex`** (`api_seex.py`) is the user ticket: identity plus a progress/result view (`response`,
 `runtime_info`, `result`). Its lifecycle methods (`cancel()`, `stream()`, streaming-aware
-`get_result()`) are one-line delegates to its `JobRuntime`. The handle never touches an `APIClient`,
-a `ResponseParser`, the `AsyncBridge`, or the `MeseexBox` directly.
+`get_result()`) are one-line delegates to its `JobRuntime`. `subscribe(on_started, on_progress,
+on_finished, on_error, replay=True)` is the thread-safe observation API: start means the platform
+job id is available, progress fires only when the message or status changes, and success or error
+is emitted once. Callbacks never fail the job. `FastClient.track_job(job_id)` reattaches against
+the service gateway origin. The handle never touches an `APIClient`, a `ResponseParser`, the
+`AsyncBridge`, or the `MeseexBox` directly.
 
 Boundary rule: `api_seex.py` imports only `meseex` and schemas (the `JobRuntime` type is a
 type-check-only import). No client, parser, or bridge imports belong there.

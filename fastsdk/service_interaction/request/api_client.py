@@ -299,6 +299,10 @@ class APIClient:
                     else:
                         rq.body_params[param.name] = param_value
 
+        # Gateway factory endpoints declare no parameters; the JSON body is the payload.
+        if embed_files_in_json_body and not endpoint.parameters:
+            rq.body_params.update({key: value for key, value in data.items() if value is not None})
+
         rq.url = self._build_request_url(endpoint, rq.query_params)
         rq.headers = self._add_authorization_to_headers(rq.headers)
         return rq

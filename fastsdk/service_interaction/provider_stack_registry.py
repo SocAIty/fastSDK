@@ -54,6 +54,19 @@ class ProviderStackRegistry:
         self._stacks[key] = self._factory.build(service, api_key)
         return self._stacks[key]
 
+    def ensure_for(self, service: AIService, api_key: str = None) -> ProviderStack:
+        """Build a stack from an ``AIService`` that is not in the catalog registry.
+
+        Used by gateway factories (agent chat, workflow run) which have a path
+        and origin but no registered service.
+        """
+        if not service.id:
+            raise ValueError("Factory service must have an id")
+        key = (service.id, api_key)
+        if key not in self._stacks:
+            self._stacks[key] = self._factory.build(service, api_key)
+        return self._stacks[key]
+
     def load(self, service_name_or_id: str, api_key: str = None) -> AIService:
         """Resolve a service from the registry and ensure its provider stack is loaded."""
         service = self.registry.get_service(service_name_or_id)

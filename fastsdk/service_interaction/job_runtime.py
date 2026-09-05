@@ -178,6 +178,7 @@ class JobRuntime:
             )
             self._meseex_box.cancel_meseex(job, cancel_result=cancel_response)
             self._stream_ready.set()
+            job.notify_finished(cancel_response)
             return cancel_response
 
         try:
@@ -195,6 +196,7 @@ class JobRuntime:
         if status == APIJobStatus.CANCELLED:
             self._meseex_box.cancel_meseex(job, cancel_result=cancel_response)
             self._stream_ready.set()
+            job.notify_finished(cancel_response)
             return cancel_response
 
         if status in {APIJobStatus.FINISHED, APIJobStatus.FAILED, APIJobStatus.TIMEOUT, APIJobStatus.REJECTED}:
