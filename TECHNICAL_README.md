@@ -237,13 +237,13 @@ It enforces the invariants with guards: at most one active stream per job, no st
 terminal state with no live source, and active streams close on cancel.
 
 **`APISeex`** (`api_seex.py`) is the user ticket: identity plus a progress/result view (`response`,
-`runtime_info`, `result`). Its lifecycle methods (`cancel()`, `stream()`, streaming-aware
-`get_result()`) are one-line delegates to its `JobRuntime`. `subscribe(on_started, on_progress,
-on_finished, on_error, replay=True)` is the thread-safe observation API: start means the platform
-job id is available, progress fires only when the message or status changes, and success or error
-is emitted once. Callbacks never fail the job. `FastClient.track_job(job_id)` reattaches against
-the service gateway origin. The handle never touches an `APIClient`, a `ResponseParser`, the
-`AsyncBridge`, or the `MeseexBox` directly.
+`runtime_info`, `result`, `platform_job_id`). Its lifecycle methods (`cancel()`, `stream()`,
+streaming-aware `get_result()`) are one-line delegates to its `JobRuntime`. Observation is
+inherited from `MrMeseex.subscribe(callback, replay=True)`: generic lifecycle events
+(`started`, `task_changed`, `progress`, `succeeded`, `failed`, `cancelled`). The platform job
+id is `job.platform_job_id` once the remote envelope exists. `FastClient.track_job(job_id)`
+reattaches against the service gateway origin. The handle never touches an `APIClient`, a
+`ResponseParser`, the `AsyncBridge`, or the `MeseexBox` directly.
 
 Boundary rule: `api_seex.py` imports only `meseex` and schemas (the `JobRuntime` type is a
 type-check-only import). No client, parser, or bridge imports belong there.

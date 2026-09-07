@@ -13,7 +13,7 @@ from .api import (
     submit_factory,
     track_job,
 )
-from .service_interaction.api_seex import APISeex, JobEvent
+from .service_interaction.api_seex import APISeex
 from .fastClient import FastClient
 from .fastSDK import FastSDK
 
@@ -24,7 +24,7 @@ __all__ = [
     'get_service', 'list_services', 'remove_service',
     'submit_factory', 'track_job',
     # classes
-    'FastStub', 'FastClient', 'APISeex', 'JobEvent', 'FastSDK',
+    'FastStub', 'FastClient', 'APISeex', 'FastSDK',
     # re-exports
     'MediaFile', 'ImageFile', 'VideoFile', 'AudioFile', 'gather_results', 'gather_results_async'
 ]
