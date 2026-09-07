@@ -23,7 +23,8 @@ from socaity_schemas.contract.address import service_url
 from socaity_schemas.platform import AIService
 
 from fastsdk.service_access import service_address, service_contract, service_provider
-
+from fastsdk.fastClient import FastClient
+from fastsdk.sdk_factory.sdk_factory import _get_type_hint
 
 DEFAULT_REGISTRY_PATH = Path.home() / ".fastsdk" / "registry"
 
@@ -67,7 +68,7 @@ def _print_service(service: AIService, as_json: bool = False):
         print(json.dumps(service.model_dump(exclude_none=True), indent=2, default=str))
         return
 
-    from fastsdk.sdk_factory.sdk_factory import _get_type_hint
+    
 
     contract = service_contract(service)
     print(f"Service:  {service.display_name}")
@@ -189,8 +190,6 @@ def cmd_generate(args: argparse.Namespace):
 
 
 def cmd_call(args: argparse.Namespace, extra: List[str]):
-    from fastsdk.fastClient import FastClient
-
     params = _parse_endpoint_params(extra)
     client = FastClient(_resolve_source(args.source), api_key=args.api_key)
     service = client.service
@@ -230,7 +229,6 @@ def cmd_registry(args: argparse.Namespace):
             return
         for service in services:
             print(f"  {_service_summary(service)}")
-
     elif args.registry_command == "add":
         service = fastsdk.inspect_service(
             args.source,
