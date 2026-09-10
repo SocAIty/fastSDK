@@ -133,31 +133,3 @@ def remove_service(service_id_or_name: str) -> bool:
     return FastSDK().service_registry.remove_service(service_id_or_name)
 
 
-def submit_factory(
-    path: str,
-    data: dict,
-    *,
-    address: str,
-    api_key: str = None,
-    materialize_media: bool = True,
-):
-    """Submit a job to a gateway factory path. No catalog service required.
-
-    Returns the same ``APISeex`` handle as ``FastClient.submit_job``.
-    """
-    return FastSDK().submit_factory(
-        path, data, address=address, api_key=api_key, materialize_media=materialize_media
-    )
-
-
-def track_job(
-    job_id: str,
-    *,
-    address: str,
-    api_key: str = None,
-    materialize_media: bool = True,
-):
-    """Re-attach to a running gateway job and poll until it is terminal."""
-    return FastSDK().track_job(
-        job_id, address=address, api_key=api_key, materialize_media=materialize_media
-    )
