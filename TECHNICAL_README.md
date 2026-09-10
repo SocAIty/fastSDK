@@ -196,7 +196,8 @@ Transport ownership is split across three files so each concern has one home.
 
 **`ApiJobManager`** (`api_job_manager.py`) is the process-level orchestrator and composition root.
 It wires a ``MeseexBox`` with handlers from ``JobTasks``, owns one shared ``AsyncBridge``,
-and exposes ``submit_job(...)``. It does not load provider stacks, plan pipelines beyond
+and exposes ``submit_job(...)`` and ``track_job(...)``.
+It does not load provider stacks, plan pipelines beyond
 delegating to ``PipelinePlanner``, or implement task bodies.
 
 ``FastClient`` loads stacks via ``FastSDK.provider_stacks.load(...)`` before submission.
@@ -212,8 +213,8 @@ later caller, which breaks multi-tenant hosts such as the MCP server.
 ``JobRuntime`` read it from the job instead of re-resolving.
 
 **`JobTasks`** (`job_tasks.py`) implements the meseex pipeline steps: prepare request, load/upload
-files, send request, poll status, process result. Polling logic and the ``@polling_task`` decorator
-live here, not on the manager.
+files, send request, attach (resume from an existing envelope), poll status, process result.
+Polling logic and the ``@polling_task`` decorator live here, not on the manager.
 
 **`ProviderFactory`** (`provider_factory.py`) resolves the provider type from
 ``deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
@@ -234,9 +235,13 @@ It enforces the invariants with guards: at most one active stream per job, no st
 terminal state with no live source, and active streams close on cancel.
 
 **`APISeex`** (`api_seex.py`) is the user ticket: identity plus a progress/result view (`response`,
-`runtime_info`, `result`). Its lifecycle methods (`cancel()`, `stream()`, streaming-aware
-`get_result()`) are one-line delegates to its `JobRuntime`. The handle never touches an `APIClient`,
-a `ResponseParser`, the `AsyncBridge`, or the `MeseexBox` directly.
+`runtime_info`, `result`, `platform_job_id`). Its lifecycle methods (`cancel()`, `stream()`,
+streaming-aware `get_result()`) are one-line delegates to its `JobRuntime`. Observation is
+inherited from `MrMeseex.subscribe(callback, replay=True)`: generic lifecycle events
+(`started`, `task_changed`, `progress`, `succeeded`, `failed`, `cancelled`). The platform job
+id is `job.platform_job_id` once the remote envelope exists. `FastClient.track_job(job_id)`
+reattaches against the client's registered service. The handle never touches an `APIClient`, a
+`ResponseParser`, the `AsyncBridge`, or the `MeseexBox` directly.
 
 Boundary rule: `api_seex.py` imports only `meseex` and schemas (the `JobRuntime` type is a
 type-check-only import). No client, parser, or bridge imports belong there.

@@ -3,9 +3,9 @@ from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import os
 
 from socaity_schemas.platform import AIService, PriceEstimate
-
 from fastsdk.fastSDK import FastSDK
 from fastsdk.service_access import service_provider
+
 
 if TYPE_CHECKING:
     from fastsdk.service_interaction.api_seex import APISeex
@@ -95,10 +95,23 @@ class FastClient:
         return os.getenv(self.service.id.upper() + "_API_KEY", None)
 
     def submit_job(self, endpoint_id: str, **kwargs) -> 'APISeex':
+        if self.fsdk.service_registry.get_service(self.service.id) is None:
+            self.fsdk.service_registry.add_service(self.service)
         return self.fsdk.api_job_manager.submit_job(
             self.service.id,
             endpoint_id,
             data=kwargs,
+            api_key=self.api_key,
+            materialize_media=self.materialize_media,
+        )
+
+    def track_job(self, job_id: str) -> 'APISeex':
+        """Re-attach to a running job on this client's registered service."""
+        if self.fsdk.service_registry.get_service(self.service.id) is None:
+            self.fsdk.service_registry.add_service(self.service)
+        return self.fsdk.api_job_manager.track_job(
+            self.service.id,
+            job_id,
             api_key=self.api_key,
             materialize_media=self.materialize_media,
         )
@@ -118,10 +131,10 @@ class FastClient:
         return estimate_fn(endpoint_path, **params)
 
     def close(self):
-        """Remove the service from the registry if this client registered it temporarily."""
+        """Drop a temporary registry entry. Keep the on-disk SDK cache."""
         if self.temporary and getattr(self, 'service', None) and hasattr(self, 'fsdk'):
             try:
-                self.fsdk.service_registry.remove_service(self.service.id)
+                self.fsdk.service_registry.remove_service(self.service.id, persist=False)
             except Exception:
                 pass
             self.temporary = False

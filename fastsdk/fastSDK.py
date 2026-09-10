@@ -8,11 +8,9 @@ from fastsdk.service_interaction.provider_stack_registry import ProviderStackReg
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_url_with_fallback, _load_from_file
 from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref, load_replicate_service
 
-
 from fastsdk.sdk_factory.sdk_factory import generate_stub as _generate_stub_file
 from typing import Union, Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
-import uuid
 
 if TYPE_CHECKING:
     from fastsdk.fastClient import FastClient

@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict
 
 from meseex.control_flow import polling_task, PollAgain
-from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
+from socaity_schemas import JOB_RESPONSE_TYPES, SocaityJobResponse, StreamingResponse
 from media_toolkit import MediaDict
 
 from fastsdk.service_interaction.api_seex import APISeex
@@ -49,9 +49,21 @@ class JobTasks:
             "Load files": self.load_files,
             "Uploading files": self.upload_files,
             "Sending request": self.send_request,
+            "Attach": self.attach_job,
             "Polling": self.poll_status,
             "Processing result": self.process_result,
         }
+
+    async def attach_job(self, job: APISeex) -> Any:
+        """Seed polling from an existing job envelope (``track_job``)."""
+        envelope = job.input
+        if isinstance(envelope, JOB_RESPONSE_TYPES):
+            attached = envelope
+        elif isinstance(envelope, dict):
+            attached = SocaityJobResponse.model_validate(envelope)
+        else:
+            raise ValueError("Attach requires a job envelope (dict or SocaityJobResponse)")
+        return attached
 
     async def prepare_request(self, job: APISeex) -> RequestData:
         stack = job.provider_stack
@@ -181,7 +193,8 @@ class JobTasks:
             return parsed_response
         if status in (APIJobStatus.FAILED, APIJobStatus.REJECTED, APIJobStatus.TIMEOUT):
             err = getattr(parsed_response, "error", None)
-            raise ValueError(err or f"Job failed with status: {getattr(parsed_response, 'status', 'unknown')}")
+            wrapped = ValueError(err or f"Job failed with status: {getattr(parsed_response, 'status', 'unknown')}")
+            raise wrapped
 
         progress = getattr(parsed_response, "progress", None)
         message = getattr(parsed_response, "message", None)

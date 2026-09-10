@@ -21,6 +21,8 @@ class APISeex(MrMeseex):
     A ticket, not an orchestrator. Lifecycle actions (cancel, stream) delegate to
     a per-job ``JobRuntime`` set by ``ApiJobManager`` at submit time. The handle
     never talks to HTTP clients, parsers, or the ``MeseexBox`` directly.
+
+    Observation uses inherited ``subscribe(callback, replay=True)``.
     """
 
     def __init__(
@@ -69,7 +71,15 @@ class APISeex(MrMeseex):
         resp = self.get_task_output("Polling")
         if resp is not None:
             return resp
-        return self.get_task_output("Sending request")
+        sent = self.get_task_output("Sending request")
+        if sent is not None:
+            return sent
+        attached = self.get_task_output("Attach")
+        if attached is not None:
+            return attached
+        if isinstance(self.input, JOB_RESPONSE_TYPES):
+            return self.input
+        return None
 
     @property
     def runtime_info(self) -> Tuple[Optional[float], Optional[float]]:
@@ -112,6 +122,14 @@ class APISeex(MrMeseex):
                 execution_seconds = getattr(metrics, "execution_time_s", None)
 
         return delay_seconds, execution_seconds
+
+    @property
+    def platform_job_id(self) -> Optional[str]:
+        """Platform job id once the gateway assigned one."""
+        resp = self.response
+        if resp is None:
+            return None
+        return getattr(resp, "job_id", None) or getattr(resp, "id", None)
 
     # ------------------------------------------------------------------
     # Lifecycle delegation (syntactic sugar over the runtime port)

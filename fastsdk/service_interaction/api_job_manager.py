@@ -1,5 +1,7 @@
 from apipod_registry.registry import Registry
+from socaity_schemas import JobLinks, SocaityJobResponse
 
+from fastsdk.service_access import service_contract
 from fastsdk.service_interaction.api_seex import APISeex
 from fastsdk.service_interaction.job_runtime import JobRuntime
 from fastsdk.service_interaction.async_bridge import AsyncBridge
@@ -62,6 +64,9 @@ class ApiJobManager:
             stack=stack,
             materialize_media=materialize_media,
         )
+        return self._wire(job, stack)
+
+    def _wire(self, job: APISeex, stack) -> APISeex:
         job.runtime = JobRuntime(
             job=job,
             api_client=stack.api_client,
@@ -70,3 +75,43 @@ class ApiJobManager:
             bridge=self._bridge,
         )
         return self.meseex_box.summon_meseex(job)
+
+    def track_job(
+        self,
+        service_id: str,
+        job_id: str,
+        api_key: str = None,
+        materialize_media: bool = True,
+    ) -> APISeex:
+        """Re-attach to a running job on a registered service and poll until terminal."""
+        service = self.service_registry.get_service(service_id)
+        if not service:
+            raise ValueError(f"Service {service_id} not found")
+
+        endpoint = self.service_registry.get_endpoint(service_id, f"/status/{job_id}")
+        if endpoint is None:
+            endpoints = service_contract(service).endpoints
+            if not endpoints:
+                raise ValueError(f"Service {service_id} has no endpoints to attach a job")
+            endpoint = endpoints[0]
+
+        stack = self.stacks.ensure(service_id, api_key)
+        envelope = SocaityJobResponse(
+            job_id=job_id,
+            status="queued",
+            links=JobLinks(
+                status=f"/status/{job_id}",
+                cancel=f"/cancel/{job_id}",
+                stream=f"/stream/{job_id}",
+            ),
+        )
+        job = APISeex(
+            service=service,
+            endpoint=endpoint,
+            data=envelope,
+            tasks=["Attach", "Polling", "Processing result"],
+            name=f"track:{job_id}",
+            stack=stack,
+            materialize_media=materialize_media,
+        )
+        return self._wire(job, stack)

@@ -131,3 +131,5 @@ def list_services() -> List[AIService]:
 def remove_service(service_id_or_name: str) -> bool:
     """Remove a service from the registry. Returns True if it was removed."""
     return FastSDK().service_registry.remove_service(service_id_or_name)
+
+
