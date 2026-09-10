@@ -22,8 +22,6 @@ The package exposes module-level functions (`fastsdk/api.py`). They wrap a proce
 | `fastsdk.connect(source)` | registers temporarily | `FastClient` (service deregistered when the client is deleted) |
 | `fastsdk.generate_stub(source)` | writes a `.py` file + registers the service | `FastStub` |
 | `fastsdk.get_service / list_services / remove_service` | registry reads/writes | - |
-| `fastsdk.submit_factory(path, data, address=...)` | POST a gateway factory path | `APISeex` |
-| `fastsdk.track_job(job_id, address=...)` | re-attach to a running job | `APISeex` |
 
 `source` is always the same union: URL, `openapi.json` file path, spec dict, `AIService`,
 Replicate model reference (`"replicate:owner/name"`, `"https://replicate.com/owner/name"`, bare `"owner/name"`),
@@ -198,7 +196,7 @@ Transport ownership is split across three files so each concern has one home.
 
 **`ApiJobManager`** (`api_job_manager.py`) is the process-level orchestrator and composition root.
 It wires a ``MeseexBox`` with handlers from ``JobTasks``, owns one shared ``AsyncBridge``,
-and exposes ``submit_job(...)``, ``submit_factory(...)``, and ``track_job(...)``.
+and exposes ``submit_job(...)`` and ``track_job(...)``.
 It does not load provider stacks, plan pipelines beyond
 delegating to ``PipelinePlanner``, or implement task bodies.
 
@@ -242,7 +240,7 @@ streaming-aware `get_result()`) are one-line delegates to its `JobRuntime`. Obse
 inherited from `MrMeseex.subscribe(callback, replay=True)`: generic lifecycle events
 (`started`, `task_changed`, `progress`, `succeeded`, `failed`, `cancelled`). The platform job
 id is `job.platform_job_id` once the remote envelope exists. `FastClient.track_job(job_id)`
-reattaches against the service gateway origin. The handle never touches an `APIClient`, a
+reattaches against the client's registered service. The handle never touches an `APIClient`, a
 `ResponseParser`, the `AsyncBridge`, or the `MeseexBox` directly.
 
 Boundary rule: `api_seex.py` imports only `meseex` and schemas (the `JobRuntime` type is a
