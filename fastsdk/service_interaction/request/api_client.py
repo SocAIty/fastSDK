@@ -273,7 +273,9 @@ class APIClient:
                 )
             ) or (is_file_model and param_value is not None)
 
-            if is_array_param and not isinstance(param_value, list):
+            # Wrap a scalar as a one-item list. Do not wrap None: that becomes
+            # ``[None]`` on the wire and pydantic list[T] rejects item 0.
+            if is_array_param and param_value is not None and not isinstance(param_value, list):
                 param_value = [param_value]
 
             if is_file_upload and embed_files_in_json_body:
