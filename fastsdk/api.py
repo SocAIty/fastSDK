@@ -13,7 +13,7 @@ These functions wrap the FastSDK singleton so users never have to deal with it d
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 
 from fastsdk.fastSDK import FastSDK
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def connect(
-    source: Union[str, Path, Dict[str, Any], AIService],
+    source: Union[str, Path, Dict[str, Any], Service],
     api_key: Optional[str] = None,
     **kwargs
 ) -> 'FastClient':
@@ -31,7 +31,7 @@ def connect(
     Connect to a service and get a ready-to-use client - no code generation, no files.
 
     Args:
-        source: Service URL ("http://localhost:8009"), openapi.json path/dict, AIService,
+        source: Service URL ("http://localhost:8009"), openapi.json path/dict, Service,
             Replicate model reference ("replicate:owner/name") or a registered service ID/name.
         api_key: Optional API key. Falls back to environment variables.
         **kwargs: Additional service loading arguments (see inspect_service).
@@ -48,28 +48,28 @@ def connect(
 
 
 def inspect_service(
-    source: Union[str, Path, Dict[str, Any], AIService],
+    source: Union[str, Path, Dict[str, Any], Service],
     api_key: Optional[str] = None,
     **kwargs
-) -> AIService:
+) -> Service:
     """
-    Load and parse a service into an AIService without registering it anywhere.
+    Load and parse a service into an Service without registering it anywhere.
     Pure function: no side effects on the registry.
 
     Args:
-        source: Service URL, openapi.json path/dict, Replicate model reference or AIService.
+        source: Service URL, openapi.json path/dict, Replicate model reference or Service.
         api_key: Required for RunPod and Replicate sources.
         **kwargs: Overrides such as provider, service_id, name.
 
     Returns:
-        AIService whose primary deployment carries the parsed ServiceContract
+        Service whose primary details binding carries the parsed ServiceContract
         (endpoints, parameters) and the resolved service address.
     """
     return FastSDK.inspect_service(source, api_key=api_key, **kwargs)
 
 
 def generate_stub(
-    source: Union[str, Path, Dict[str, Any], AIService],
+    source: Union[str, Path, Dict[str, Any], Service],
     save_path: Optional[str] = None,
     class_name: Optional[str] = None,
     template: Optional[str] = None,
@@ -81,7 +81,7 @@ def generate_stub(
     used immediately in the same process.
 
     Args:
-        source: Service URL, openapi.json path/dict, AIService, Replicate model
+        source: Service URL, openapi.json path/dict, Service, Replicate model
             reference or a registered service ID/name.
         save_path: File or directory path for the generated .py file. Defaults to the current directory.
         class_name: Name of the generated class. Defaults to the (normalized) service name.
@@ -101,29 +101,29 @@ def generate_stub(
 
 
 def register_service(
-    source: Union[str, Path, Dict[str, Any], AIService],
+    source: Union[str, Path, Dict[str, Any], Service],
     **kwargs
-) -> AIService:
+) -> Service:
     """
     Load a service and add it to the registry. Idempotent: re-registering a service with the
     same ID replaces the previous entry.
 
     Args:
-        source: Service URL, openapi.json path/dict, Replicate model reference or AIService.
+        source: Service URL, openapi.json path/dict, Replicate model reference or Service.
         **kwargs: Overrides such as service_name, service_id, service_address, provider, api_key, ...
 
     Returns:
-        The registered AIService.
+        The registered Service.
     """
     return FastSDK().register_service(source, **kwargs)
 
 
-def get_service(service_id_or_name: str) -> Optional[AIService]:
+def get_service(service_id_or_name: str) -> Optional[Service]:
     """Get a registered service by ID or name. Returns None if not found."""
     return FastSDK().get_service(service_id_or_name)
 
 
-def list_services() -> List[AIService]:
+def list_services() -> List[Service]:
     """List all services currently in the registry."""
     return FastSDK().service_registry.list_services()
 

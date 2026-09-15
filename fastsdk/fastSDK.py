@@ -1,8 +1,8 @@
 from apipod_registry import Registry, create_service, materialize_contract, parse_address, determine_provider
 from socaity_schemas.contract.address import service_url
-from socaity_schemas.platform import AIModel, AIService, Provider
+from socaity_schemas.platform import AIModel, Service, Provider
 
-from fastsdk.service_access import primary_deployment, service_contract
+from fastsdk.service_access import primary_details, service_contract
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_interaction.provider_stack_registry import ProviderStackRegistry
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_url_with_fallback, _load_from_file
@@ -81,40 +81,40 @@ class FastSDK:
     # ---- Service Inspection (pure, no registry side effects) ----
     @staticmethod
     def inspect_service(
-        spec_source: Union[str, Path, Dict[str, Any], AIService],
+        spec_source: Union[str, Path, Dict[str, Any], Service],
         api_key: Optional[str] = None,
         provider: Optional[Provider] = None,
         service_id: Optional[str] = None,
-        name: Optional[str] = None,
-    ) -> AIService:
+        slug: Optional[str] = None,
+    ) -> Service:
         """
-        Load and parse a service into an AIService without adding it to the registry.
+        Load and parse a service into an Service without adding it to the registry.
 
         Args:
             spec_source: What to inspect. Can be:
                 - a URL ("http://localhost:8009", an openapi.json URL, a RunPod endpoint URL)
                 - a Replicate model reference ("replicate:owner/name", "https://replicate.com/owner/name", "owner/name")
                 - a file path to an openapi.json
-                - an already loaded spec dict or an AIService
+                - an already loaded spec dict or an Service
             api_key: Required for RunPod and Replicate sources, optional for others
             provider: Hosting provider override; inferred from the address when omitted
             service_id: Service id override; generated when omitted
-            name: Service slug override; derived from the spec title when omitted
+            slug: Service slug override; derived from the spec title when omitted
 
         Returns:
-            AIService with one deployment carrying the parsed ServiceContract.
+            Service with one details binding carrying the parsed ServiceContract.
         """
-        if isinstance(spec_source, AIService):
+        if isinstance(spec_source, Service):
             return spec_source
 
         if isinstance(spec_source, dict):
             contract = materialize_contract(spec_source, provider=provider)
-            return create_service(contract, provider=provider, service_id=service_id, name=name)
+            return create_service(contract, provider=provider, service_id=service_id, slug=slug)
 
         if isinstance(spec_source, Path):
             spec = _load_from_file(spec_source)
             contract = materialize_contract(spec, provider=provider)
-            return create_service(contract, provider=provider, service_id=service_id, name=name)
+            return create_service(contract, provider=provider, service_id=service_id, slug=slug)
 
         if isinstance(spec_source, str) and "http" not in spec_source:
             # example black-forest-labs/flux-schnell:version
@@ -124,7 +124,7 @@ class FastSDK:
             # probably is a file path
             spec = _load_from_file(spec_source)
             contract = materialize_contract(spec, provider=provider)
-            return create_service(contract, provider=provider, service_id=service_id, name=name)
+            return create_service(contract, provider=provider, service_id=service_id, slug=slug)
 
         # Load from deployed service with address
         provider = provider or determine_provider(spec_source)
@@ -135,7 +135,7 @@ class FastSDK:
             loaded_spec = _load_from_url_with_fallback(service_url(address))
 
         contract = materialize_contract(loaded_spec, provider=provider)
-        return create_service(contract, address=address, provider=provider, service_id=service_id, name=name)
+        return create_service(contract, address=address, provider=provider, service_id=service_id, slug=slug)
 
     @staticmethod
     def load_openapi_spec_from_runpod(runpod_url: str, api_key: str, return_api_job: bool = False) -> Union[Dict[str, Any], 'ApiJob']:
@@ -147,7 +147,7 @@ class FastSDK:
     # ---- Service Registration ----
     def register_service(
         self,
-        spec_source: Union[str, Path, Dict[str, Any], AIService],
+        spec_source: Union[str, Path, Dict[str, Any], Service],
         service_id: Optional[str] = None,
         service_address: Optional[str] = None,
         service_name: Optional[str] = None,
@@ -157,17 +157,17 @@ class FastSDK:
         description: Optional[str] = None,
         api_key: Optional[str] = None,
         update_existing: bool = True
-    ) -> AIService:
+    ) -> Service:
         """
         Load a service and add it to the registry. Idempotent: registering a service whose ID
         already exists replaces the previous entry (re-running the same script never fails).
 
         Args:
-            spec_source: AIService or spec source (see inspect_service)
+            spec_source: Service or spec source (see inspect_service)
             service_id: Optional service ID override
             service_address: Optional service address override
             service_name: Optional service display name override
-            category: Optional category id assignment (AIService.categories)
+            category: Optional category id assignment (Service.categories)
             used_models: Optional models used by the service; strings become AIModel(name=...)
             provider: Optional hosting provider override
             description: Optional description override
@@ -176,9 +176,9 @@ class FastSDK:
                 registered, that entry is updated (its ID is kept) instead of adding a duplicate.
 
         Returns:
-            The registered AIService object
+            The registered Service object
         """
-        if isinstance(spec_source, AIService):
+        if isinstance(spec_source, Service):
             service = spec_source
         else:
             service = self.inspect_service(spec_source, api_key, provider=provider)
@@ -201,16 +201,16 @@ class FastSDK:
         elif not service.display_name:
             service.display_name = "unnamed_service_" + service.id
 
-        deployment = primary_deployment(service)
-        deployment.service_id = service.id
+        details = primary_details(service)
+        details.service_id = service.id
 
         if provider:
-            deployment.provider = provider
+            details.provider = provider
 
         # Forced local overwrite for runtime modification of the service address.
         # UseCase: You have a registered service and then change the address for it on runtime.
         if service_address:
-            deployment.address = parse_address(service_address, provider=deployment.provider)
+            details.address = parse_address(service_address, provider=details.provider)
 
         if category:
             service.categories = [category] if isinstance(category, str) else category
@@ -223,32 +223,32 @@ class FastSDK:
         # Registry.add_service is an upsert: an existing service with the same ID is replaced.
         return self.service_registry.add_service(service)
 
-    def update_service(self, service_id_or_name: str, **kwargs) -> Optional[AIService]:
+    def update_service(self, service_id_or_name: str, **kwargs) -> Optional[Service]:
         """
         Update attributes of a registered service.
 
         Args:
             service_id_or_name: Service ID, name or display name
-            **kwargs: AIService attributes to update. "service_address" updates the
-                primary deployment's address (string values go through the address parser).
+            **kwargs: Service attributes to update. "service_address" updates the
+                primary details' address (string values go through the address parser).
 
         Returns:
-            Updated AIService if found, None otherwise
+            Updated Service if found, None otherwise
         """
         service = self.service_registry.get_service(service_id_or_name)
         if not service:
             return None
 
         if "service_address" in kwargs:
-            deployment = primary_deployment(service)
-            deployment.address = parse_address(kwargs.pop("service_address"), provider=deployment.provider)
+            details = primary_details(service)
+            details.address = parse_address(kwargs.pop("service_address"), provider=details.provider)
 
         for key, value in kwargs.items():
             setattr(service, key, value)
 
         return self.service_registry.add_service(service)
 
-    def get_service(self, service_id_or_name: str) -> Optional[AIService]:
+    def get_service(self, service_id_or_name: str) -> Optional[Service]:
         """
         Get an already registered service by ID or name.
 
@@ -256,14 +256,14 @@ class FastSDK:
             service_id_or_name: Service ID or display name
 
         Returns:
-            AIService if found, None otherwise
+            Service if found, None otherwise
         """
         return self.service_registry.get_service(service_id_or_name)
 
     # ---- Client / Stub Creation ----
     def generate_stub(
         self,
-        source: Union[str, Path, Dict[str, Any], AIService],
+        source: Union[str, Path, Dict[str, Any], Service],
         save_path: Optional[str] = None,
         class_name: Optional[str] = None,
         template: Optional[str] = None,
@@ -273,7 +273,7 @@ class FastSDK:
         Generate a Python client stub file (.py) for a service and register the service in the registry.
 
         Args:
-            source: Service source (URL, file path, spec dict, AIService, or a registered service ID/name)
+            source: Service source (URL, file path, spec dict, Service, or a registered service ID/name)
             save_path: Path (file or directory) to save the generated file. Defaults to the current directory.
             class_name: Name for the generated class. Defaults to the service name.
             template: Optional custom Jinja2 template path
@@ -286,19 +286,19 @@ class FastSDK:
         service = source
         if isinstance(source, str):
             service = self.get_service(source)
-            if not isinstance(service, AIService):
+            if not isinstance(service, Service):
                 service = self.register_service(source, **kwargs)
         else:
             service = self.register_service(source, **kwargs)
 
-        if not isinstance(service, AIService):
+        if not isinstance(service, Service):
             raise ValueError("Invalid service source")
 
         return _generate_stub_file(service, save_path, class_name, template)
 
     def connect(
         self,
-        source: Union[str, Path, Dict[str, Any], AIService],
+        source: Union[str, Path, Dict[str, Any], Service],
         api_key: Optional[str] = None,
         **kwargs
     ) -> 'FastClient':
@@ -307,7 +307,7 @@ class FastSDK:
         The service is registered temporarily and removed again when the client is deleted.
 
         Args:
-            source: Service source (URL, file path, spec dict, AIService or Replicate model ref)
+            source: Service source (URL, file path, spec dict, Service or Replicate model ref)
             api_key: Optional API key for the service
             **kwargs: Additional arguments for service loading
 

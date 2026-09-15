@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from apipod_registry import FileSystemStore, Registry
 from socaity_schemas.contract.address import service_url
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 
 from fastsdk.service_access import service_address, service_contract, service_provider
 from fastsdk.fastClient import FastClient
@@ -41,7 +41,7 @@ def _open_persistent_registry() -> Registry:
     return Registry(service_store=FileSystemStore(path=str(_registry_path())))
 
 
-def _resolve_source(source: str) -> Union[str, AIService]:
+def _resolve_source(source: str) -> Union[str, Service]:
     """If the source matches a service in the persistent CLI registry, use that service."""
     try:
         stored = _open_persistent_registry().get_service(source)
@@ -50,12 +50,12 @@ def _resolve_source(source: str) -> Union[str, AIService]:
     return stored or source
 
 
-def _address_url(service: AIService) -> str:
+def _address_url(service: Service) -> str:
     address = service_address(service)
     return service_url(address) if address else "-"
 
 
-def _service_summary(service: AIService) -> str:
+def _service_summary(service: Service) -> str:
     contract = service_contract(service)
     return (
         f"{service.display_name} (id: {service.id}, spec: {contract.specification}, "
@@ -63,7 +63,7 @@ def _service_summary(service: AIService) -> str:
     )
 
 
-def _print_service(service: AIService, as_json: bool = False):
+def _print_service(service: Service, as_json: bool = False):
     if as_json:
         print(json.dumps(service.model_dump(exclude_none=True), indent=2, default=str))
         return

@@ -20,7 +20,9 @@ class APIClientReplicate(APIClient):
 
         return True
 
-    def _build_request_url(self, endpoint: Endpoint, query_params: dict | None = None) -> str:
+    def _build_request_url(
+        self, endpoint: Endpoint, query_params: dict | None = None, path_params: dict | None = None
+    ) -> str:
         # Overwrites the default implementation, because /endpoint_route is not attached.
         # Also query_parameters are added to body not to url.
         # (replicate always just has 1 endpoint)

@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from .api_client import APIClient, APIKeyError, RequestData
 from socaity_schemas.contract import Endpoint, EndpointParameter, ServiceContract
 from socaity_schemas.platform import PriceEstimate
-from fastsdk.service_access import primary_deployment, service_contract
+from fastsdk.service_access import primary_details, service_contract
 from fastsdk.requires import requires
 import httpx
 import json
@@ -62,6 +62,16 @@ class APIClientSocaity(APIClient):
         return None
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+        # The gate is always POST. Origin GET query params become job-body fields
+        # so FastAPI Form()/Body() required params are not left empty.
+        if request_data.query_params:
+            for key, value in request_data.query_params.items():
+                if value is not None and key not in request_data.body_params:
+                    request_data.body_params[key] = value
+            request_data.query_params = {}
+            if request_data.url and "?" in request_data.url:
+                request_data.url = request_data.url.split("?", 1)[0]
+
         kwargs = {
             "url": request_data.url,
             "params": request_data.query_params,
@@ -108,9 +118,9 @@ class APIClientSocaity(APIClient):
         """Estimate price and runtime via the platform analytics API."""
         from socaity_cli import SocaityBackendClient
 
-        deployment = primary_deployment(self.service)
-        if not deployment.id:
-            raise ValueError("Service has no deployment id; cannot estimate")
+        details = primary_details(self.service)
+        if not details.id:
+            raise ValueError("Service has no details id; cannot estimate")
 
         contract = service_contract(self.service)
         endpoint = self._resolve_endpoint(endpoint_path, contract)
@@ -120,7 +130,7 @@ class APIClientSocaity(APIClient):
         # The client's own key, not the ambient one: a multi-tenant host (MCP) must not
         # estimate under a process-wide credential that belongs to someone else.
         result = SocaityBackendClient(api_key=self.api_key).estimate(
-            deployment_id=deployment.id,
+            details_id=details.id,
             endpoint_id=endpoint_id,
             input_data=input_data,
         )

@@ -1,12 +1,12 @@
 """
-Loads Replicate models as AIServices.
+Loads Replicate models as Services.
 
 Replicate has two different invocation URL schemes:
 - Official models:  POST https://api.replicate.com/v1/models/{owner}/{name}/predictions (no version needed)
 - Community models: POST https://api.replicate.com/v1/predictions with the model version id in the body
 
 This loader fetches the model's openapi schema via the `replicate` package (optional dependency)
-and builds an AIService with the correct service address for either scheme.
+and builds an Service with the correct service address for either scheme.
 """
 import os
 import re
@@ -16,7 +16,7 @@ import httpx
 from media_toolkit.utils.dependency_requirements import requires
 
 from apipod_registry import create_service, materialize_contract
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 
 
 _MODEL_REF_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$")
@@ -65,16 +65,16 @@ def parse_replicate_model_ref(source) -> Optional[str]:
 
 
 @requires("replicate")
-def load_replicate_service(model_ref: str, api_key: Optional[str] = None) -> AIService:
+def load_replicate_service(model_ref: str, api_key: Optional[str] = None) -> Service:
     """
-    Load a Replicate model as an AIService by fetching its openapi schema from the Replicate API.
+    Load a Replicate model as an Service by fetching its openapi schema from the Replicate API.
 
     Args:
         model_ref: Model reference in the form "owner/name" (see parse_replicate_model_ref).
         api_key: Replicate API key. Falls back to the REPLICATE_API_KEY environment variable.
 
     Returns:
-        AIService with a provider="replicate" deployment and the correct service address
+        Service with a provider="replicate" details binding and the correct service address
         for official ("models" scheme) or community ("predictions" scheme) models.
     """
     import replicate
@@ -107,7 +107,7 @@ def load_replicate_service(model_ref: str, api_key: Optional[str] = None) -> AIS
         address=address,
         provider="replicate",
         service_id=f"replicate-{model.owner}-{model.name}",
-        name=f"{model.owner}/{model.name}",
+        slug=f"{model.owner}/{model.name}",
     )
     service.display_name = f"{model.owner}/{model.name}"
     if model.description:

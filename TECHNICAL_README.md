@@ -4,7 +4,7 @@
 `fastsdk` turns an API description into a Python client workflow that is easy to call from normal Python code.
 
 It has three major responsibilities:
-- parse API specifications into `AIService` objects with a `ServiceContract` (the *definition layer*, delegated to `apipod_registry`)
+- parse API specifications into `Service` objects with a `ServiceContract` (the *definition layer*, delegated to `apipod_registry`)
 - generate Python client stub code from those contracts (the *stub factory*)
 - execute requests, file handling, polling, and job lifecycle management for long-running APIs (the *runtime layer*)
 
@@ -17,13 +17,13 @@ The package exposes module-level functions (`fastsdk/api.py`). They wrap a proce
 
 | Function | Side effects | Returns |
 |---|---|---|
-| `fastsdk.inspect_service(source)` | none (pure) | `AIService` |
-| `fastsdk.register_service(source)` | upserts into the registry | `AIService` |
+| `fastsdk.inspect_service(source)` | none (pure) | `Service` |
+| `fastsdk.register_service(source)` | upserts into the registry | `Service` |
 | `fastsdk.connect(source)` | registers temporarily | `FastClient` (service deregistered when the client is deleted) |
 | `fastsdk.generate_stub(source)` | writes a `.py` file + registers the service | `FastStub` |
 | `fastsdk.get_service / list_services / remove_service` | registry reads/writes | - |
 
-`source` is always the same union: URL, `openapi.json` file path, spec dict, `AIService`,
+`source` is always the same union: URL, `openapi.json` file path, spec dict, `Service`,
 Replicate model reference (`"replicate:owner/name"`, `"https://replicate.com/owner/name"`, bare `"owner/name"`),
 or, where it makes sense, an already registered service ID/name.
 
@@ -33,8 +33,8 @@ Think of `fastsdk` as two connected subsystems:
 1. Definition layer
    - Loads `openapi.json` or provider-specific specs
    - Parses them into a `ServiceContract` (`apipod_registry.materialize_contract`) and wraps it
-     in an `AIService` with one `Deployment` (`apipod_registry.create_service`)
-   - Stores the `AIService` in the `Registry`
+     in an `Service` with one `ServiceDetails` (`apipod_registry.create_service`)
+   - Stores the `Service` in the `Registry`
 
 2. Runtime layer
    - Formats requests
@@ -48,7 +48,7 @@ Generated stubs and `connect()` clients are just convenient entry points into th
 ## Easy Overview
 The rough data flow is:
 
-1. A service specification is loaded (`inspect_service`) and parsed into an `AIService` whose deployment carries a `ServiceContract` with contract `Endpoint`s.
+1. A service specification is loaded (`inspect_service`) and parsed into an `Service` whose details binding carries a `ServiceContract` with contract `Endpoint`s.
 2. The service is registered in the `Registry` (`register_service`, or implicitly by `connect`/`generate_stub`).
 3. A client is constructed (`FastClient`) or generated (`GeneratedStub` → `.py` file with a `FastClient` subclass).
 4. Calling an endpoint creates an `APISeex` job.
@@ -70,14 +70,14 @@ fastsdk/
   fastSDK.py                      # FastSDK singleton facade (registry + job manager wiring)
   fastClient.py                   # FastClient runtime client (base class of generated stubs)
   fastStub.py                     # Contains the Stub that is generated
-  service_access.py               # primary_deployment/service_contract/service_address/needs_polling helpers
+  service_access.py               # primary_details/service_contract/service_address/needs_polling helpers
   sdk_factory/
     sdk_factory.py                # generate_stub(), Jinja2-based codegen
     sdk_template.j2               # default stub template
   service_specification_loader/
     spec_loader.py                # load openapi.json from URL/file/dict (with fallbacks)
     runpod_open_api_loader.py     # fetch openapi.json through a RunPod serverless job
-    replicate_loader.py           # Replicate model -> AIService (optional `replicate` dep)
+    replicate_loader.py           # Replicate model -> Service (optional `replicate` dep)
   service_interaction/
     api_job_manager.py            # composition root + submit + meseex wiring
     job_tasks.py                  # meseex task implementations (prepare, poll, send, ...)
@@ -104,21 +104,21 @@ All clients and stubs in a process therefore share one registry and one job mana
 Advanced users can swap the registry (e.g. for a persistent or DB-backed one) via
 `FastSDK().service_registry = Registry(service_store=...)`.
 
-### `AIService`, `ServiceContract` and `Registry`
-The unit fastsdk works with is an `AIService` (from `socaity_schemas.platform`) with exactly one
-primary `Deployment`, created via `apipod_registry.create_service`:
-- `deployment.contract`: the `ServiceContract` (endpoints, parameters, `specification`
+### `Service`, `ServiceContract` and `Registry`
+The unit fastsdk works with is an `Service` (from `socaity_schemas.platform`) with exactly one
+primary `ServiceDetails`, created via `apipod_registry.create_service`:
+- `details.contract`: the `ServiceContract` (endpoints, parameters, `specification`
   format `openapi`/`apipod`/`cog`/`cog2`, and `has_job_queue` for polling decisions)
-- `deployment.provider`: where it runs (`socaity`/`runpod`/`replicate`/`other`)
-- `deployment.address`: typed `ServiceAddress`; URL composition is done by the module
+- `details.provider`: where it runs (`socaity`/`runpod`/`replicate`/`other`)
+- `details.address`: typed `ServiceAddress`; URL composition is done by the module
   functions in `socaity_schemas.contract.address` (`service_url`, `endpoint_url`, `resolve_url`)
 
-`fastsdk/service_access.py` provides the accessors (`primary_deployment`, `service_contract`,
+`fastsdk/service_access.py` provides the accessors (`primary_details`, `service_contract`,
 `service_address`, `service_provider`, `needs_polling`) used across the codebase; `needs_polling`
 is `contract.has_job_queue or provider == "runpod"` (RunPod serverless always uses the
 /run + /status wire protocol).
 
-`Registry` (from `apipod_registry`) maps service IDs and normalized names to `AIService` objects.
+`Registry` (from `apipod_registry`) maps service IDs and normalized names to `Service` objects.
 
 **Registration is an upsert**: `FastSDK.register_service()` replaces an existing entry with the same ID
 instead of raising. This makes scripts idempotent — re-running `generate_stub`/`register_service`
@@ -138,7 +138,7 @@ FastClient(service, api_key=None, temporary=False, service_name_or_id=None, **lo
 ```
 
 - `service`: any source. Strings are first looked up in the registry; on miss they are loaded
-  and registered as a spec source. The resolved `AIService` is available as `client.service`.
+  and registered as a spec source. The resolved `Service` is available as `client.service`.
 - `service_name_or_id`: strict registry lookup (no loading). This is the path generated stubs use:
   `super().__init__(service_name_or_id="<service-id>")`. It raises with a helpful message if the
   service was never registered in this process.
@@ -156,7 +156,7 @@ into a `.py` file containing a `FastClient` subclass:
 - one method per contract endpoint, with type hints derived from the parameter definitions
   (media formats map to `media_toolkit` types: `ImageFile`, `AudioFile`, `VideoFile`, `MediaFile`)
 - parameter defaults and docstrings from the spec; docstrings prefer the curated platform
-  endpoint description (`AIService.endpoints`) over the contract description when present
+  endpoint description (`Service.endpoints`) over the contract description when present
 - `run` and `__call__` aliases for the primary endpoint
 
 It returns a `FastStub`:
@@ -217,7 +217,7 @@ files, send request, attach (resume from an existing envelope), poll status, pro
 Polling logic and the ``@polling_task`` decorator live here, not on the manager.
 
 **`ProviderFactory`** (`provider_factory.py`) resolves the provider type from
-``deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
+``details.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
 ``apipod-serverless-runpod``) and returns a frozen ``ProviderStack``: ``APIClient``,
 ``FileHandler``, and cached ``ResponseParser``.
 
@@ -420,5 +420,5 @@ Not implemented here. Platform concept: `socaity_backend/agents/SPAINE/connector
 - At send time, read OpenAPI `components.securitySchemes` + `security` and apply auth. Catalog `service_credential_requirements` stores scheme **names** only, not placement.
 - One `apply_auth` path. Presets when the spec is silent: socaity / runpod / replicate / apipod → HTTP bearer. `connect(..., api_key=)` stays the single secret.
 - `send_request` uses `Endpoint.method` (stop hardcoding POST).
-- Catalog rename: `AIService` → `Service`. FastSDK's working unit becomes `ServiceDetails` (address + contract), not the hosting `Deployment` row.
+- Catalog remodel done: `Service` with `ServiceDetails` (address + contract, `execution`) is the working unit; the hosting `Deployment` row hangs off a provisioned binding. `APIClient.apply_auth` places credentials per OpenAPI `securitySchemes`; `send_request` honours `Endpoint.method` and path/header parameters.
 - Do not rewrite `ApiJobManager` / meseex. `PipelinePlanner` already skips polling when `has_job_queue` is false.

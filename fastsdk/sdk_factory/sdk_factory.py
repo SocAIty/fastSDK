@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any, Union, Set
 from jinja2 import Environment, FileSystemLoader, Template
 
 from socaity_schemas.contract import Endpoint, EndpointParameter, ParameterDefinition
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 from apipod_registry.utils.normalization import normalize_name_for_py
 from fastsdk.fastStub import FastStub
 from fastsdk.service_access import service_contract
@@ -227,7 +227,7 @@ def _prepare_endpoint_data(endpoint: Endpoint, platform_description: Optional[st
     
     Args:
         endpoint: The contract endpoint
-        platform_description: Curated description from the AIService endpoint metadata,
+        platform_description: Curated description from the Service endpoint metadata,
             preferred over the contract endpoint description when present.
         
     Returns:
@@ -378,16 +378,16 @@ def _get_file_path(save_path: Union[str, Path], class_name: str) -> Path:
 
 
 def generate_stub(
-    service: AIService,
+    service: Service,
     save_path: Optional[str] = None,
     class_name: Optional[str] = None,
     template: Optional[str] = None
 ) -> FastStub:
     """
-    Creates a .py client stub file for a given AIService in the given save_path.
+    Creates a .py client stub file for a given Service in the given save_path.
     
     Args:
-        service: the AIService whose primary deployment contract provides the endpoints.
+        service: the Service whose primary details contract provides the endpoints.
         save_path: Path where to save the generated file(s). Can be either:
             - A directory path: File will be saved as {class_name.lower()}.py in this directory
             - A file path: File will be saved with this exact path
@@ -403,8 +403,8 @@ def generate_stub(
         FileNotFoundError: If template path is invalid
         IOError: If file cannot be written
     """
-    if not isinstance(service, AIService):
-        raise ValueError("service must be an AIService object. Load it with fastsdk.inspect_service() first.")
+    if not isinstance(service, Service):
+        raise ValueError("service must be an Service object. Load it with fastsdk.inspect_service() first.")
 
     # Determine class name if not provided
     if not class_name:

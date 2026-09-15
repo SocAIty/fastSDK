@@ -1,14 +1,18 @@
 from typing import Dict, Any, Optional, Union
 import json
 import httpx
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from socaity_schemas.contract import Endpoint
 from socaity_schemas.contract.address import endpoint_url, resolve_url
-from socaity_schemas.platform import AIService
-from fastsdk.service_access import service_address
+from socaity_schemas.platform import Service
+from fastsdk.service_access import primary_details, service_address
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaFile, MediaDict, MediaList
+
+# Providers whose wire protocol is a bearer token regardless of what their spec declares.
+_BEARER_PRESET_PROVIDERS = frozenset({"socaity", "runpod", "replicate"})
+_BODYLESS_METHODS = frozenset({"GET", "HEAD", "DELETE", "OPTIONS"})
 
 
 class APIKeyError(Exception):
@@ -27,6 +31,7 @@ class RequestData:
         headers: dict = {},
         url: str = "",
         body_content_type: Optional[str] = None,
+        method: str = "POST",
     ):
         self.query_params = query_params or {}
         self.body_params = body_params or {}
@@ -34,6 +39,7 @@ class RequestData:
         self.headers = headers or {}
         self.url = url
         self.body_content_type = body_content_type
+        self.method = method
 
 
 class APIClient:
@@ -54,11 +60,19 @@ class APIClient:
         _FORM_BODY_CONTENT_TYPE,
     )
 
-    def __init__(self, service: AIService, api_key: str = None):
+    def __init__(self, service: Service, api_key: str = None, credentials: Optional[Dict[str, str]] = None):
+        """
+        Args:
+            service: Service with one details binding (address + contract).
+            api_key: Single secret; bearer on preset providers, otherwise fills every
+                required security scheme that has no entry in ``credentials``.
+            credentials: Secrets by OpenAPI security scheme name (connectors).
+        """
         self.__client = None
         self.service = service
         self.address = service_address(service)
         self.api_key = api_key
+        self.credentials = credentials or {}
         self.validate_api_key()
         self.poll_method = "POST"
         self.cancel_method = "POST"
@@ -104,16 +118,63 @@ class APIClient:
         """
         return True
 
-    def _add_authorization_to_headers(self, headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-        headers = headers or {}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+    def _required_schemes(self, endpoint: Optional[Endpoint]) -> Optional[list]:
+        """Security scheme names the spec requires for this call; None when the spec declares none."""
+        details = primary_details(self.service)
+        if details.provider in _BEARER_PRESET_PROVIDERS or details.contract is None:
+            return None
+        if endpoint is not None and endpoint.security is not None:
+            return endpoint.security or None
+        return details.contract.security or None
+
+    def apply_auth(
+        self,
+        headers: Optional[Dict[str, str]] = None,
+        query_params: Optional[Dict[str, Any]] = None,
+        endpoint: Optional[Endpoint] = None,
+    ) -> Dict[str, str]:
+        """Place credentials where the spec's ``securitySchemes`` say they go.
+
+        Preset providers (socaity, runpod, replicate) and specs without security
+        use a bearer token. Everything else is driven by the scheme type: http
+        bearer/basic, apiKey in header, query or cookie, oauth2/openIdConnect as
+        bearer. Query placement mutates ``query_params`` in place.
+        """
+        headers = headers if headers is not None else {}
+        schemes = self._required_schemes(endpoint)
+        if schemes is None:
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            return headers
+
+        definitions = primary_details(self.service).contract.security_schemes
+        for name in schemes:
+            secret = self.credentials.get(name) or self.api_key
+            if not secret:
+                continue
+            scheme = definitions.get(name, {})
+            scheme_type = scheme.get("type")
+            if scheme_type == "apiKey":
+                location, key = scheme.get("in", "header"), scheme.get("name", name)
+                if location == "query" and query_params is not None:
+                    query_params[key] = secret
+                elif location == "cookie":
+                    headers["Cookie"] = f"{key}={secret}"
+                else:
+                    headers[key] = secret
+            elif scheme_type == "http" and str(scheme.get("scheme", "bearer")).lower() == "basic":
+                headers["Authorization"] = f"Basic {secret}"
+            else:
+                headers["Authorization"] = f"Bearer {secret}"
         return headers
 
-    def _build_request_url(self, endpoint: Endpoint, query_params: Dict = None) -> str:
+    def _build_request_url(self, endpoint: Endpoint, query_params: Dict = None, path_params: Dict = None) -> str:
         if not self.address:
             return None
-        base_url = endpoint_url(self.address, endpoint.path)
+        path = endpoint.path
+        for name, value in (path_params or {}).items():
+            path = path.replace("{" + name + "}", quote(str(value), safe=""))
+        base_url = endpoint_url(self.address, path)
         if query_params:
             query_string = urlencode(query_params, doseq=True)
             return f"{base_url}?{query_string}"
@@ -233,15 +294,16 @@ class APIClient:
         body_content_type = getattr(endpoint, "request_body_content_type", None)
 
         if not data:
-            rq = RequestData(body_content_type=body_content_type)
-            rq.headers = self._add_authorization_to_headers()
+            rq = RequestData(body_content_type=body_content_type, method=endpoint.method)
+            rq.headers = self.apply_auth(query_params=rq.query_params, endpoint=endpoint)
             rq.url = self._build_request_url(endpoint, rq.query_params)
             return rq
 
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
 
-        rq = RequestData(body_content_type=body_content_type)
+        rq = RequestData(body_content_type=body_content_type, method=endpoint.method)
+        path_params: Dict[str, Any] = {}
         embed_files_in_json_body = self._uses_json_request_body(endpoint)
         body_params = [p for p in endpoint.parameters if p.location == "body"]
         # Sole JSON object body (e.g. ChatCompletionRequest as ``request``):
@@ -284,7 +346,13 @@ class APIClient:
             elif is_file_upload:
                 rq.file_params[param.name] = param_value
             elif param.location == "query":
-                rq.query_params[param.name] = param_value
+                if param_value is not None:
+                    rq.query_params[param.name] = param_value
+            elif param.location == "path":
+                path_params[param.name] = param_value
+            elif param.location == "header":
+                if param_value is not None:
+                    rq.headers[param.name] = str(param_value)
             elif param.location == "body":
                 if param_value is not None:
                     if single_json_object_body and param.name == body_params[0].name:
@@ -303,8 +371,8 @@ class APIClient:
         if embed_files_in_json_body and not endpoint.parameters:
             rq.body_params.update({key: value for key, value in data.items() if value is not None})
 
-        rq.url = self._build_request_url(endpoint, rq.query_params)
-        rq.headers = self._add_authorization_to_headers(rq.headers)
+        rq.headers = self.apply_auth(rq.headers, rq.query_params, endpoint)
+        rq.url = self._build_request_url(endpoint, rq.query_params, path_params)
         return rq
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
@@ -324,16 +392,17 @@ class APIClient:
                 request_data.body_params[name] = self._serialize_json_body_file_value(value)
             request_data.file_params = {}
 
+        body = {k: v for k, v in request_data.body_params.items() if v is not None}
         if request_data.file_params:
             kwargs["data"] = self._encode_form_fields(request_data.body_params)
             kwargs["files"] = request_data.file_params
         elif request_data.body_content_type == self._FORM_BODY_CONTENT_TYPE:
             kwargs["data"] = self._encode_form_fields(request_data.body_params)
-        else:
-            kwargs["json"] = {k: v for k, v in request_data.body_params.items() if v is not None}
+        elif body or request_data.method not in _BODYLESS_METHODS:
+            kwargs["json"] = body
 
         # Use build_request + send(stream=True) to support direct SSE responses
-        request = self.client.build_request("POST", **kwargs)
+        request = self.client.build_request(request_data.method, **kwargs)
         return await self.client.send(request, stream=True)
 
     async def request_url(
@@ -349,7 +418,7 @@ class APIClient:
             raise ValueError("Service address is required to request a relative URL")
 
         url = resolve_url(self.address, url)
-        headers = self._add_authorization_to_headers()
+        headers = self.apply_auth()
         timeout = timeout or 60
 
         request = self.client.build_request(

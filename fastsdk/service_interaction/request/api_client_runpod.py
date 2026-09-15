@@ -18,7 +18,9 @@ class APIClientRunpod(APIClient):
             raise APIKeyError("Invalid API key. It should look like 'rpa_...'. ", "runpod", "https://www.runpod.io/")
         return True
 
-    def _build_request_url(self, endpoint: Endpoint, query_params: dict | None = None) -> str:
+    def _build_request_url(
+        self, endpoint: Endpoint, query_params: dict | None = None, path_params: dict | None = None
+    ) -> str:
         # Overwrites the default implementation, because query parameters are not added to the url but to the body
         url = service_url(self.address).strip("/")  # don't use strip("/run") it will remove the letters / r u and n.
         if url.endswith("/run"):

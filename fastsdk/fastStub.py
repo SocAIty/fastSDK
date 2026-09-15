@@ -1,4 +1,4 @@
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 
 
 import importlib.util
@@ -13,13 +13,13 @@ class FastStub:
     Result of generate_stub(). Holds everything you need to use the generated client stub:
     - path: where the .py file was written (import it from there in your next run)
     - class_name: the name of the generated class inside that file
-    - service: the parsed AIService the stub was generated from
+    - service: the parsed Service the stub was generated from
     - client(): import the generated file and return a ready-to-use client instance
     """
-    def __init__(self, path: str, class_name: str, service: AIService):
+    def __init__(self, path: str, class_name: str, service: Service):
         self.path: str = path
         self.class_name: str = class_name
-        self.service: AIService = service
+        self.service: Service = service
 
     def client(self, api_key: Optional[str] = None) -> 'FastClient':
         """Import the generated stub file and return an instance of the generated client class."""

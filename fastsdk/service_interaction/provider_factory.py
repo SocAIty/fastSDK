@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 from fastCloud import ReplicateUploadAPI
 
 from fastsdk.service_access import service_address, service_contract, service_provider
@@ -47,7 +47,7 @@ class ProviderFactory:
         self._parser_cache: Dict[str, ResponseParser] = {}
 
     @staticmethod
-    def determine_provider_type(service: AIService) -> str:
+    def determine_provider_type(service: Service) -> str:
         """Map a service to the provider type key used by clients and response parsers."""
         provider = service_provider(service)
         specification = service_contract(service).specification
@@ -84,11 +84,11 @@ class ProviderFactory:
             )
         return FileHandler()
 
-    def build(self, service: AIService, api_key: str = None) -> ProviderStack:
+    def build(self, service: Service, api_key: str = None) -> ProviderStack:
         """Assemble the full provider stack for a service."""
         if service_address(service) is None:
             raise ValueError(
-                f"Service {service.id} has no deployment address. "
+                f"Service {service.id} has no service address. "
                 "Add one with fastsdk.register_service(..., service_address=...)"
             )
 
