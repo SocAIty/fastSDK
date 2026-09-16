@@ -6,7 +6,7 @@ from urllib.parse import quote, urlencode
 from socaity_schemas.contract import Endpoint
 from socaity_schemas.contract.address import endpoint_url, resolve_url
 from socaity_schemas.platform import Service
-from fastsdk.service_access import primary_details, service_address
+from fastsdk.service_access import primary_details, service_address, service_provider
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaFile, MediaDict, MediaList
 
@@ -121,7 +121,7 @@ class APIClient:
     def _required_schemes(self, endpoint: Optional[Endpoint]) -> Optional[list]:
         """Security scheme names the spec requires for this call; None when the spec declares none."""
         details = primary_details(self.service)
-        if details.provider in _BEARER_PRESET_PROVIDERS or details.contract is None:
+        if service_provider(self.service) in _BEARER_PRESET_PROVIDERS or details.contract is None:
             return None
         if endpoint is not None and endpoint.security is not None:
             return endpoint.security or None

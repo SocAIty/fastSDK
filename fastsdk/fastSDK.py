@@ -2,7 +2,7 @@ from apipod_registry import Registry, create_service, materialize_contract, pars
 from socaity_schemas.contract.address import service_url
 from socaity_schemas.platform import AIModel, Service, Provider
 
-from fastsdk.service_access import primary_details, service_contract
+from fastsdk.service_access import details_provider, primary_details, service_contract, set_reachability
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_interaction.provider_stack_registry import ProviderStackRegistry
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_url_with_fallback, _load_from_file
@@ -205,12 +205,15 @@ class FastSDK:
         details.service_id = service.id
 
         if provider:
-            details.provider = provider
+            set_reachability(details, provider=provider)
 
         # Forced local overwrite for runtime modification of the service address.
         # UseCase: You have a registered service and then change the address for it on runtime.
         if service_address:
-            details.address = parse_address(service_address, provider=details.provider)
+            set_reachability(
+                details,
+                address=parse_address(service_address, provider=details_provider(details)),
+            )
 
         if category:
             service.categories = [category] if isinstance(category, str) else category
@@ -241,7 +244,10 @@ class FastSDK:
 
         if "service_address" in kwargs:
             details = primary_details(service)
-            details.address = parse_address(kwargs.pop("service_address"), provider=details.provider)
+            set_reachability(
+                details,
+                address=parse_address(kwargs.pop("service_address"), provider=details_provider(details)),
+            )
 
         for key, value in kwargs.items():
             setattr(service, key, value)

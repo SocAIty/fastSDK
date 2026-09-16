@@ -7,13 +7,53 @@ one place that encodes this convention; callers never index details directly.
 from typing import Optional
 
 from socaity_schemas.contract import ServiceAddress, ServiceContract
-from socaity_schemas.platform import Provider, Service, ServiceDetails
+from socaity_schemas.platform import Deployment, Provider, Service, ServiceDetails
 
 
 def primary_details(service: Service) -> ServiceDetails:
     if not service.details:
         raise ValueError(f"Service {service.id} has no details binding")
     return service.details[0]
+
+
+def details_provider(details: ServiceDetails) -> Provider:
+    """Compute provider from the nested deployment. Connectors have none."""
+    dep = details.deployment
+    if dep is not None and dep.provider:
+        return dep.provider
+    return "other"
+
+
+def details_address(details: ServiceDetails) -> Optional[ServiceAddress]:
+    """Reachability URL: deployment or connector, never details."""
+    if details.deployment is not None and details.deployment.address is not None:
+        return details.deployment.address
+    if details.connector is not None and details.connector.address is not None:
+        return details.connector.address
+    return None
+
+
+def set_reachability(
+    details: ServiceDetails,
+    *,
+    provider: Optional[Provider] = None,
+    address: Optional[ServiceAddress] = None,
+) -> None:
+    """Write provider/url onto the nested instance, never onto details."""
+    if details.connector is not None:
+        if address is not None:
+            details.connector.address = address
+        return
+    if details.deployment is None:
+        details.deployment = Deployment(
+            service_id=details.service_id,
+            details_id=details.id,
+            provider=provider or "other",
+        )
+    if provider is not None:
+        details.deployment.provider = provider
+    if address is not None:
+        details.deployment.address = address
 
 
 def service_contract(service: Service) -> ServiceContract:
@@ -24,11 +64,11 @@ def service_contract(service: Service) -> ServiceContract:
 
 
 def service_address(service: Service) -> Optional[ServiceAddress]:
-    return primary_details(service).address
+    return details_address(primary_details(service))
 
 
 def service_provider(service: Service) -> Provider:
-    return primary_details(service).provider
+    return details_provider(primary_details(service))
 
 
 def needs_polling(service: Service) -> bool:

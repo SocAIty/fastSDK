@@ -109,8 +109,8 @@ The unit fastsdk works with is an `Service` (from `socaity_schemas.platform`) wi
 primary `ServiceDetails`, created via `apipod_registry.create_service`:
 - `details.contract`: the `ServiceContract` (endpoints, parameters, `specification`
   format `openapi`/`apipod`/`cog`/`cog2`, and `has_job_queue` for polling decisions)
-- `details.provider`: where it runs (`socaity`/`runpod`/`replicate`/`other`)
-- `details.address`: typed `ServiceAddress`; URL composition is done by the module
+- `details.deployment.provider` (or a connector address): where it runs (`socaity`/`runpod`/`replicate`/`other`)
+- `details.deployment.address` or `details.connector.address`: typed `ServiceAddress`; URL composition is done by the module
   functions in `socaity_schemas.contract.address` (`service_url`, `endpoint_url`, `resolve_url`)
 
 `fastsdk/service_access.py` provides the accessors (`primary_details`, `service_contract`,
@@ -217,7 +217,7 @@ files, send request, attach (resume from an existing envelope), poll status, pro
 Polling logic and the ``@polling_task`` decorator live here, not on the manager.
 
 **`ProviderFactory`** (`provider_factory.py`) resolves the provider type from
-``details.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
+``details.deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
 ``apipod-serverless-runpod``) and returns a frozen ``ProviderStack``: ``APIClient``,
 ``FileHandler``, and cached ``ResponseParser``.
 
