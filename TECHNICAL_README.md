@@ -75,7 +75,8 @@ fastsdk/
     sdk_factory.py                # generate_stub(), Jinja2-based codegen
     sdk_template.j2               # default stub template
   service_specification_loader/
-    spec_loader.py                # load openapi.json from URL/file/dict (with fallbacks)
+    spec_loader.py                # load openapi from URL/file (discovery: Link, HTML, well-known paths)
+    openapi_discovery.py          # OpenAPI URL discovery (paths, Link header, regex HTML/JS)
     runpod_open_api_loader.py     # fetch openapi.json through a RunPod serverless job
     replicate_loader.py           # Replicate model -> Service (optional `replicate` dep)
   service_interaction/

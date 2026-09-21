@@ -1,45 +1,18 @@
 from typing import Dict, Union, Any
 from pathlib import Path
 import json
-import httpx
-from httpx import TimeoutException, HTTPError
-
 
 from typing import TYPE_CHECKING
+
+from fastsdk.service_specification_loader.openapi_discovery import load_openapi_from_url
+
 if TYPE_CHECKING:
     from fastsdk.service_interaction.api_seex import APISeex
 
 
-def _download_json(url: str, timeout: float = 30.0) -> Dict[str, Any]:
-    """Download a JSON file from a URL."""
-    with httpx.Client(timeout=timeout) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        return response.json()
-
-
-def _load_from_url_with_fallback(url: str, timeout: float = 30.0) -> Dict[str, Any]:
-    """Load OpenAPI spec from URL with automatic path resolution and fallback."""
-    # Try direct URL first
-    try:
-        return _download_json(url, timeout)
-    except (HTTPError, TimeoutException, json.JSONDecodeError):
-        pass
-    # Try fallback locations if not already openapi.json
-    if not url.rstrip('/').endswith('openapi.json'):
-        base_url = url.rstrip('/')
-        possible_paths = [
-            f"{base_url}/openapi.json",
-            f"{base_url}/api/openapi.json",
-            f"{base_url}/docs/openapi.json",
-            f"{base_url}/redoc/openapi.json"
-        ]
-        for path in possible_paths:
-            try:
-                return _download_json(path, timeout)
-            except (HTTPError, TimeoutException, json.JSONDecodeError):
-                continue
-    raise ValueError(f"Could not load spec from URL or fallback locations: {url}")
+def _load_from_url_with_fallback(url: str, timeout: float = 8.0) -> Dict[str, Any]:
+    """Load an OpenAPI document from a spec URL, docs page, or API root."""
+    return load_openapi_from_url(url, timeout=timeout)
 
 
 def _load_from_file(file_path: str) -> Dict[str, Any]:
@@ -47,16 +20,15 @@ def _load_from_file(file_path: str) -> Dict[str, Any]:
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Specification file not found: {file_path}")
-    
-    with open(path, 'r') as f:
+
+    with open(path, "r") as f:
         return json.load(f)
 
 
-def _load_from_runpod_serverless_server(url: str, api_key: str = None, return_api_job: bool = False) -> Union[Dict[str, Any], 'APISeex']:
+def _load_from_runpod_serverless_server(url: str, api_key: str = None, return_api_job: bool = False) -> Union[Dict[str, Any], "APISeex"]:
     """Load OpenAPI spec from RunPod serverless server."""
     from fastsdk.service_specification_loader.runpod_open_api_loader import RunpodOpenAPILoader
     loader = RunpodOpenAPILoader(url, api_key)
     if return_api_job:
         return loader.load_openapi_spec_async()
-    else:
-        return loader.load_openapi_spec()
+    return loader.load_openapi_spec()
