@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -104,23 +104,60 @@ _LINK_PART = re.compile(r'<([^>]+)>\s*;?\s*(.*)')
 _LINK_PARAM = re.compile(r"""(\w+)\s*=\s*["']?([^"',;]+)["']?""")
 
 
-def load_openapi_from_url(url: str, timeout: float = 45.0) -> Dict[str, Any]:
-    """Fetch an OpenAPI document, discovering it when ``url`` is a docs page or API root."""
+class OpenAPIDiscoveryError(ValueError):
+    """No OpenAPI document was found. ``probed`` is ``(url, result)`` for each GET."""
+
+    def __init__(self, url: str, probed: List[tuple], truncated: bool = False):
+        self.url = url
+        self.probed = list(probed)
+        self.truncated = truncated
+        super().__init__(format_discovery_failure(url, self.probed, truncated))
+
+
+def format_discovery_failure(url: str, probed: List[tuple], truncated: bool = False) -> str:
+    """User-facing hint: what was fetched, and that a direct spec URL is the next step."""
+    lines = [
+        f"Could not discover an OpenAPI document at {url}.",
+        "Paste a direct openapi.json or openapi.yaml URL.",
+    ]
+    if probed:
+        lines.append(f"Probed {len(probed)} URLs:")
+        lines.extend(f"- {item}: {reason}" for item, reason in probed)
+    else:
+        lines.append("No URL was fetched.")
+    if truncated:
+        lines.append(
+            f"Stopped after {_MAX_CANDIDATES} probes. Further candidates were not fetched."
+        )
+    return "\n".join(lines)
+
+
+def load_openapi_from_url(url: str, timeout: float = 45.0) -> Tuple[str, Dict[str, Any]]:
+    """Fetch an OpenAPI document, discovering it when ``url`` is a docs page or API root.
+
+    Returns:
+        ``(spec_url, spec)``. ``spec_url`` is the final URL the document was served from, the canonical
+        address of that API regardless of which docs page or root the caller pasted.
+    """
     timeout_cfg = httpx.Timeout(timeout, connect=min(5.0, timeout))
+    notes: List[tuple] = []
+    flags = {"truncated": False}
     with httpx.Client(timeout=timeout_cfg, follow_redirects=True, headers=_HEADERS) as client:
-        spec = _discover(client, url)
-    if spec:
-        return spec
-    raise ValueError(f"Could not discover an OpenAPI document at {url}")
+        found = _discover(client, url, notes, flags)
+    if found:
+        return found
+    raise OpenAPIDiscoveryError(url, notes, truncated=flags["truncated"])
 
 
-def _discover(client: httpx.Client, url: str) -> Optional[Dict[str, Any]]:
+def _discover(
+    client: httpx.Client, url: str, notes: List[tuple], flags: Dict[str, bool],
+) -> Optional[Tuple[str, Dict[str, Any]]]:
     tried: Set[str] = set()
-    first = _get(client, url, tried)
+    first = _get(client, url, tried, notes)
     if first is not None:
-        spec = _as_openapi(first)
-        if spec:
-            return spec
+        found = _spec_or_note(first, url, notes)
+        if found:
+            return found
         pending = _candidates_from_response(first)
         pending.extend(_script_assets(first))
     else:
@@ -139,15 +176,16 @@ def _discover(client: httpx.Client, url: str) -> Optional[Dict[str, Any]]:
             conventional_added = True
             continue
         if len(tried) >= _MAX_CANDIDATES:
+            flags["truncated"] = True
             break
         candidate = queue[index]
         index += 1
-        response = _get(client, candidate, tried)
+        response = _get(client, candidate, tried, notes)
         if response is None:
             continue
-        spec = _as_openapi(response)
-        if spec:
-            return spec
+        found = _spec_or_note(response, candidate, notes)
+        if found:
+            return found
         extras = _candidates_from_response(response)
         extras.extend(_json_siblings(candidate))
         if js_left and _is_javascript(response):
@@ -161,31 +199,49 @@ def _discover(client: httpx.Client, url: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _get(client: httpx.Client, url: str, tried: Set[str]) -> Optional[httpx.Response]:
+def _get(
+    client: httpx.Client, url: str, tried: Set[str], notes: List[tuple],
+) -> Optional[httpx.Response]:
     absolute = url.split("#", 1)[0].rstrip()
     if not absolute or absolute in tried:
         return None
     tried.add(absolute)
     try:
-        response = client.get(absolute)
-    except (HTTPError, TimeoutException):
-        return None
-    return response
+        return client.get(absolute)
+    except TimeoutException:
+        notes.append((absolute, "timed out"))
+    except HTTPError as exc:
+        notes.append((absolute, f"request failed ({type(exc).__name__})"))
+    return None
 
 
-def _as_openapi(response: httpx.Response) -> Optional[Dict[str, Any]]:
-    if response.status_code >= 400:
-        return None
-    text = response.text or ""
-    ctype = (response.headers.get("content-type") or "").lower()
-    data = _parse_payload(text, ctype)
+def _spec_or_note(
+    response: httpx.Response, requested: str, notes: List[tuple],
+) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """Return ``(final_url, spec)``, or record why this response is not an OpenAPI document."""
+    final = str(response.url).split("#", 1)[0]
+    spec, reason = _read_spec(response)
+    if spec is not None:
+        return final, spec
+    if final.rstrip("/") != requested.split("#", 1)[0].rstrip("/"):
+        reason = f"{reason} (redirected to {final})"
+    notes.append((requested, reason))
+    return None
+
+
+def _read_spec(response: httpx.Response) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Parsed OpenAPI or Swagger document, or ``None`` and the reason the body is not one."""
+    status = response.status_code
+    if status >= 400:
+        return None, f"HTTP {status}"
+    data = _parse_payload(response.text or "", (response.headers.get("content-type") or "").lower())
     if not isinstance(data, dict):
-        return None
+        return None, f"HTTP {status}, body is not a JSON or YAML object"
     if "openapi" not in data and "swagger" not in data:
-        return None
+        return None, f"HTTP {status}, no openapi or swagger field"
     if "paths" not in data and "webhooks" not in data:
-        return None
-    return data
+        return None, f"HTTP {status}, missing paths"
+    return data, ""
 
 
 def _parse_payload(text: str, content_type: str) -> Any:

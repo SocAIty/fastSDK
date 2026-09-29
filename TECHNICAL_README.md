@@ -275,7 +275,7 @@ If the provider is configured with cloud upload support, `FileHandler.upload_fil
 
 Provider subclasses adapt protocol details:
 - `APIClientRunpod`
-- `APIClientSocaity`
+- `APIClientSocaity` (sends `socaity_options` / `socaity_context` as JSON query params on catalog routes, since contracts never declare them; gate factory routes without declared parameters keep them in the body)
 - `APIClientReplicate` (moves query/file params into the JSON body as `{"input": ...}`, adds `version` for community models)
 
 ### 5. Poll status

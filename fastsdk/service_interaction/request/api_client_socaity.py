@@ -10,6 +10,9 @@ import json
 from urllib.parse import urlparse
 
 _FILE_FORMATS = frozenset({"file", "image", "video", "audio", "binary"})
+# The gate adds these JSON query params to every catalog route; service contracts never declare them.
+# Gate factory routes (agents, workflows) declare no parameters and read them from the JSON body instead.
+_GATE_QUERY_FLAGS = ("socaity_options", "socaity_context")
 
 
 def _normalize_endpoint_key(path: str) -> str:
@@ -61,17 +64,20 @@ class APIClientSocaity(APIClient):
                 return ep
         return None
 
-    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
-        # The gate is always POST. Origin GET query params become job-body fields
-        # so FastAPI Form()/Body() required params are not left empty.
-        if request_data.query_params:
-            for key, value in request_data.query_params.items():
-                if value is not None and key not in request_data.body_params:
-                    request_data.body_params[key] = value
-            request_data.query_params = {}
-            if request_data.url and "?" in request_data.url:
-                request_data.url = request_data.url.split("?", 1)[0]
+    def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
+        if not endpoint.parameters:
+            return super().format_request_params(endpoint, data)
+        declared = {param.name for param in endpoint.parameters}
+        data = dict(data or {})
+        flags = {name: data.pop(name) for name in _GATE_QUERY_FLAGS if name in data and name not in declared}
+        request_data = super().format_request_params(endpoint, data)
+        request_data.query_params.update(
+            {name: value if isinstance(value, str) else json.dumps(value) for name, value in flags.items() if value}
+        )
+        return request_data
 
+    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+        # The gate is always POST. Origin query params stay on the query string (gate binds them as Query).
         kwargs = {
             "url": request_data.url,
             "params": request_data.query_params,

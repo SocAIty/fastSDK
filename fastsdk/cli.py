@@ -38,7 +38,9 @@ def _registry_path() -> Path:
 
 
 def _open_persistent_registry() -> Registry:
-    return Registry(service_store=FileSystemStore(path=str(_registry_path())))
+    registry = Registry(service_store=FileSystemStore(path=str(_registry_path())))
+    registry.load_all()
+    return registry
 
 
 def _resolve_source(source: str) -> Union[str, Service]:

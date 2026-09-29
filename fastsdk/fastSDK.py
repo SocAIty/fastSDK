@@ -1,3 +1,5 @@
+import uuid
+
 from apipod_registry import Registry, create_service, materialize_contract, parse_address, determine_provider
 from socaity_schemas.contract.address import service_url
 from socaity_schemas.platform import AIModel, Service, Provider
@@ -5,7 +7,8 @@ from socaity_schemas.platform import AIModel, Service, Provider
 from fastsdk.service_access import details_provider, primary_details, service_contract, set_reachability
 from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_interaction.provider_stack_registry import ProviderStackRegistry
-from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_url_with_fallback, _load_from_file
+from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_file
+from fastsdk.service_specification_loader.openapi_discovery import load_openapi_from_url
 from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref, load_replicate_service
 
 from fastsdk.sdk_factory.sdk_factory import generate_stub as _generate_stub_file
@@ -129,13 +132,16 @@ class FastSDK:
         # Load from deployed service with address
         provider = provider or determine_provider(spec_source)
         address = parse_address(spec_source, provider=provider)
+        spec_url = None
         if provider == "runpod":
             loaded_spec = _load_from_runpod_serverless_server(spec_source, api_key=api_key)
         else:
-            loaded_spec = _load_from_url_with_fallback(service_url(address))
+            spec_url, loaded_spec = load_openapi_from_url(service_url(address), timeout=8)
 
         contract = materialize_contract(loaded_spec, provider=provider)
-        return create_service(contract, address=address, provider=provider, service_id=service_id, slug=slug)
+        service = create_service(contract, address=address, provider=provider, service_id=service_id, slug=slug)
+        service.details[0].spec_url = spec_url
+        return service
 
     @staticmethod
     def load_openapi_spec_from_runpod(runpod_url: str, api_key: str, return_api_job: bool = False) -> Union[Dict[str, Any], 'ApiJob']:
@@ -223,7 +229,9 @@ class FastSDK:
         if description:
             service.description = description
 
-        # Registry.add_service is an upsert: an existing service with the same ID is replaced.
+        # Replace, not merge: Registry.add_service merges bindings by details id (gate hydration),
+        # which would keep a stale cached binding in front of the fresh one.
+        self.service_registry.remove_service(service.id, persist=False)
         return self.service_registry.add_service(service)
 
     def update_service(self, service_id_or_name: str, **kwargs) -> Optional[Service]:
