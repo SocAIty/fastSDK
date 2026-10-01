@@ -1,4 +1,4 @@
-from socaity_schemas.platform import Service
+from socaity_schemas.platform.catalog.service import Service
 
 
 import importlib.util

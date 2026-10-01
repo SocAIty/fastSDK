@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from apipod_registry import FileSystemStore, Registry
-from socaity_schemas.contract.address import service_url
-from socaity_schemas.platform import Service
+from socaity_schemas.public.spec.address import service_url
+from socaity_schemas.platform.catalog.service import Service
 
 from fastsdk.service_access import service_address, service_contract, service_provider
 from fastsdk.fastClient import FastClient

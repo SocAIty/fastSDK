@@ -1,8 +1,10 @@
 import uuid
 
 from apipod_registry import Registry, create_service, materialize_contract, parse_address, determine_provider
-from socaity_schemas.contract.address import service_url
-from socaity_schemas.platform import AIModel, Service, Provider
+from socaity_schemas.public.spec.address import service_url
+from socaity_schemas.platform.catalog.model import AIModel
+from socaity_schemas.platform.catalog.service import Service
+from socaity_schemas.platform.catalog.hosting import Provider
 
 from fastsdk.service_access import details_provider, primary_details, service_contract, set_reachability
 from fastsdk.service_interaction import ApiJobManager

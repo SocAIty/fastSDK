@@ -16,7 +16,7 @@ import httpx
 from media_toolkit.utils.dependency_requirements import requires
 
 from apipod_registry import create_service, materialize_contract
-from socaity_schemas.platform import Service
+from socaity_schemas.platform.catalog.service import Service
 
 
 _MODEL_REF_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$")

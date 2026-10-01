@@ -4,7 +4,11 @@ import logging
 from typing import Any, Dict
 
 from meseex.control_flow import polling_task, PollAgain
-from socaity_schemas import JOB_RESPONSE_TYPES, SocaityJobResponse, StreamingResponse
+from socaity_schemas.public.providers import (
+    JOB_RESPONSE_TYPES,
+    SocaityJobResponse,
+    StreamingResponse,
+)
 from media_toolkit import MediaDict
 
 from fastsdk.service_interaction.api_seex import APISeex

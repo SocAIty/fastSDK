@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.platform import Service
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.platform.catalog.service import Service
 
 from fastsdk.service_access import needs_polling
 from fastsdk.service_interaction.provider_factory import ProviderStack

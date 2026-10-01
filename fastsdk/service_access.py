@@ -6,8 +6,16 @@ one place that encodes this convention; callers never index details directly.
 """
 from typing import Optional
 
-from socaity_schemas.contract import ServiceAddress, ServiceContract
-from socaity_schemas.platform import Deployment, Provider, Service, ServiceDetails
+from socaity_schemas.public.spec.address import ServiceAddress
+from socaity_schemas.public.spec.endpoint import ServiceContract
+from socaity_schemas.platform.catalog.hosting import (
+    Deployment,
+    Provider,
+)
+from socaity_schemas.platform.catalog.service import (
+    Service,
+    ServiceDetails,
+)
 
 
 def primary_details(service: Service) -> ServiceDetails:

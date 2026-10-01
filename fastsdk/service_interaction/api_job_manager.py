@@ -1,5 +1,8 @@
 from apipod_registry.registry import Registry
-from socaity_schemas import JobLinks, SocaityJobResponse
+from socaity_schemas.public.providers import (
+    JobLinks,
+    SocaityJobResponse,
+)
 
 from fastsdk.service_access import service_contract
 from fastsdk.service_interaction.api_seex import APISeex

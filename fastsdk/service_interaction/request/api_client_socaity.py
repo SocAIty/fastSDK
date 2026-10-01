@@ -1,8 +1,12 @@
 from typing import Any, Dict, Optional
 
 from .api_client import APIClient, APIKeyError, RequestData
-from socaity_schemas.contract import Endpoint, EndpointParameter, ServiceContract
-from socaity_schemas.platform import PriceEstimate
+from socaity_schemas.public.spec.endpoint import (
+    Endpoint,
+    EndpointParameter,
+    ServiceContract,
+)
+from socaity_schemas.platform.catalog.pricing import PriceEstimate
 from fastsdk.service_access import primary_details, service_contract
 from fastsdk.requires import requires
 import httpx

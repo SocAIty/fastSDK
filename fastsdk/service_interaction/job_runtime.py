@@ -20,7 +20,7 @@ import threading
 import time
 from typing import Any, Optional, TYPE_CHECKING
 
-from socaity_schemas import JOB_RESPONSE_TYPES
+from socaity_schemas.public.providers import JOB_RESPONSE_TYPES
 
 from fastsdk.service_interaction.response.sse_assembly import assemble_stream_bytes
 from fastsdk.service_interaction.response.stream_session import StreamSession

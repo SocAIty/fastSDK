@@ -1,6 +1,9 @@
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.platform import Service
-from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.platform.catalog.service import Service
+from socaity_schemas.public.providers import (
+    JOB_RESPONSE_TYPES,
+    StreamingResponse,
+)
 from meseex import MrMeseex
 
 from fastsdk.service_access import service_provider

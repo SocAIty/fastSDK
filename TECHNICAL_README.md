@@ -106,13 +106,13 @@ Advanced users can swap the registry (e.g. for a persistent or DB-backed one) vi
 `FastSDK().service_registry = Registry(service_store=...)`.
 
 ### `Service`, `ServiceContract` and `Registry`
-The unit fastsdk works with is an `Service` (from `socaity_schemas.platform`) with exactly one
+The unit fastsdk works with is an `Service` (from `socaity_schemas.platform.catalog.service`) with exactly one
 primary `ServiceDetails`, created via `apipod_registry.create_service`:
 - `details.contract`: the `ServiceContract` (endpoints, parameters, `specification`
   format `openapi`/`apipod`/`cog`/`cog2`, and `has_job_queue` for polling decisions)
 - `details.deployment.provider` (or a connector address): where it runs (`socaity`/`runpod`/`replicate`/`other`)
 - `details.deployment.address` or `details.connector.address`: typed `ServiceAddress`; URL composition is done by the module
-  functions in `socaity_schemas.contract.address` (`service_url`, `endpoint_url`, `resolve_url`)
+  functions in `socaity_schemas.public.spec.address` (`service_url`, `endpoint_url`, `resolve_url`)
 
 `fastsdk/service_access.py` provides the accessors (`primary_details`, `service_contract`,
 `service_address`, `service_provider`, `needs_polling`) used across the codebase; `needs_polling`
@@ -347,7 +347,7 @@ response is created and read on `meseex`'s background event loop via the `AsyncB
 `StreamSession` hands items across threads through a queue, so callers consume from any thread or
 loop without touching that loop directly.
 
-Provider transport models live in ``socaity_schemas.transport`` (imported directly, no local duplicate module).
+Provider transport models live in ``socaity_schemas.public.providers`` (imported directly, no local duplicate module).
 Byte-chunk streams are assembled via ``media_toolkit.media_from_any``.
 
 ## How Cancellation Works
