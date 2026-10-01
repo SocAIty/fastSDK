@@ -1,5 +1,5 @@
 from socaity_schemas.contract import Endpoint
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
 from meseex import MrMeseex
 
@@ -27,7 +27,7 @@ class APISeex(MrMeseex):
 
     def __init__(
         self,
-        service: AIService,
+        service: Service,
         endpoint: Endpoint,
         data: Any = None,
         name: str = None,

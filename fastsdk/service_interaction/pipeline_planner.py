@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from socaity_schemas.contract import Endpoint
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 
 from fastsdk.service_access import needs_polling
 from fastsdk.service_interaction.provider_factory import ProviderStack
@@ -37,7 +37,7 @@ class PipelinePlanner:
     @classmethod
     def plan(
         cls,
-        service: AIService,
+        service: Service,
         endpoint: Endpoint,
         stack: Optional[ProviderStack] = None,
     ) -> List[str]:

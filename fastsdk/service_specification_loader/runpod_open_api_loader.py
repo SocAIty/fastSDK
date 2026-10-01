@@ -1,7 +1,7 @@
 from fastsdk.fastClient import FastClient
 from apipod_registry import create_service
 from socaity_schemas.contract import Endpoint, ServiceContract
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 from typing import Any, Dict
 import uuid
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class RunpodOpenAPILoader:
     """
     Simplified loader for fetching OpenAPI specifications from RunPod APIPod endpoints.
-    Fetches the openapi spec through a RunPod serverless job using a temporary AIService.
+    Fetches the openapi spec through a RunPod serverless job using a temporary Service.
     Uses Registry and ApiJobManager infrastructure instead of implementing logic from scratch.
     """
 
@@ -27,8 +27,8 @@ class RunpodOpenAPILoader:
         # Add service to manager and configure API client
         self.client = FastClient(self.service, api_key=self.api_key, temporary=True)
 
-    def _create_temp_service(self) -> AIService:
-        """Create a temporary AIService whose only endpoint fetches /openapi.json through the runtime."""
+    def _create_temp_service(self) -> Service:
+        """Create a temporary Service whose only endpoint fetches /openapi.json through the runtime."""
         contract = ServiceContract(
             title="Temp RunPod OpenAPI Loader",
             specification="openapi",

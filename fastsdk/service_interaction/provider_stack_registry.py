@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Dict, Optional, Tuple
 
 from apipod_registry.registry import Registry
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform import Service
 
 from fastsdk.service_interaction.provider_factory import ProviderFactory, ProviderStack
 from fastsdk.service_interaction.request.file_handler import FileHandler
@@ -54,7 +54,7 @@ class ProviderStackRegistry:
         self._stacks[key] = self._factory.build(service, api_key)
         return self._stacks[key]
 
-    def load(self, service_name_or_id: str, api_key: str = None) -> AIService:
+    def load(self, service_name_or_id: str, api_key: str = None) -> Service:
         """Resolve a service from the registry and ensure its provider stack is loaded."""
         service = self.registry.get_service(service_name_or_id)
         if not service:

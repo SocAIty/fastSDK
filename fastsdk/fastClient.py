@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import os
 
-from socaity_schemas.platform import AIService, PriceEstimate
+from socaity_schemas.platform import Service, PriceEstimate
 from fastsdk.fastSDK import FastSDK
 from fastsdk.service_access import service_provider
 
@@ -25,7 +25,7 @@ class FastClient:
 
     A FastClient can be created from:
     - a registered service ID or name (this is what generated stubs do)
-    - a service URL, an openapi.json file path, a spec dict or an AIService
+    - a service URL, an openapi.json file path, a spec dict or an Service
     - a Replicate model reference like "replicate:owner/name"
 
     If the source is not yet in the registry, it is loaded and registered automatically.
@@ -36,7 +36,7 @@ class FastClient:
     """
     def __init__(
         self,
-        service: Union[str, Path, Dict[str, Any], AIService, None] = None,
+        service: Union[str, Path, Dict[str, Any], Service, None] = None,
         api_key: Optional[str] = None,
         temporary: bool = False,
         service_name_or_id: Optional[str] = None,
@@ -46,7 +46,7 @@ class FastClient:
         """
         Args:
             service: Service source. A registered service ID/name, a URL, a spec file path,
-                a spec dict, an AIService or a Replicate model reference.
+                a spec dict, an Service or a Replicate model reference.
             api_key: Optional API key for the service. If not provided, it is looked up in
                 the environment variables (e.g. REPLICATE_API_KEY, RUNPOD_API_KEY, <SERVICE_ID>_API_KEY).
             temporary: If True, the service is removed from the registry when the client is deleted.
@@ -61,7 +61,7 @@ class FastClient:
         self.materialize_media = materialize_media
 
         if service is None and service_name_or_id is None:
-            raise ValueError("Provide a service source (URL, file, dict, AIService) or a registered service ID/name.")
+            raise ValueError("Provide a service source (URL, file, dict, Service) or a registered service ID/name.")
 
         if service_name_or_id is not None:
             self.service = self.fsdk.service_registry.get_service(service_name_or_id)
@@ -77,7 +77,7 @@ class FastClient:
         self.api_key = api_key or self._get_api_key()
         self.fsdk.provider_stacks.load(self.service.id, self.api_key)
 
-    def _resolve_service(self, service, api_key: Optional[str], **load_kwargs) -> AIService:
+    def _resolve_service(self, service, api_key: Optional[str], **load_kwargs) -> Service:
         # A plain string might be a registered service ID/name - check the registry first.
         if isinstance(service, str):
             registered = self.fsdk.service_registry.get_service(service)

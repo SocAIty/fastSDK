@@ -80,13 +80,19 @@ class JobRuntime:
     # Streaming
     # ------------------------------------------------------------------
 
-    def stream(self, timeout_s: float = 60.0) -> StreamSession:
-        """Open the job's live output stream and take the single session slot."""
+    def stream(self, timeout_s: Optional[float] = None) -> StreamSession:
+        """Open the job's live output stream and take the single session slot.
+
+        Waits while the job is queued or running (serverless workers may still
+        be booting). ``exposes no stream`` is only raised after the job has
+        finished without a stream URL. ``timeout_s`` caps that wait; ``None``
+        waits until the job ends.
+        """
         with self._lock:
             if self._session is not None or self._opening:
                 raise RuntimeError(f"Job {self.job.meseex_id} already has an active stream")
             if self.job.is_terminal and not self._has_stream_source():
-                raise ValueError(f"Job {self.job.meseex_id} exposes no stream")
+                raise self._missing_stream_error()
             self._opening = True
 
         try:
@@ -99,20 +105,34 @@ class JobRuntime:
             self._session = session
         return session
 
-    def _await_stream_source(self, timeout_s: float) -> StreamSession:
-        """Block on the readiness event until a source exists or the job ends."""
-        deadline = time.monotonic() + timeout_s
+    def _await_stream_source(self, timeout_s: Optional[float]) -> StreamSession:
+        """Block until a stream URL exists or the job finishes."""
+        deadline = None if timeout_s is None or timeout_s <= 0 else time.monotonic() + timeout_s
         while True:
             session = self._resolve_source()
             if session is not None:
                 return session
             if self.job.is_terminal:
-                raise ValueError(f"Job {self.job.meseex_id} exposes no stream")
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise ValueError(f"Job {self.job.meseex_id} exposes no stream")
-            self._stream_ready.wait(timeout=remaining)
+                raise self._missing_stream_error()
+            if deadline is None:
+                self._stream_ready.wait(timeout=30.0)
+            else:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"Job {self.job.meseex_id} timed out waiting for the worker stream"
+                    )
+                self._stream_ready.wait(timeout=min(30.0, remaining))
             self._stream_ready.clear()
+
+    def _missing_stream_error(self) -> BaseException:
+        """Prefer the submit/poll failure over a generic missing-hypermedia error."""
+        err = getattr(self.job, "error", None)
+        if isinstance(err, BaseException):
+            return err
+        if err:
+            return ValueError(str(err))
+        return ValueError(f"Job {self.job.meseex_id} exposes no stream")
 
     def _resolve_source(self) -> Optional[StreamSession]:
         """Return a session for a direct response or a discovered stream URL."""

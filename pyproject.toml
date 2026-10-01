@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastsdk"
-version = "0.4.16"
+version = "0.4.17"
 description = "Turn any AI/web service (OpenAPI, Replicate, RunPod, APIPod) into a native-feeling Python client."
 requires-python = ">=3.8"
 authors = [
@@ -16,13 +16,13 @@ dependencies = [
     "httpx",
     "tqdm",
     "pydantic>=2.11.3",
-    "meseex>=0.0.7",
+    "meseex>=0.0.11",
     "media-toolkit>=00.02.22",
     "singleton_decorator==1.0.0",
     "jinja2>=3.1.6",
     "fastcloud>=0.0.14",
 	"apipod-registry>=0.1.7",
-    "socaity-schemas>=0.1.6",
+    "socaity-schemas>=0.1.8",
 ]
 
 [project.optional-dependencies]
