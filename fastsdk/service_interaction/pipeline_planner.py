@@ -54,6 +54,21 @@ class PipelinePlanner:
 
         if needs_polling(service):
             tasks.append("Polling")
+            if cls._needs_status_stream(stack):
+                tasks.append("Streaming")
 
+        tasks.append("Processing result")
+        return tasks
+
+    @staticmethod
+    def _needs_status_stream(stack: Optional[ProviderStack]) -> bool:
+        return stack is not None and stack.provider_type == "socaity"
+
+    @classmethod
+    def plan_track(cls, stack: Optional[ProviderStack] = None) -> List[str]:
+        """Task list for ``track_job``: attach an envelope, then the wait phases."""
+        tasks = ["Attach", "Polling"]
+        if cls._needs_status_stream(stack):
+            tasks.append("Streaming")
         tasks.append("Processing result")
         return tasks

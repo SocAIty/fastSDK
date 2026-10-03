@@ -71,15 +71,10 @@ class APISeex(MrMeseex):
         if self.termination_state is not None and isinstance(self.cancel_result, JOB_RESPONSE_TYPES):
             return self.cancel_result
 
-        resp = self.get_task_output("Polling")
-        if resp is not None:
-            return resp
-        sent = self.get_task_output("Sending request")
-        if sent is not None:
-            return sent
-        attached = self.get_task_output("Attach")
-        if attached is not None:
-            return attached
+        for name in ("Streaming", "Polling", "Sending request", "Attach"):
+            resp = self.get_task_output(name)
+            if resp is not None:
+                return resp
         if isinstance(self.input, JOB_RESPONSE_TYPES):
             return self.input
         return None

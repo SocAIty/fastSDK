@@ -112,7 +112,7 @@ class ApiJobManager:
             service=service,
             endpoint=endpoint,
             data=envelope,
-            tasks=["Attach", "Polling", "Processing result"],
+            tasks=PipelinePlanner.plan_track(stack),
             name=f"track:{job_id}",
             stack=stack,
             materialize_media=materialize_media,

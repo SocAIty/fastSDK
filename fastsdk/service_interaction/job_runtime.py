@@ -5,7 +5,8 @@ ticket and delegates every lifecycle action here, so state that belongs to a
 single job lives in this object, never on the process-level orchestrator:
 
 - the one active ``StreamSession`` slot (``None`` or exactly one session)
-- a readiness signal fed by the polling task as job state advances
+- the Socaity ``StatusStream`` opened by the ``Streaming`` task
+- a readiness signal fed by send, poll, and the status subscription
 - cancellation policy (remote cancel plus terminal-state reconciliation)
 - stream teardown when a cancel resolves
 
@@ -18,13 +19,14 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, AsyncIterator, Optional, TYPE_CHECKING
 
 from socaity_schemas.public.providers import JOB_RESPONSE_TYPES
 
 from fastsdk.service_interaction.response.sse_assembly import assemble_stream_bytes
 from fastsdk.service_interaction.response.stream_session import StreamSession
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
+from fastsdk.service_interaction.status_stream import StatusStream
 
 if TYPE_CHECKING:
     from meseex import MeseexBox
@@ -54,8 +56,12 @@ class JobRuntime:
         self._bridge = bridge
         self._lock = threading.Lock()
         self._session: Optional[StreamSession] = None
+        self._status_stream: Optional[StatusStream] = None
         self._opening = False
         self._stream_ready = threading.Event()
+
+    def _plans_status_stream(self) -> bool:
+        return "Streaming" in (self.job.tasks or [])
 
     # ------------------------------------------------------------------
     # Readiness signal (fed by the orchestrator's send/poll tasks)
@@ -69,6 +75,10 @@ class JobRuntime:
     def _has_stream_source(self) -> bool:
         if self.job.direct_response is not None:
             return True
+        if self._status_stream is not None:
+            return True
+        if self._plans_status_stream():
+            return False
         current = self.job.response
         return (
             self._api_client is not None
@@ -135,10 +145,13 @@ class JobRuntime:
         return ValueError(f"Job {self.job.meseex_id} exposes no stream")
 
     def _resolve_source(self) -> Optional[StreamSession]:
-        """Return a session for a direct response or a discovered stream URL."""
+        """Return a session for a direct response, status-stream feed, or stream URL."""
         if self.job.direct_response is not None:
             return StreamSession(self.job.direct_response, self._bridge.loop)
-
+        if self._status_stream is not None:
+            return self._status_stream.output
+        if self._plans_status_stream():
+            return None
         current = self.job.response
         if (
             self._api_client is not None
@@ -149,6 +162,24 @@ class JobRuntime:
             return StreamSession(response, self._bridge.loop)
         return None
 
+    async def follow_status_stream(self, envelope: Any) -> AsyncIterator[Any]:
+        """Subscribe to ``GET /stream`` and yield each ``event: job`` snapshot.
+
+        Creates the push-fed output session so ``job.stream()`` can take it.
+        """
+        if self._status_stream is not None:
+            raise RuntimeError(f"Job {self.job.meseex_id} already follows a status stream")
+        if self._api_client is None:
+            raise ValueError(f"Job {self.job.meseex_id} has no API client")
+        stream = StatusStream(self._bridge.loop)
+        self._status_stream = stream
+        self._stream_ready.set()
+        try:
+            async for snapshot in stream.snapshots(self._api_client, envelope):
+                yield snapshot
+        finally:
+            await stream.aclose()
+
     def assemble_result(self) -> Any:
         """Drain a streaming job into one assembled result (media file or text)."""
         session = self.stream()
@@ -156,12 +187,15 @@ class JobRuntime:
         return assemble_stream_bytes(data, is_sse=session.is_sse)
 
     def _close_active_stream(self) -> None:
-        """Release and close the session slot. Idempotent."""
+        """Release the session slot and the status subscription. Idempotent."""
         with self._lock:
             session = self._session
             self._session = None
+            status = self._status_stream
         if session is not None:
             session.close()
+        if status is not None:
+            status.close()
 
     # ------------------------------------------------------------------
     # Cancellation (single source of truth for cancel semantics)

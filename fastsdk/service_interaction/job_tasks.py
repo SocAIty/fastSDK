@@ -1,7 +1,7 @@
 """Meseex task implementations for the API job pipeline."""
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from meseex.control_flow import polling_task, PollAgain
 from socaity_schemas.public.providers import (
@@ -44,6 +44,10 @@ class JobTasks:
 
     Handlers read the provider stack from the job, which binds it at submit
     time. Re-resolving per task could hand a job another tenant's credential.
+
+    Polling is ``GET /status`` only. When the next task is ``Streaming`` and
+    ``links.stream`` appears, Polling returns so Streaming can own ``GET /stream``.
+    Streaming is a pass-through when the envelope has no stream URL.
     """
 
     def as_task_map(self) -> Dict[str, Any]:
@@ -55,6 +59,7 @@ class JobTasks:
             "Sending request": self.send_request,
             "Attach": self.attach_job,
             "Polling": self.poll_status,
+            "Streaming": self.follow_stream,
             "Processing result": self.process_result,
         }
 
@@ -184,31 +189,66 @@ class JobTasks:
         if not isinstance(parsed_response, JOB_RESPONSE_TYPES):
             raise ValueError(f"Expected job response but got {type(parsed_response)}")
 
-        job.set_task_output(parsed_response)
+        done = self._apply_status_envelope(job, stack, parsed_response)
+        if done is not None:
+            return done
+
+        tasks = job.tasks or []
+        nxt = job.current_task_index + 1
+        if (
+            nxt < len(tasks)
+            and tasks[nxt] == "Streaming"
+            and stack.api_client.get_stream_url(parsed_response)
+        ):
+            return parsed_response
+
+        raw_status = getattr(parsed_response, "status", "unknown")
+        return PollAgain(f"Job status: {raw_status}")
+
+    def _apply_status_envelope(self, job: APISeex, stack, envelope: Any) -> Optional[Any]:
+        """Apply a status snapshot. Return the envelope when terminal, else None."""
+        job.set_task_output(envelope)
         job.runtime.refresh_stream_state()
 
-        status = stack.api_client.get_status(parsed_response)
-
+        status = stack.api_client.get_status(envelope)
         if status == APIJobStatus.FINISHED:
-            return parsed_response
+            return envelope
         if status == APIJobStatus.CANCELLED:
-            job.mark_cancelled(cancel_result=parsed_response)
+            job.mark_cancelled(cancel_result=envelope)
             job.runtime.refresh_stream_state()
-            return parsed_response
+            return envelope
         if status in (APIJobStatus.FAILED, APIJobStatus.REJECTED, APIJobStatus.TIMEOUT):
-            err = getattr(parsed_response, "error", None)
-            wrapped = ValueError(err or f"Job failed with status: {getattr(parsed_response, 'status', 'unknown')}")
-            raise wrapped
+            err = getattr(envelope, "error", None)
+            raise ValueError(err or f"Job failed with status: {getattr(envelope, 'status', 'unknown')}")
 
-        progress = getattr(parsed_response, "progress", None)
-        message = getattr(parsed_response, "message", None)
-        raw_status = getattr(parsed_response, "status", "unknown")
-
-        progress_msg = f"Job {getattr(parsed_response, 'id', getattr(parsed_response, 'job_id', '?'))}"
+        progress = getattr(envelope, "progress", None)
+        message = getattr(envelope, "message", None)
+        raw_status = getattr(envelope, "status", "unknown")
+        progress_msg = f"Job {getattr(envelope, 'id', getattr(envelope, 'job_id', '?'))}"
         progress_msg += f": {message}" if message else f" status: {raw_status}"
-
         job.set_task_progress(progress, progress_msg)
-        return PollAgain(f"Job status: {raw_status}")
+        return None
+
+    async def follow_stream(self, job: APISeex) -> Any:
+        """Follow ``GET /stream`` until a terminal job frame.
+
+        Pass-through when Polling already finished or the envelope has no stream URL.
+        """
+        envelope = job.prev_task_output
+        if not isinstance(envelope, JOB_RESPONSE_TYPES):
+            return envelope
+        stack = job.provider_stack
+        done = self._apply_status_envelope(job, stack, envelope)
+        if done is not None:
+            return done
+        if not stack.api_client.get_stream_url(envelope):
+            return envelope
+
+        async for next_envelope in job.runtime.follow_status_stream(envelope):
+            done = self._apply_status_envelope(job, stack, next_envelope)
+            if done is not None:
+                return done
+        raise ValueError("Job status stream ended before a terminal status")
 
     async def process_result(self, job: APISeex) -> Any:
         response = job.prev_task_output
