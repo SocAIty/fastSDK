@@ -3,9 +3,8 @@
 ## TL;DR
 `fastsdk` turns an API description into a Python client workflow that is easy to call from normal Python code.
 
-It has three major responsibilities:
+It has two major responsibilities:
 - parse API specifications into `Service` objects with a `ServiceContract` (the *definition layer*, delegated to `apipod_registry`)
-- generate Python client stub code from those contracts (the *stub factory*)
 - execute requests, file handling, polling, and job lifecycle management for long-running APIs (the *runtime layer*)
 
 For job-based APIs such as APIPod, RunPod, Socaity, or Replicate, `fastsdk` delegates runtime orchestration to `meseex`.
@@ -20,7 +19,6 @@ The package exposes module-level functions (`fastsdk/api.py`). They wrap a proce
 | `fastsdk.inspect_service(source)` | none (pure) | `Service` |
 | `fastsdk.register_service(source)` | upserts into the registry | `Service` |
 | `fastsdk.connect(source)` | registers temporarily | `FastClient` (service deregistered when the client is deleted) |
-| `fastsdk.generate_stub(source)` | writes a `.py` file + registers the service | `FastStub` |
 | `fastsdk.get_service / list_services / remove_service` | registry reads/writes | - |
 
 `source` is always the same union: URL, `openapi.json` file path, spec dict, `Service`,
@@ -43,14 +41,14 @@ Think of `fastsdk` as two connected subsystems:
    - Polls job status when the provider is asynchronous
    - Parses final results back into Python-friendly objects
 
-Generated stubs and `connect()` clients are just convenient entry points into those two layers.
+`connect()` is the entry point into those two layers.
 
 ## Easy Overview
 The rough data flow is:
 
 1. A service specification is loaded (`inspect_service`) and parsed into an `Service` whose details binding carries a `ServiceContract` with contract `Endpoint`s.
-2. The service is registered in the `Registry` (`register_service`, or implicitly by `connect`/`generate_stub`).
-3. A client is constructed (`FastClient`) or generated (`GeneratedStub` → `.py` file with a `FastClient` subclass).
+2. The service is registered in the `Registry` (`register_service`, or implicitly by `connect`).
+3. A `FastClient` is constructed.
 4. Calling an endpoint creates an `APISeex` job.
 5. `ApiJobManager` executes that job through `MeseexBox`.
 6. The job runs a small pipeline:
@@ -65,15 +63,11 @@ The rough data flow is:
 
 ```
 fastsdk/
-  api.py                          # module-level public API (connect, generate_stub, ...)
+  api.py                          # module-level public API (connect, inspect, register)
   cli.py                          # `fastsdk` console entry point
   fastSDK.py                      # FastSDK singleton facade (registry + job manager wiring)
-  fastClient.py                   # FastClient runtime client (base class of generated stubs)
-  fastStub.py                     # Contains the Stub that is generated
+  fastClient.py                   # FastClient runtime client
   service_access.py               # primary_details/service_contract/service_address/needs_polling helpers
-  sdk_factory/
-    sdk_factory.py                # generate_stub(), Jinja2-based codegen
-    sdk_template.j2               # default stub template
   service_specification_loader/
     spec_loader.py                # load openapi from URL/file (discovery: Link, HTML, well-known paths)
     openapi_discovery.py          # OpenAPI URL discovery (paths, Link header, regex HTML/JS)
@@ -101,8 +95,8 @@ One instance per process. It owns:
 - the `ProviderStackRegistry` (lazy-created)
 - the `ApiJobManager` (lazy-created, receives the stack registry)
 
-and implements `inspect_service`, `register_service` (upsert), `generate_stub`, `connect`.
-All clients and stubs in a process therefore share one registry and one job manager.
+and implements `inspect_service`, `register_service` (upsert), `connect`.
+All clients in a process therefore share one registry and one job manager.
 Advanced users can swap the registry (e.g. for a persistent or DB-backed one) via
 `FastSDK().service_registry = Registry(service_store=...)`.
 
@@ -123,17 +117,15 @@ is `contract.has_job_queue or provider == "runpod"` (RunPod serverless always us
 `Registry` (from `apipod_registry`) maps service IDs and normalized names to `Service` objects.
 
 **Registration is an upsert**: `FastSDK.register_service()` replaces an existing entry with the same ID
-instead of raising. This makes scripts idempotent — re-running `generate_stub`/`register_service`
+instead of raising. This makes scripts idempotent: re-running `register_service`
 never fails with "already registered".
 
-**Lifetime**: the default registry is in-memory. A stub imported in a fresh process must find its
-service in the registry; either `register_service(...)` first, regenerate the stub, or attach a
-persistent store. The CLI attaches a `FileSystemStore` under `~/.fastsdk/registry` for its
-`registry` subcommand, so CLI-registered services survive across invocations.
+**Lifetime**: the default registry is in-memory. The CLI attaches a `FileSystemStore`
+under `~/.fastsdk/registry` for its `registry` subcommand, so CLI-registered services
+survive across invocations.
 
 ### `FastClient`
-The single runtime client class (the previous `DynamicClient`/`TemporaryClient` subclasses are
-collapsed into attributes):
+The single runtime client class:
 
 ```python
 FastClient(service, api_key=None, temporary=False, service_name_or_id=None, **load_kwargs)
@@ -141,31 +133,14 @@ FastClient(service, api_key=None, temporary=False, service_name_or_id=None, **lo
 
 - `service`: any source. Strings are first looked up in the registry; on miss they are loaded
   and registered as a spec source. The resolved `Service` is available as `client.service`.
-- `service_name_or_id`: strict registry lookup (no loading). This is the path generated stubs use:
-  `super().__init__(service_name_or_id="<service-id>")`. It raises with a helpful message if the
-  service was never registered in this process.
+- `service_name_or_id`: strict registry lookup (no loading). Raises if the service was never
+  registered in this process.
 - `temporary=True`: the service is removed from the registry when the client is deleted/closed.
   `FastClient` is also a context manager (`with fastsdk.connect(...) as client:`).
 - API keys are resolved from the argument, then from environment variables
   (`SOCAITY_API_KEY`, `RUNPOD_API_KEY`, `REPLICATE_API_KEY`, or `<SERVICE_ID>_API_KEY`).
 
-`submit_job(endpoint_id, **params)` is the generic invocation path; generated stub methods are
-thin typed wrappers around it.
-
-### Stub Generation (`sdk_factory`)
-`generate_stub(service, save_path, class_name, template)` renders the Jinja2 template
-into a `.py` file containing a `FastClient` subclass:
-- one method per contract endpoint, with type hints derived from the parameter definitions
-  (media formats map to `media_toolkit` types: `ImageFile`, `AudioFile`, `VideoFile`, `MediaFile`)
-- parameter defaults and docstrings from the spec; docstrings prefer the curated platform
-  endpoint description (`Service.endpoints`) over the contract description when present
-- `run` and `__call__` aliases for the primary endpoint
-
-It returns a `FastStub`:
-- `.path`, `.class_name`, `.service`
-- `.client(api_key=None)`: imports the generated file and instantiates the class (works
-  immediately because the service was just registered)
-- iterable (`path, name, service = generate_stub(...)`)
+`submit_job(endpoint_id, **params)` is the invocation path.
 
 ### Specification Loading
 The definition layer does provider-aware parsing:
@@ -400,7 +375,6 @@ The implementation waits for the provider to confirm cancellation. If the provid
 | Command | Python equivalent |
 |---|---|
 | `fastsdk inspect <source>` | `inspect_service(source)` + pretty printing of endpoints/params |
-| `fastsdk generate <source> -o <path> --name <Class>` | `generate_stub(...)` + prints the import line |
 | `fastsdk call <source> <endpoint> --param value ...` | `FastClient(source).submit_job(endpoint, ...)` |
 | `fastsdk registry list/add/remove/show` | persistent registry management |
 

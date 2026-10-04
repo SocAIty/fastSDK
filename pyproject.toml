@@ -18,8 +18,6 @@ dependencies = [
     "pydantic>=2.11.3",
     "meseex>=0.0.11",
     "media-toolkit>=00.02.22",
-    "singleton_decorator==1.0.0",
-    "jinja2>=3.1.6",
     "fastcloud>=0.0.14",
 	"apipod-registry>=0.1.7",
     "socaity-schemas>=0.1.8",
@@ -44,6 +42,3 @@ Homepage = "https://www.socaity.ai"
 where = ["."]
 include = ["fastsdk*"]
 exclude = ["output*", "test*"]
-
-[tool.setuptools.package-data]
-"fastsdk.sdk_factory" = ["*.j2"]

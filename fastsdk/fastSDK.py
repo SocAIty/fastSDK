@@ -13,24 +13,22 @@ from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_s
 from fastsdk.service_specification_loader.openapi_discovery import load_openapi_from_url
 from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref, load_replicate_service
 
-from fastsdk.sdk_factory.sdk_factory import generate_stub as _generate_stub_file
 from typing import Union, Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
 
 if TYPE_CHECKING:
     from fastsdk.fastClient import FastClient
     from fastsdk.service_interaction import ApiJob
-    from fastsdk.fastStub import FastStub
 
 
 class FastSDK:
     """
-    Internal facade that wires the service registry, spec loaders, the stub generator and the
-    runtime job manager together. It is a singleton, so generated stubs and clients share one
+    Internal facade that wires the service registry, spec loaders, and the
+    runtime job manager together. It is a singleton, so clients share one
     registry and one job manager per process.
 
     Most users should use the module-level functions instead:
-    fastsdk.connect(), fastsdk.inspect_service(), fastsdk.generate_stub(), fastsdk.register_service()
+    fastsdk.connect(), fastsdk.inspect_service(), fastsdk.register_service()
     """
     _instance: 'FastSDK' = None
 
@@ -192,7 +190,7 @@ class FastSDK:
             service = self.inspect_service(spec_source, api_key, provider=provider)
             # Most specs (e.g. OpenAPI) don't embed a service ID, so every parse generates a fresh
             # one. Reuse the ID of an already registered service with the same name and spec format,
-            # so re-runs update the existing entry and previously generated stubs stay valid.
+            # so re-runs update the existing entry.
             if update_existing and service_id is None and service.display_name:
                 existing = self.service_registry.get_service(service.display_name)
                 if existing is not None and service_contract(existing).specification == service_contract(service).specification:
@@ -236,34 +234,6 @@ class FastSDK:
         self.service_registry.remove_service(service.id, persist=False)
         return self.service_registry.add_service(service)
 
-    def update_service(self, service_id_or_name: str, **kwargs) -> Optional[Service]:
-        """
-        Update attributes of a registered service.
-
-        Args:
-            service_id_or_name: Service ID, name or display name
-            **kwargs: Service attributes to update. "service_address" updates the
-                primary details' address (string values go through the address parser).
-
-        Returns:
-            Updated Service if found, None otherwise
-        """
-        service = self.service_registry.get_service(service_id_or_name)
-        if not service:
-            return None
-
-        if "service_address" in kwargs:
-            details = primary_details(service)
-            set_reachability(
-                details,
-                address=parse_address(kwargs.pop("service_address"), provider=details_provider(details)),
-            )
-
-        for key, value in kwargs.items():
-            setattr(service, key, value)
-
-        return self.service_registry.add_service(service)
-
     def get_service(self, service_id_or_name: str) -> Optional[Service]:
         """
         Get an already registered service by ID or name.
@@ -276,42 +246,6 @@ class FastSDK:
         """
         return self.service_registry.get_service(service_id_or_name)
 
-    # ---- Client / Stub Creation ----
-    def generate_stub(
-        self,
-        source: Union[str, Path, Dict[str, Any], Service],
-        save_path: Optional[str] = None,
-        class_name: Optional[str] = None,
-        template: Optional[str] = None,
-        **kwargs
-    ) -> 'FastStub':
-        """
-        Generate a Python client stub file (.py) for a service and register the service in the registry.
-
-        Args:
-            source: Service source (URL, file path, spec dict, Service, or a registered service ID/name)
-            save_path: Path (file or directory) to save the generated file. Defaults to the current directory.
-            class_name: Name for the generated class. Defaults to the service name.
-            template: Optional custom Jinja2 template path
-            **kwargs: Additional arguments for service loading (e.g. api_key, service_name)
-
-        Returns:
-            FastStub with .path, .class_name, .service and .client()
-        """
-        # Get or load the service
-        service = source
-        if isinstance(source, str):
-            service = self.get_service(source)
-            if not isinstance(service, Service):
-                service = self.register_service(source, **kwargs)
-        else:
-            service = self.register_service(source, **kwargs)
-
-        if not isinstance(service, Service):
-            raise ValueError("Invalid service source")
-
-        return _generate_stub_file(service, save_path, class_name, template)
-
     def connect(
         self,
         source: Union[str, Path, Dict[str, Any], Service],
@@ -319,7 +253,7 @@ class FastSDK:
         **kwargs
     ) -> 'FastClient':
         """
-        Connect to a service and return a ready-to-use client - no code generation involved.
+        Connect to a service and return a ready-to-use client.
         The service is registered temporarily and removed again when the client is deleted.
 
         Args:
@@ -328,8 +262,7 @@ class FastSDK:
             **kwargs: Additional arguments for service loading
 
         Returns:
-            FastClient instance. Call endpoints via client.endpoint_name(...) after stub generation,
-            or generically via client.submit_job("/endpoint", **params).
+            FastClient. Call endpoints via client.submit_job("/endpoint", **params).
         """
         from fastsdk.fastClient import FastClient
         return FastClient(source, api_key=api_key, temporary=True, **kwargs)
