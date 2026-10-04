@@ -1,4 +1,4 @@
-from typing import Dict, Union, Any
+from typing import Dict, Tuple, Union, Any
 from pathlib import Path
 import json
 
@@ -8,11 +8,6 @@ from fastsdk.service_specification_loader.openapi_discovery import load_openapi_
 
 if TYPE_CHECKING:
     from fastsdk.service_interaction.api_seex import APISeex
-
-
-def _load_from_url_with_fallback(url: str, timeout: float = 8.0) -> Dict[str, Any]:
-    """Load an OpenAPI document from a spec URL, docs page, or API root."""
-    return load_openapi_from_url(url, timeout=timeout)
 
 
 def _load_from_file(file_path: str) -> Dict[str, Any]:

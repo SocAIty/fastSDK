@@ -91,7 +91,7 @@ LIVE_CASES = [
 
 def _live_discover(url: str):
     try:
-        spec = load_openapi_from_url(url)
+        _spec_url, spec = load_openapi_from_url(url)
     except Exception:
         return None
     title = (spec.get("info") or {}).get("title")
