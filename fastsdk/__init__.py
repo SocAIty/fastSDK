@@ -1,11 +1,9 @@
-from .fastStub import FastStub
 from media_toolkit import MediaFile, ImageFile, VideoFile, AudioFile
 from meseex import gather_results, gather_results_async
 
 from .api import (
     connect,
     inspect_service,
-    generate_stub,
     register_service,
     get_service,
     list_services,
@@ -17,11 +15,8 @@ from .fastSDK import FastSDK
 
 
 __all__ = [
-    # primary API
-    'connect', 'inspect_service', 'generate_stub', 'register_service',
+    'connect', 'inspect_service', 'register_service',
     'get_service', 'list_services', 'remove_service',
-    # classes
-    'FastStub', 'FastClient', 'APISeex', 'FastSDK',
-    # re-exports
+    'FastClient', 'APISeex', 'FastSDK',
     'MediaFile', 'ImageFile', 'VideoFile', 'AudioFile', 'gather_results', 'gather_results_async'
 ]

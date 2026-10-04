@@ -21,11 +21,10 @@ _PROVIDER_API_KEY_ENV = {
 
 class FastClient:
     """
-    The runtime client for a service. Generated stubs inherit from this class, but it can also be
-    used directly with any service source.
+    The runtime client for a service.
 
     A FastClient can be created from:
-    - a registered service ID or name (this is what generated stubs do)
+    - a registered service ID or name
     - a service URL, an openapi.json file path, a spec dict or an Service
     - a Replicate model reference like "replicate:owner/name"
 
@@ -51,7 +50,7 @@ class FastClient:
             api_key: Optional API key for the service. If not provided, it is looked up in
                 the environment variables (e.g. REPLICATE_API_KEY, RUNPOD_API_KEY, <SERVICE_ID>_API_KEY).
             temporary: If True, the service is removed from the registry when the client is deleted.
-            service_name_or_id: Strict registry lookup by ID/name (used by generated stubs).
+            service_name_or_id: Strict registry lookup by ID/name.
                 Raises if the service is not registered.
             materialize_media: If False, media results stay URL references instead of being
                 downloaded. Agent hosts (MCP) use this to avoid pulling bytes they only forward.
@@ -69,7 +68,7 @@ class FastClient:
             if not self.service:
                 raise ValueError(
                     f"Service '{service_name_or_id}' not found in the registry. "
-                    f"Register it first with fastsdk.register_service(...) or regenerate the stub with fastsdk.generate_stub(...)."
+                    f"Register it first with fastsdk.register_service(...)."
                 )
         else:
             self.service = self._resolve_service(service, api_key, **load_kwargs)

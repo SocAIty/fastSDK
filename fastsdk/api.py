@@ -6,7 +6,6 @@ These functions wrap the FastSDK singleton so users never have to deal with it d
     import fastsdk
 
     client = fastsdk.connect("http://localhost:8009")          # use a service right now
-    stub = fastsdk.generate_stub("http://localhost:8009")      # generate a client stub file
     service = fastsdk.inspect_service("replicate:owner/name")  # look at a service without side effects
     service = fastsdk.register_service("./openapi.json")       # add a service to the registry
 """
@@ -19,7 +18,6 @@ from fastsdk.fastSDK import FastSDK
 
 if TYPE_CHECKING:
     from fastsdk.fastClient import FastClient
-    from fastsdk.fastStub import FastStub
 
 
 def connect(
@@ -28,7 +26,7 @@ def connect(
     **kwargs
 ) -> 'FastClient':
     """
-    Connect to a service and get a ready-to-use client - no code generation, no files.
+    Connect to a service and get a ready-to-use client. No files written.
 
     Args:
         source: Service URL ("http://localhost:8009"), openapi.json path/dict, Service,
@@ -37,7 +35,7 @@ def connect(
         **kwargs: Additional service loading arguments (see inspect_service).
 
     Returns:
-        FastClient. Call endpoints generically via client.submit_job("/endpoint", **params).
+        FastClient. Call endpoints via client.submit_job("/endpoint", **params).
 
     Example:
         client = fastsdk.connect("http://localhost:8009")
@@ -66,38 +64,6 @@ def inspect_service(
         (endpoints, parameters) and the resolved service address.
     """
     return FastSDK.inspect_service(source, api_key=api_key, **kwargs)
-
-
-def generate_stub(
-    source: Union[str, Path, Dict[str, Any], Service],
-    save_path: Optional[str] = None,
-    class_name: Optional[str] = None,
-    template: Optional[str] = None,
-    **kwargs
-) -> 'FastStub':
-    """
-    Generate a Python client stub file (.py) for a service. The generated class has one typed
-    method per endpoint. The service is also registered in the registry, so the stub can be
-    used immediately in the same process.
-
-    Args:
-        source: Service URL, openapi.json path/dict, Service, Replicate model
-            reference or a registered service ID/name.
-        save_path: File or directory path for the generated .py file. Defaults to the current directory.
-        class_name: Name of the generated class. Defaults to the (normalized) service name.
-        template: Optional custom Jinja2 template path.
-        **kwargs: Additional service loading arguments (e.g. api_key, service_name).
-
-    Returns:
-        FastStub with .path, .class_name, .service and .client().
-
-    Example:
-        stub = fastsdk.generate_stub("http://localhost:8009", save_path="clients/")
-        client = stub.client()                     # use it right away
-        # or in the next run:
-        # from clients.speechcraft import SpeechCraft
-    """
-    return FastSDK().generate_stub(source, save_path=save_path, class_name=class_name, template=template, **kwargs)
 
 
 def register_service(
@@ -131,5 +97,3 @@ def list_services() -> List[Service]:
 def remove_service(service_id_or_name: str) -> bool:
     """Remove a service from the registry. Returns True if it was removed."""
     return FastSDK().service_registry.remove_service(service_id_or_name)
-
-

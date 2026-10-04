@@ -4,7 +4,6 @@ fastsdk command line interface.
 Mirrors the Python API one-to-one:
 
     fastsdk inspect  <source>                   ->  fastsdk.inspect_service(source)
-    fastsdk generate <source> -o clients/       ->  fastsdk.generate_stub(source, save_path="clients/")
     fastsdk call     <source> <endpoint> ...    ->  fastsdk.connect(source).submit_job(endpoint, ...)
     fastsdk registry list|add|remove|show       ->  persistent local registry management
 
@@ -24,7 +23,6 @@ from socaity_schemas.platform.catalog.service import Service
 
 from fastsdk.service_access import service_address, service_contract, service_provider
 from fastsdk.fastClient import FastClient
-from fastsdk.sdk_factory.sdk_factory import _get_type_hint
 
 DEFAULT_REGISTRY_PATH = Path.home() / ".fastsdk" / "registry"
 
@@ -87,13 +85,24 @@ def _print_service(service: Service, as_json: bool = False):
         for param in endpoint.parameters:
             if param.location not in ("body", "query"):
                 continue
-            type_hint = _get_type_hint(param)
+            type_hint = _param_type(param)
             suffix = ""
             if param.default is not None:
                 suffix = f" = {param.default!r}"
             elif not param.required:
                 suffix = " (optional)"
             print(f"    {param.name}: {type_hint}{suffix}")
+
+
+def _param_type(param) -> str:
+    """Short type label for inspect output."""
+    definition = getattr(param, "definition", None)
+    if definition is None:
+        return "any"
+    first = definition[0] if isinstance(definition, list) else definition
+    kind = getattr(first, "type", None) or "any"
+    fmt = getattr(first, "format", None)
+    return f"{kind}:{fmt}" if fmt else str(kind)
 
 
 def _parse_value(raw: str) -> Any:
@@ -150,45 +159,10 @@ def _emit_result(result: Any, output: Optional[str]):
         print(text)
 
 
-def _import_hint(stub_path: str, class_name: str) -> str:
-    try:
-        relative = Path(stub_path).resolve().relative_to(Path.cwd())
-        module = ".".join(relative.with_suffix("").parts)
-        return f"from {module} import {class_name}"
-    except ValueError:
-        return f"# stub saved outside the current directory:\n  # {stub_path} (class {class_name})"
-
-
-# ---------------------------------------------------------------------------
-# commands
-# ---------------------------------------------------------------------------
-
 def cmd_inspect(args: argparse.Namespace):
     import fastsdk
     service = fastsdk.inspect_service(_resolve_source(args.source), api_key=args.api_key)
     _print_service(service, as_json=args.json)
-
-
-def cmd_generate(args: argparse.Namespace):
-    import fastsdk
-    kwargs = {}
-    if args.service_name:
-        kwargs["service_name"] = args.service_name
-    stub = fastsdk.generate_stub(
-        _resolve_source(args.source),
-        save_path=args.output,
-        class_name=args.name,
-        template=args.template,
-        api_key=args.api_key,
-        **kwargs
-    )
-    print(f"Generated {stub.path}")
-    print(f"  class:   {stub.class_name}")
-    print(f"  service: {_service_summary(stub.service)}")
-    print()
-    print("Use it:")
-    print(f"  {_import_hint(stub.path, stub.class_name)}")
-    print(f"  client = {stub.class_name}()")
 
 
 def cmd_call(args: argparse.Namespace, extra: List[str]):
@@ -265,13 +239,11 @@ def cmd_registry(args: argparse.Namespace):
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="fastsdk",
-        description="fastsdk CLI - inspect AI/web services, generate Python client stubs and call endpoints.",
+        description="fastsdk CLI: inspect services, call endpoints, manage a local registry.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   fastsdk inspect http://localhost:8009                       Show endpoints + parameters of a service
-  fastsdk generate http://localhost:8009 -o clients/          Generate a Python client stub
-  fastsdk generate replicate:black-forest-labs/flux-schnell   Generate a stub for a Replicate model
   fastsdk call http://localhost:8009 /text2voice --text "hi"  Call an endpoint directly
   fastsdk registry add http://localhost:8009 --name speech    Register a service for later use by name
   fastsdk registry list                                       List registered services
@@ -284,14 +256,6 @@ Examples:
     p_inspect.add_argument("source", help="Service URL, openapi.json path, Replicate model ref or registered service name")
     p_inspect.add_argument("--api-key", default=None, help="API key (required for RunPod/Replicate sources)")
     p_inspect.add_argument("--json", action="store_true", help="Print the raw service definition as JSON")
-
-    p_gen = sub.add_parser("generate", help="Generate a Python client stub (.py) for a service")
-    p_gen.add_argument("source", help="Service URL, openapi.json path, Replicate model ref or registered service name")
-    p_gen.add_argument("-o", "--output", default=None, help="File or directory for the generated stub (default: current directory)")
-    p_gen.add_argument("--name", default=None, help="Class name for the generated client (default: derived from service name)")
-    p_gen.add_argument("--service-name", default=None, help="Override the service display name")
-    p_gen.add_argument("--template", default=None, help="Custom Jinja2 template path")
-    p_gen.add_argument("--api-key", default=None, help="API key (required for RunPod/Replicate sources)")
 
     p_call = sub.add_parser(
         "call",
@@ -331,8 +295,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         if args.command == "inspect":
             cmd_inspect(args)
-        elif args.command == "generate":
-            cmd_generate(args)
         elif args.command == "call":
             cmd_call(args, extra)
         elif args.command == "registry":
