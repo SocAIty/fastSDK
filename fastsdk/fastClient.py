@@ -2,7 +2,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 import os
 
-from socaity_schemas.platform import Service, PriceEstimate
+from socaity_schemas.platform.catalog.service import Service
+from socaity_schemas.platform.catalog.pricing import PriceEstimate
 from fastsdk.fastSDK import FastSDK
 from fastsdk.service_access import service_provider
 

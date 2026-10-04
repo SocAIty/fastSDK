@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
-from socaity_schemas.platform import Service
+from socaity_schemas.platform.catalog.service import Service
 from fastCloud import ReplicateUploadAPI
 
 from fastsdk.service_access import service_address, service_contract, service_provider

@@ -13,7 +13,7 @@ These functions wrap the FastSDK singleton so users never have to deal with it d
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
-from socaity_schemas.platform import Service
+from socaity_schemas.platform.catalog.service import Service
 
 from fastsdk.fastSDK import FastSDK
 

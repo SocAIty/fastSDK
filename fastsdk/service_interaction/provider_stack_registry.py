@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Dict, Optional, Tuple
 
 from apipod_registry.registry import Registry
-from socaity_schemas.platform import Service
+from socaity_schemas.platform.catalog.service import Service
 
 from fastsdk.service_interaction.provider_factory import ProviderFactory, ProviderStack
 from fastsdk.service_interaction.request.file_handler import FileHandler

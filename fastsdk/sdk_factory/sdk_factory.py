@@ -4,8 +4,12 @@ from typing import Dict, List, Optional, Any, Union, Set
 
 from jinja2 import Environment, FileSystemLoader, Template
 
-from socaity_schemas.contract import Endpoint, EndpointParameter, ParameterDefinition
-from socaity_schemas.platform import Service
+from socaity_schemas.public.spec.endpoint import (
+    Endpoint,
+    EndpointParameter,
+    ParameterDefinition,
+)
+from socaity_schemas.platform.catalog.service import Service
 from apipod_registry.utils.normalization import normalize_name_for_py
 from fastsdk.fastStub import FastStub
 from fastsdk.service_access import service_contract

@@ -9,8 +9,12 @@ This example shows how to:
 """
 
 from apipod_registry import Registry, create_service
-from socaity_schemas.contract import ServiceContract
-from socaity_schemas.platform import AIModel, AIService, ServiceCategory
+from socaity_schemas.public.spec.endpoint import ServiceContract
+from socaity_schemas.platform.catalog.model import AIModel
+from socaity_schemas.platform.catalog.service import (
+    Service,
+    ServiceCategory,
+)
 
 
 def main():
@@ -57,7 +61,7 @@ def main():
 
     # Create AIServices manually for demo purposes (usually parsed from a spec
     # via fastsdk.register_service or apipod_registry.materialize_contract).
-    sd_service: AIService = create_service(
+    sd_service: Service = create_service(
         ServiceContract(title="Stable Diffusion API", description="API for generating images with Stable Diffusion"),
         service_id="sd_service",
     )
@@ -66,7 +70,7 @@ def main():
     manager.add_service(sd_service)
     print(f"Created demo service: {sd_service.display_name}")
 
-    llm_service: AIService = create_service(
+    llm_service: Service = create_service(
         ServiceContract(title="Llama API", description="API for generating text with Llama models"),
         service_id="llama_service",
     )

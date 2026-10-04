@@ -3,9 +3,12 @@ import json
 import httpx
 from urllib.parse import quote, urlencode
 
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.contract.address import endpoint_url, resolve_url
-from socaity_schemas.platform import Service
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.public.spec.address import (
+    endpoint_url,
+    resolve_url,
+)
+from socaity_schemas.platform.catalog.service import Service
 from fastsdk.service_access import primary_details, service_address, service_provider
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from media_toolkit import MediaFile, MediaDict, MediaList

@@ -81,15 +81,16 @@ fastsdk/
     replicate_loader.py           # Replicate model -> Service (optional `replicate` dep)
   service_interaction/
     api_job_manager.py            # composition root + submit + meseex wiring
-    job_tasks.py                  # meseex task implementations (prepare, poll, send, ...)
+    job_tasks.py                  # meseex task implementations (prepare, poll, stream, send, ...)
     job_runtime.py                # per-job lifecycle controller (cancel/stream/assemble + guards)
+    status_stream.py              # Socaity GET /stream subscription for the Streaming task
     async_bridge.py               # single async->sync bridge over the meseex loop
     provider_factory.py           # provider type resolution + ProviderStack assembly
     provider_stack_registry.py    # load/cache provider stacks per service id
     pipeline_planner.py           # ordered meseex task list for one endpoint
     api_seex.py                   # APISeex job handle (a specialized MrMeseex)
     request/                      # APIClient + provider subclasses, FileHandler
-    response/                     # ResponseParser, BaseJobResponse, StreamSession, status mapping
+    response/                     # ResponseParser, StreamSession, sse_records, status mapping
 ```
 
 ## Core Building Blocks
@@ -106,13 +107,13 @@ Advanced users can swap the registry (e.g. for a persistent or DB-backed one) vi
 `FastSDK().service_registry = Registry(service_store=...)`.
 
 ### `Service`, `ServiceContract` and `Registry`
-The unit fastsdk works with is an `Service` (from `socaity_schemas.platform`) with exactly one
+The unit fastsdk works with is an `Service` (from `socaity_schemas.platform.catalog.service`) with exactly one
 primary `ServiceDetails`, created via `apipod_registry.create_service`:
 - `details.contract`: the `ServiceContract` (endpoints, parameters, `specification`
   format `openapi`/`apipod`/`cog`/`cog2`, and `has_job_queue` for polling decisions)
 - `details.deployment.provider` (or a connector address): where it runs (`socaity`/`runpod`/`replicate`/`other`)
 - `details.deployment.address` or `details.connector.address`: typed `ServiceAddress`; URL composition is done by the module
-  functions in `socaity_schemas.contract.address` (`service_url`, `endpoint_url`, `resolve_url`)
+  functions in `socaity_schemas.public.spec.address` (`service_url`, `endpoint_url`, `resolve_url`)
 
 `fastsdk/service_access.py` provides the accessors (`primary_details`, `service_contract`,
 `service_address`, `service_provider`, `needs_polling`) used across the codebase; `needs_polling`
@@ -214,8 +215,9 @@ later caller, which breaks multi-tenant hosts such as the MCP server.
 ``JobRuntime`` read it from the job instead of re-resolving.
 
 **`JobTasks`** (`job_tasks.py`) implements the meseex pipeline steps: prepare request, load/upload
-files, send request, attach (resume from an existing envelope), poll status, process result.
-Polling logic and the ``@polling_task`` decorator live here, not on the manager.
+files, send request, attach (resume from an existing envelope), poll status, follow the Socaity
+status stream, process result. ``@polling_task`` lives on Polling only. Streaming is a normal
+task: pass-through when there is no ``links.stream``, otherwise it consumes ``GET /stream``.
 
 **`ProviderFactory`** (`provider_factory.py`) resolves the provider type from
 ``details.deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
@@ -223,12 +225,14 @@ Polling logic and the ``@polling_task`` decorator live here, not on the manager.
 ``FileHandler``, and cached ``ResponseParser``.
 
 **`PipelinePlanner`** (`pipeline_planner.py`) is a pure planner: given a service, endpoint, and
-optional stack, it returns the ordered task names with steps omitted when not needed.
+optional stack, it returns the ordered task names with steps omitted when not needed. Socaity
+job pipelines insert ``Streaming`` after ``Polling``. Other providers do not.
 
 **`JobRuntime`** (`job_runtime.py`) is the per-job lifecycle controller, created once per job. It
 owns one job's transport state:
 - the single active `StreamSession` slot (`None` or exactly one session)
-- a readiness `Event` fed by the polling/send tasks as job state advances
+- the Socaity `StatusStream` (push-fed output session plus the `GET /stream` response)
+- a readiness `Event` fed by send, poll, and the status subscription
 - cancellation policy (remote cancel plus terminal-state reconciliation)
 - stream teardown when a cancel resolves
 
@@ -279,7 +283,7 @@ Provider subclasses adapt protocol details:
 - `APIClientReplicate` (moves query/file params into the JSON body as `{"input": ...}`, adds `version` for community models)
 
 ### 5. Poll status
-If the response is job-based, `_poll_status(...)` keeps polling through `@polling_task(...)` until the remote job is terminal.
+If the response is job-based, `poll_status` GETs `links.status` until the remote job is terminal. On the Socaity provider, once `links.stream` appears the task opens that socket and stops polling. `event: job` frames apply the same envelope helper as a status GET. A dropped socket falls back to `GET /status` for the rest of the job. Replicate and RunPod keep their own poll.
 
 ### 6. Process result
 `ResponseParser` and result-specific parsers convert provider responses into:
@@ -338,16 +342,21 @@ file or joined SSE text) when the caller never invoked ``stream()``.
 `APISeex.stream()` delegates to its `JobRuntime`. The runtime resolves the stream source in this
 order:
 1. ``job.direct_response``: an open SSE/raw response captured at send time (no polling job).
-2. provider ``links.stream`` / ``urls.stream``: opened via ``APIClient.open_stream`` once the poll
-   loop exposes the URL.
+2. Socaity ``StatusStream.output``: a push-fed session filled by the ``Streaming`` task.
+3. Other providers: ``links.stream`` / ``urls.stream`` opened via ``APIClient.open_stream``.
 
-The runtime blocks on a readiness `Event` (set by the send/poll tasks as state advances) instead of
-busy-waiting, takes the single session slot, and rejects a second concurrent `stream()`. The
-response is created and read on `meseex`'s background event loop via the `AsyncBridge`.
-`StreamSession` hands items across threads through a queue, so callers consume from any thread or
-loop without touching that loop directly.
+Socaity wait is two meseex tasks. ``Polling`` is ``GET /status`` only and leaves when
+``links.stream`` appears (or the job is already terminal). ``Streaming`` then owns the only
+``GET /stream``. Unnamed records go to the feed; ``event: job`` snapshots complete the job.
+``[DONE]`` does not end the session. If Polling finished without a stream URL, Streaming
+returns that envelope unchanged.
 
-Provider transport models live in ``socaity_schemas.transport`` (imported directly, no local duplicate module).
+The runtime blocks on a readiness `Event` instead of busy-waiting, takes the single session slot,
+and rejects a second concurrent `stream()`. The response is created and read on `meseex`'s
+background event loop via the `AsyncBridge`. `StreamSession` hands items across threads through
+a queue, so callers consume from any thread or loop without touching that loop directly.
+
+Provider transport models live in ``socaity_schemas.public.providers`` (imported directly, no local duplicate module).
 Byte-chunk streams are assembled via ``media_toolkit.media_from_any``.
 
 ## How Cancellation Works

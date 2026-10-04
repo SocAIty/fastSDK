@@ -1,7 +1,10 @@
 from fastsdk.fastClient import FastClient
 from apipod_registry import create_service
-from socaity_schemas.contract import Endpoint, ServiceContract
-from socaity_schemas.platform import Service
+from socaity_schemas.public.spec.endpoint import (
+    Endpoint,
+    ServiceContract,
+)
+from socaity_schemas.platform.catalog.service import Service
 from typing import Any, Dict
 import uuid
 

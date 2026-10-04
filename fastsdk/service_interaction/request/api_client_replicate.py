@@ -2,8 +2,8 @@ from typing import Any, Optional
 
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.contract.address import service_url
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.public.spec.address import service_url
 
 
 class APIClientReplicate(APIClient):

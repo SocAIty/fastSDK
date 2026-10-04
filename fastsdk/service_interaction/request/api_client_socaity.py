@@ -1,8 +1,12 @@
 from typing import Any, Dict, Optional
 
 from .api_client import APIClient, APIKeyError, RequestData
-from socaity_schemas.contract import Endpoint, EndpointParameter, ServiceContract
-from socaity_schemas.platform import PriceEstimate
+from socaity_schemas.public.spec.endpoint import (
+    Endpoint,
+    EndpointParameter,
+    ServiceContract,
+)
+from socaity_schemas.platform.catalog.pricing import PriceEstimate
 from fastsdk.service_access import primary_details, service_contract
 from fastsdk.requires import requires
 import httpx
@@ -12,7 +16,7 @@ from urllib.parse import urlparse
 _FILE_FORMATS = frozenset({"file", "image", "video", "audio", "binary"})
 # The gate adds these JSON query params to every catalog route; service contracts never declare them.
 # Gate factory routes (agents, workflows) declare no parameters and read them from the JSON body instead.
-_GATE_QUERY_FLAGS = ("socaity_options", "socaity_context")
+_GATE_QUERY_FLAGS = ("socaity_options", "socaity_context", "details_id")
 
 
 def _normalize_endpoint_key(path: str) -> str:
@@ -65,15 +69,24 @@ class APIClientSocaity(APIClient):
         return None
 
     def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
-        if not endpoint.parameters:
-            return super().format_request_params(endpoint, data)
-        declared = {param.name for param in endpoint.parameters}
+        # Catalog routes move undeclared gate flags onto the query string.
+        # Factory routes declare no parameters and keep socaity_options / socaity_context
+        # in the JSON body. details_id is always a query param so the gate can route.
         data = dict(data or {})
-        flags = {name: data.pop(name) for name in _GATE_QUERY_FLAGS if name in data and name not in declared}
+        declared = {param.name for param in (endpoint.parameters or [])}
+        flag_names = _GATE_QUERY_FLAGS if endpoint.parameters else ("details_id",)
+        flags = {
+            name: data.pop(name)
+            for name in flag_names
+            if name in data and name not in declared
+        }
         request_data = super().format_request_params(endpoint, data)
         request_data.query_params.update(
             {name: value if isinstance(value, str) else json.dumps(value) for name, value in flags.items() if value}
         )
+        details = primary_details(self.service)
+        if details and details.id and "details_id" not in request_data.query_params:
+            request_data.query_params["details_id"] = details.id
         return request_data
 
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:

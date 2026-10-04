@@ -14,7 +14,7 @@ sys.path.append(str(current_path))
 # Now we can import from fastsdk
 import fastsdk  # noqa: E402
 from apipod_registry import create_service  # noqa: E402
-from socaity_schemas.contract import (  # noqa: E402
+from socaity_schemas.public.spec.endpoint import (
     Endpoint,
     EndpointParameter,
     ParameterDefinition,
