@@ -3,9 +3,9 @@ from typing import Any, Optional
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
-from fastsdk.service_interaction.response.response_schemas import SocaityJobResponse
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.contract.address import service_url
+from socaity_schemas.public.providers import SocaityJobResponse
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.public.spec.address import service_url
 
 
 class APIClientRunpod(APIClient):
@@ -18,7 +18,9 @@ class APIClientRunpod(APIClient):
             raise APIKeyError("Invalid API key. It should look like 'rpa_...'. ", "runpod", "https://www.runpod.io/")
         return True
 
-    def _build_request_url(self, endpoint: Endpoint, query_params: dict | None = None) -> str:
+    def _build_request_url(
+        self, endpoint: Endpoint, query_params: dict | None = None, path_params: dict | None = None
+    ) -> str:
         # Overwrites the default implementation, because query parameters are not added to the url but to the body
         url = service_url(self.address).strip("/")  # don't use strip("/run") it will remove the letters / r u and n.
         if url.endswith("/run"):

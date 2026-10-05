@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from media_toolkit import AudioFile, ImageFile, MediaFile, VideoFile, media_from_any
 
+from fastsdk.service_interaction.response.sse_records import iter_sse_records
+
 _BASE64_CHARSET = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
 
 
@@ -57,30 +59,28 @@ def bytes_to_result(data: bytes) -> Any:
 
 
 def assemble_sse_bytes(data: bytes) -> Optional[Any]:
-    """Parse SSE-framed bytes; return None when the body is raw passthrough."""
+    """Parse SSE-framed bytes; return None when the body is raw passthrough.
+
+    Named records (``event: job``) and ``[DONE]`` carry no output and are skipped.
+    """
     if not data:
         return ""
 
-    json_payloads: list[bytes] = []
-    binary_chunks: list[bytes] = []
-    text_payloads: list[bytes] = []
-    saw_data_line = False
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    first_field = next((line.strip() for line in lines if line.strip() and not line.startswith(":")), "")
+    if not first_field.startswith(("data:", "event:")):
+        return None
 
-    for raw_line in data.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith(b":"):
+    json_payloads: list[str] = []
+    binary_chunks: list[bytes] = []
+    text_payloads: list[str] = []
+
+    for event, payload in iter_sse_records(lines):
+        if event or payload == "[DONE]":
             continue
-        if not line.startswith(b"data:"):
-            if saw_data_line:
-                continue
-            return None
-        saw_data_line = True
-        payload = line[5:].strip()
-        if payload == b"[DONE]":
-            continue
-        if payload.startswith(b"{"):
+        if payload.startswith("{"):
             json_payloads.append(payload)
-        elif looks_like_base64(payload):
+        elif looks_like_base64(payload.encode()):
             try:
                 binary_chunks.append(base64.b64decode(payload))
             except Exception:
@@ -89,15 +89,10 @@ def assemble_sse_bytes(data: bytes) -> Optional[Any]:
             text_payloads.append(payload)
 
     if json_payloads:
-        return "".join(
-            chunk_text(json.loads(payload.decode("utf-8")))
-            for payload in json_payloads
-        )
+        return "".join(chunk_text(json.loads(payload)) for payload in json_payloads)
     if binary_chunks:
         return bytes_to_result(b"".join(binary_chunks))
-    if text_payloads:
-        return b"".join(text_payloads).decode("utf-8", errors="replace")
-    return ""
+    return "".join(text_payloads)
 
 
 def assemble_stream_bytes(data: bytes, *, is_sse: bool) -> Any:

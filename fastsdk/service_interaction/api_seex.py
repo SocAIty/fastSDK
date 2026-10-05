@@ -1,6 +1,9 @@
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.platform import AIService
-from socaity_schemas import JOB_RESPONSE_TYPES, StreamingResponse
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.platform.catalog.service import Service
+from socaity_schemas.public.providers import (
+    JOB_RESPONSE_TYPES,
+    StreamingResponse,
+)
 from meseex import MrMeseex
 
 from fastsdk.service_access import service_provider
@@ -27,7 +30,7 @@ class APISeex(MrMeseex):
 
     def __init__(
         self,
-        service: AIService,
+        service: Service,
         endpoint: Endpoint,
         data: Any = None,
         name: str = None,
@@ -68,15 +71,10 @@ class APISeex(MrMeseex):
         if self.termination_state is not None and isinstance(self.cancel_result, JOB_RESPONSE_TYPES):
             return self.cancel_result
 
-        resp = self.get_task_output("Polling")
-        if resp is not None:
-            return resp
-        sent = self.get_task_output("Sending request")
-        if sent is not None:
-            return sent
-        attached = self.get_task_output("Attach")
-        if attached is not None:
-            return attached
+        for name in ("Streaming", "Polling", "Sending request", "Attach"):
+            resp = self.get_task_output(name)
+            if resp is not None:
+                return resp
         if isinstance(self.input, JOB_RESPONSE_TYPES):
             return self.input
         return None

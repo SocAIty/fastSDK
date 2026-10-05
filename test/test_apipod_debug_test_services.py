@@ -26,12 +26,12 @@ import pytest
 
 import fastsdk
 from fastsdk.service_access import service_contract
-from socaity_schemas.contract import (
+from socaity_schemas.public.spec.endpoint import (
     Endpoint,
     EndpointParameter,
     ParameterDefinition,
 )
-from socaity_schemas.platform import AIService
+from socaity_schemas.platform.catalog.service import Service
 from media_toolkit import MediaFile, VideoFile
 
 from fastsdk.service_interaction.response.sse_assembly import assemble_stream_bytes, chunk_text
@@ -54,13 +54,13 @@ MEDIA_RETURN_PATH_MARKERS = (
 )
 
 
-def _is_native_runpod_gateway(service: AIService) -> bool:
+def _is_native_runpod_gateway(service: Service) -> bool:
     """True when the service exposes RunPod's generic /run API (APIPOD_NATIVE=true)."""
     paths = {endpoint.path for endpoint in service_contract(service).endpoints}
     return "/run" in paths and not any("/core/" in path for path in paths)
 
 
-def _service_def() -> AIService:
+def _service_def() -> Service:
     service = fastsdk.inspect_service(SERVICE_URL)
     if _is_native_runpod_gateway(service):
         pytest.skip(
@@ -166,7 +166,7 @@ def _kwargs_for_endpoint(endpoint: Endpoint, files: dict[str, str]) -> dict[str,
     return kwargs
 
 
-def _endpoint_by_suffix(service: AIService, suffix: str) -> Optional[Endpoint]:
+def _endpoint_by_suffix(service: Service, suffix: str) -> Optional[Endpoint]:
     normalized_suffix = suffix if suffix.startswith("/") else f"/{suffix}"
     for endpoint in service_contract(service).endpoints:
         if endpoint.path.rstrip("/").endswith(normalized_suffix.rstrip("/")):
@@ -174,7 +174,7 @@ def _endpoint_by_suffix(service: AIService, suffix: str) -> Optional[Endpoint]:
     return None
 
 
-def _require_stream_endpoint(service: AIService, leaf: str) -> Endpoint:
+def _require_stream_endpoint(service: Service, leaf: str) -> Endpoint:
     """Resolve /text, /video or streaming /chat without colliding with schema routes."""
     suffix = leaf if leaf.startswith("/") else f"/{leaf}"
     candidates = [

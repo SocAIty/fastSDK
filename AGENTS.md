@@ -48,7 +48,7 @@ The test: Every changed line should trace directly to the user's request.
 - Avoid local imports
 - Do not write "deprecated" or backward compability code.
 - Update the README.md if there's user related important changes. Update TECHNICAL_README.md for architectural, or project maintainer important changes. Keep the .md update brief use technical correct terms.
-- Write ruff formatted code with ignores E203, W503, W501, W293, W291 and lineLenght 120.
+- Write ruff formatted code with ignores E203, W501, W293, W291 and lineLenght 120.
 - Avoid using direct cmd python calls and pip installs.
 - When executing python code, always use the local venv of the corresponding project.
 - Dev tools are make, ruff, mypy, pytest.

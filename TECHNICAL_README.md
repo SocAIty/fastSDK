@@ -3,9 +3,8 @@
 ## TL;DR
 `fastsdk` turns an API description into a Python client workflow that is easy to call from normal Python code.
 
-It has three major responsibilities:
-- parse API specifications into `AIService` objects with a `ServiceContract` (the *definition layer*, delegated to `apipod_registry`)
-- generate Python client stub code from those contracts (the *stub factory*)
+It has two major responsibilities:
+- parse API specifications into `Service` objects with a `ServiceContract` (the *definition layer*, delegated to `apipod_registry`)
 - execute requests, file handling, polling, and job lifecycle management for long-running APIs (the *runtime layer*)
 
 For job-based APIs such as APIPod, RunPod, Socaity, or Replicate, `fastsdk` delegates runtime orchestration to `meseex`.
@@ -17,13 +16,12 @@ The package exposes module-level functions (`fastsdk/api.py`). They wrap a proce
 
 | Function | Side effects | Returns |
 |---|---|---|
-| `fastsdk.inspect_service(source)` | none (pure) | `AIService` |
-| `fastsdk.register_service(source)` | upserts into the registry | `AIService` |
+| `fastsdk.inspect_service(source)` | none (pure) | `Service` |
+| `fastsdk.register_service(source)` | upserts into the registry | `Service` |
 | `fastsdk.connect(source)` | registers temporarily | `FastClient` (service deregistered when the client is deleted) |
-| `fastsdk.generate_stub(source)` | writes a `.py` file + registers the service | `FastStub` |
 | `fastsdk.get_service / list_services / remove_service` | registry reads/writes | - |
 
-`source` is always the same union: URL, `openapi.json` file path, spec dict, `AIService`,
+`source` is always the same union: URL, `openapi.json` file path, spec dict, `Service`,
 Replicate model reference (`"replicate:owner/name"`, `"https://replicate.com/owner/name"`, bare `"owner/name"`),
 or, where it makes sense, an already registered service ID/name.
 
@@ -33,8 +31,8 @@ Think of `fastsdk` as two connected subsystems:
 1. Definition layer
    - Loads `openapi.json` or provider-specific specs
    - Parses them into a `ServiceContract` (`apipod_registry.materialize_contract`) and wraps it
-     in an `AIService` with one `Deployment` (`apipod_registry.create_service`)
-   - Stores the `AIService` in the `Registry`
+     in an `Service` with one `ServiceDetails` (`apipod_registry.create_service`)
+   - Stores the `Service` in the `Registry`
 
 2. Runtime layer
    - Formats requests
@@ -43,14 +41,14 @@ Think of `fastsdk` as two connected subsystems:
    - Polls job status when the provider is asynchronous
    - Parses final results back into Python-friendly objects
 
-Generated stubs and `connect()` clients are just convenient entry points into those two layers.
+`connect()` is the entry point into those two layers.
 
 ## Easy Overview
 The rough data flow is:
 
-1. A service specification is loaded (`inspect_service`) and parsed into an `AIService` whose deployment carries a `ServiceContract` with contract `Endpoint`s.
-2. The service is registered in the `Registry` (`register_service`, or implicitly by `connect`/`generate_stub`).
-3. A client is constructed (`FastClient`) or generated (`GeneratedStub` → `.py` file with a `FastClient` subclass).
+1. A service specification is loaded (`inspect_service`) and parsed into an `Service` whose details binding carries a `ServiceContract` with contract `Endpoint`s.
+2. The service is registered in the `Registry` (`register_service`, or implicitly by `connect`).
+3. A `FastClient` is constructed.
 4. Calling an endpoint creates an `APISeex` job.
 5. `ApiJobManager` executes that job through `MeseexBox`.
 6. The job runs a small pipeline:
@@ -65,30 +63,28 @@ The rough data flow is:
 
 ```
 fastsdk/
-  api.py                          # module-level public API (connect, generate_stub, ...)
+  api.py                          # module-level public API (connect, inspect, register)
   cli.py                          # `fastsdk` console entry point
   fastSDK.py                      # FastSDK singleton facade (registry + job manager wiring)
-  fastClient.py                   # FastClient runtime client (base class of generated stubs)
-  fastStub.py                     # Contains the Stub that is generated
-  service_access.py               # primary_deployment/service_contract/service_address/needs_polling helpers
-  sdk_factory/
-    sdk_factory.py                # generate_stub(), Jinja2-based codegen
-    sdk_template.j2               # default stub template
+  fastClient.py                   # FastClient runtime client
+  service_access.py               # primary_details/service_contract/service_address/needs_polling helpers
   service_specification_loader/
-    spec_loader.py                # load openapi.json from URL/file/dict (with fallbacks)
+    spec_loader.py                # load openapi from URL/file (discovery: Link, HTML, well-known paths)
+    openapi_discovery.py          # OpenAPI URL discovery (paths, Link header, regex HTML/JS)
     runpod_open_api_loader.py     # fetch openapi.json through a RunPod serverless job
-    replicate_loader.py           # Replicate model -> AIService (optional `replicate` dep)
+    replicate_loader.py           # Replicate model -> Service (optional `replicate` dep)
   service_interaction/
     api_job_manager.py            # composition root + submit + meseex wiring
-    job_tasks.py                  # meseex task implementations (prepare, poll, send, ...)
+    job_tasks.py                  # meseex task implementations (prepare, poll, stream, send, ...)
     job_runtime.py                # per-job lifecycle controller (cancel/stream/assemble + guards)
+    status_stream.py              # Socaity GET /stream subscription for the Streaming task
     async_bridge.py               # single async->sync bridge over the meseex loop
     provider_factory.py           # provider type resolution + ProviderStack assembly
     provider_stack_registry.py    # load/cache provider stacks per service id
     pipeline_planner.py           # ordered meseex task list for one endpoint
     api_seex.py                   # APISeex job handle (a specialized MrMeseex)
     request/                      # APIClient + provider subclasses, FileHandler
-    response/                     # ResponseParser, BaseJobResponse, StreamSession, status mapping
+    response/                     # ResponseParser, StreamSession, sse_records, status mapping
 ```
 
 ## Core Building Blocks
@@ -99,71 +95,52 @@ One instance per process. It owns:
 - the `ProviderStackRegistry` (lazy-created)
 - the `ApiJobManager` (lazy-created, receives the stack registry)
 
-and implements `inspect_service`, `register_service` (upsert), `generate_stub`, `connect`.
-All clients and stubs in a process therefore share one registry and one job manager.
+and implements `inspect_service`, `register_service` (upsert), `connect`.
+All clients in a process therefore share one registry and one job manager.
 Advanced users can swap the registry (e.g. for a persistent or DB-backed one) via
 `FastSDK().service_registry = Registry(service_store=...)`.
 
-### `AIService`, `ServiceContract` and `Registry`
-The unit fastsdk works with is an `AIService` (from `socaity_schemas.platform`) with exactly one
-primary `Deployment`, created via `apipod_registry.create_service`:
-- `deployment.contract`: the `ServiceContract` (endpoints, parameters, `specification`
+### `Service`, `ServiceContract` and `Registry`
+The unit fastsdk works with is an `Service` (from `socaity_schemas.platform.catalog.service`) with exactly one
+primary `ServiceDetails`, created via `apipod_registry.create_service`:
+- `details.contract`: the `ServiceContract` (endpoints, parameters, `specification`
   format `openapi`/`apipod`/`cog`/`cog2`, and `has_job_queue` for polling decisions)
-- `deployment.provider`: where it runs (`socaity`/`runpod`/`replicate`/`other`)
-- `deployment.address`: typed `ServiceAddress`; URL composition is done by the module
-  functions in `socaity_schemas.contract.address` (`service_url`, `endpoint_url`, `resolve_url`)
+- `details.deployment.provider` (or a connector address): where it runs (`socaity`/`runpod`/`replicate`/`other`)
+- `details.deployment.address` or `details.connector.address`: typed `ServiceAddress`; URL composition is done by the module
+  functions in `socaity_schemas.public.spec.address` (`service_url`, `endpoint_url`, `resolve_url`)
 
-`fastsdk/service_access.py` provides the accessors (`primary_deployment`, `service_contract`,
+`fastsdk/service_access.py` provides the accessors (`primary_details`, `service_contract`,
 `service_address`, `service_provider`, `needs_polling`) used across the codebase; `needs_polling`
 is `contract.has_job_queue or provider == "runpod"` (RunPod serverless always uses the
 /run + /status wire protocol).
 
-`Registry` (from `apipod_registry`) maps service IDs and normalized names to `AIService` objects.
+`Registry` (from `apipod_registry`) maps service IDs and normalized names to `Service` objects.
 
 **Registration is an upsert**: `FastSDK.register_service()` replaces an existing entry with the same ID
-instead of raising. This makes scripts idempotent — re-running `generate_stub`/`register_service`
+instead of raising. This makes scripts idempotent: re-running `register_service`
 never fails with "already registered".
 
-**Lifetime**: the default registry is in-memory. A stub imported in a fresh process must find its
-service in the registry; either `register_service(...)` first, regenerate the stub, or attach a
-persistent store. The CLI attaches a `FileSystemStore` under `~/.fastsdk/registry` for its
-`registry` subcommand, so CLI-registered services survive across invocations.
+**Lifetime**: the default registry is in-memory. The CLI attaches a `FileSystemStore`
+under `~/.fastsdk/registry` for its `registry` subcommand, so CLI-registered services
+survive across invocations.
 
 ### `FastClient`
-The single runtime client class (the previous `DynamicClient`/`TemporaryClient` subclasses are
-collapsed into attributes):
+The single runtime client class:
 
 ```python
 FastClient(service, api_key=None, temporary=False, service_name_or_id=None, **load_kwargs)
 ```
 
 - `service`: any source. Strings are first looked up in the registry; on miss they are loaded
-  and registered as a spec source. The resolved `AIService` is available as `client.service`.
-- `service_name_or_id`: strict registry lookup (no loading). This is the path generated stubs use:
-  `super().__init__(service_name_or_id="<service-id>")`. It raises with a helpful message if the
-  service was never registered in this process.
+  and registered as a spec source. The resolved `Service` is available as `client.service`.
+- `service_name_or_id`: strict registry lookup (no loading). Raises if the service was never
+  registered in this process.
 - `temporary=True`: the service is removed from the registry when the client is deleted/closed.
   `FastClient` is also a context manager (`with fastsdk.connect(...) as client:`).
 - API keys are resolved from the argument, then from environment variables
   (`SOCAITY_API_KEY`, `RUNPOD_API_KEY`, `REPLICATE_API_KEY`, or `<SERVICE_ID>_API_KEY`).
 
-`submit_job(endpoint_id, **params)` is the generic invocation path; generated stub methods are
-thin typed wrappers around it.
-
-### Stub Generation (`sdk_factory`)
-`generate_stub(service, save_path, class_name, template)` renders the Jinja2 template
-into a `.py` file containing a `FastClient` subclass:
-- one method per contract endpoint, with type hints derived from the parameter definitions
-  (media formats map to `media_toolkit` types: `ImageFile`, `AudioFile`, `VideoFile`, `MediaFile`)
-- parameter defaults and docstrings from the spec; docstrings prefer the curated platform
-  endpoint description (`AIService.endpoints`) over the contract description when present
-- `run` and `__call__` aliases for the primary endpoint
-
-It returns a `FastStub`:
-- `.path`, `.class_name`, `.service`
-- `.client(api_key=None)`: imports the generated file and instantiates the class (works
-  immediately because the service was just registered)
-- iterable (`path, name, service = generate_stub(...)`)
+`submit_job(endpoint_id, **params)` is the invocation path.
 
 ### Specification Loading
 The definition layer does provider-aware parsing:
@@ -213,21 +190,24 @@ later caller, which breaks multi-tenant hosts such as the MCP server.
 ``JobRuntime`` read it from the job instead of re-resolving.
 
 **`JobTasks`** (`job_tasks.py`) implements the meseex pipeline steps: prepare request, load/upload
-files, send request, attach (resume from an existing envelope), poll status, process result.
-Polling logic and the ``@polling_task`` decorator live here, not on the manager.
+files, send request, attach (resume from an existing envelope), poll status, follow the Socaity
+status stream, process result. ``@polling_task`` lives on Polling only. Streaming is a normal
+task: pass-through when there is no ``links.stream``, otherwise it consumes ``GET /stream``.
 
 **`ProviderFactory`** (`provider_factory.py`) resolves the provider type from
-``deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
+``details.deployment.provider`` plus ``contract.specification`` (e.g. runpod + apipod spec becomes
 ``apipod-serverless-runpod``) and returns a frozen ``ProviderStack``: ``APIClient``,
 ``FileHandler``, and cached ``ResponseParser``.
 
 **`PipelinePlanner`** (`pipeline_planner.py`) is a pure planner: given a service, endpoint, and
-optional stack, it returns the ordered task names with steps omitted when not needed.
+optional stack, it returns the ordered task names with steps omitted when not needed. Socaity
+job pipelines insert ``Streaming`` after ``Polling``. Other providers do not.
 
 **`JobRuntime`** (`job_runtime.py`) is the per-job lifecycle controller, created once per job. It
 owns one job's transport state:
 - the single active `StreamSession` slot (`None` or exactly one session)
-- a readiness `Event` fed by the polling/send tasks as job state advances
+- the Socaity `StatusStream` (push-fed output session plus the `GET /stream` response)
+- a readiness `Event` fed by send, poll, and the status subscription
 - cancellation policy (remote cancel plus terminal-state reconciliation)
 - stream teardown when a cancel resolves
 
@@ -274,11 +254,11 @@ If the provider is configured with cloud upload support, `FileHandler.upload_fil
 
 Provider subclasses adapt protocol details:
 - `APIClientRunpod`
-- `APIClientSocaity`
+- `APIClientSocaity` (sends `socaity_options` / `socaity_context` as JSON query params on catalog routes, since contracts never declare them; gate factory routes without declared parameters keep them in the body)
 - `APIClientReplicate` (moves query/file params into the JSON body as `{"input": ...}`, adds `version` for community models)
 
 ### 5. Poll status
-If the response is job-based, `_poll_status(...)` keeps polling through `@polling_task(...)` until the remote job is terminal.
+If the response is job-based, `poll_status` GETs `links.status` until the remote job is terminal. On the Socaity provider, once `links.stream` appears the task opens that socket and stops polling. `event: job` frames apply the same envelope helper as a status GET. A dropped socket falls back to `GET /status` for the rest of the job. Replicate and RunPod keep their own poll.
 
 ### 6. Process result
 `ResponseParser` and result-specific parsers convert provider responses into:
@@ -337,16 +317,21 @@ file or joined SSE text) when the caller never invoked ``stream()``.
 `APISeex.stream()` delegates to its `JobRuntime`. The runtime resolves the stream source in this
 order:
 1. ``job.direct_response``: an open SSE/raw response captured at send time (no polling job).
-2. provider ``links.stream`` / ``urls.stream``: opened via ``APIClient.open_stream`` once the poll
-   loop exposes the URL.
+2. Socaity ``StatusStream.output``: a push-fed session filled by the ``Streaming`` task.
+3. Other providers: ``links.stream`` / ``urls.stream`` opened via ``APIClient.open_stream``.
 
-The runtime blocks on a readiness `Event` (set by the send/poll tasks as state advances) instead of
-busy-waiting, takes the single session slot, and rejects a second concurrent `stream()`. The
-response is created and read on `meseex`'s background event loop via the `AsyncBridge`.
-`StreamSession` hands items across threads through a queue, so callers consume from any thread or
-loop without touching that loop directly.
+Socaity wait is two meseex tasks. ``Polling`` is ``GET /status`` only and leaves when
+``links.stream`` appears (or the job is already terminal). ``Streaming`` then owns the only
+``GET /stream``. Unnamed records go to the feed; ``event: job`` snapshots complete the job.
+``[DONE]`` does not end the session. If Polling finished without a stream URL, Streaming
+returns that envelope unchanged.
 
-Provider transport models live in ``socaity_schemas.transport`` (imported directly, no local duplicate module).
+The runtime blocks on a readiness `Event` instead of busy-waiting, takes the single session slot,
+and rejects a second concurrent `stream()`. The response is created and read on `meseex`'s
+background event loop via the `AsyncBridge`. `StreamSession` hands items across threads through
+a queue, so callers consume from any thread or loop without touching that loop directly.
+
+Provider transport models live in ``socaity_schemas.public.providers`` (imported directly, no local duplicate module).
 Byte-chunk streams are assembled via ``media_toolkit.media_from_any``.
 
 ## How Cancellation Works
@@ -390,7 +375,6 @@ The implementation waits for the provider to confirm cancellation. If the provid
 | Command | Python equivalent |
 |---|---|
 | `fastsdk inspect <source>` | `inspect_service(source)` + pretty printing of endpoints/params |
-| `fastsdk generate <source> -o <path> --name <Class>` | `generate_stub(...)` + prints the import line |
 | `fastsdk call <source> <endpoint> --param value ...` | `FastClient(source).submit_job(endpoint, ...)` |
 | `fastsdk registry list/add/remove/show` | persistent registry management |
 
@@ -420,5 +404,5 @@ Not implemented here. Platform concept: `socaity_backend/agents/SPAINE/connector
 - At send time, read OpenAPI `components.securitySchemes` + `security` and apply auth. Catalog `service_credential_requirements` stores scheme **names** only, not placement.
 - One `apply_auth` path. Presets when the spec is silent: socaity / runpod / replicate / apipod → HTTP bearer. `connect(..., api_key=)` stays the single secret.
 - `send_request` uses `Endpoint.method` (stop hardcoding POST).
-- Catalog rename: `AIService` → `Service`. FastSDK's working unit becomes `ServiceDetails` (address + contract), not the hosting `Deployment` row.
+- Catalog remodel done: `Service` with `ServiceDetails` (address + contract, `execution`) is the working unit; the hosting `Deployment` row hangs off a provisioned binding. `APIClient.apply_auth` places credentials per OpenAPI `securitySchemes`; `send_request` honours `Endpoint.method` and path/header parameters.
 - Do not rewrite `ApiJobManager` / meseex. `PipelinePlanner` already skips polling when `has_job_queue` is false.

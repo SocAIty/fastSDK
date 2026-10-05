@@ -1,15 +1,22 @@
 from typing import Any, Dict, Optional
 
 from .api_client import APIClient, APIKeyError, RequestData
-from socaity_schemas.contract import Endpoint, EndpointParameter, ServiceContract
-from socaity_schemas.platform import PriceEstimate
-from fastsdk.service_access import primary_deployment, service_contract
+from socaity_schemas.public.spec.endpoint import (
+    Endpoint,
+    EndpointParameter,
+    ServiceContract,
+)
+from socaity_schemas.platform.catalog.pricing import PriceEstimate
+from fastsdk.service_access import primary_details, service_contract
 from fastsdk.requires import requires
 import httpx
 import json
 from urllib.parse import urlparse
 
 _FILE_FORMATS = frozenset({"file", "image", "video", "audio", "binary"})
+# The gate adds these JSON query params to every catalog route; service contracts never declare them.
+# Gate factory routes (agents, workflows) declare no parameters and read them from the JSON body instead.
+_GATE_QUERY_FLAGS = ("socaity_options", "socaity_context", "details_id")
 
 
 def _normalize_endpoint_key(path: str) -> str:
@@ -61,7 +68,29 @@ class APIClientSocaity(APIClient):
                 return ep
         return None
 
+    def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
+        # Catalog routes move undeclared gate flags onto the query string.
+        # Factory routes declare no parameters and keep socaity_options / socaity_context
+        # in the JSON body. details_id is always a query param so the gate can route.
+        data = dict(data or {})
+        declared = {param.name for param in (endpoint.parameters or [])}
+        flag_names = _GATE_QUERY_FLAGS if endpoint.parameters else ("details_id",)
+        flags = {
+            name: data.pop(name)
+            for name in flag_names
+            if name in data and name not in declared
+        }
+        request_data = super().format_request_params(endpoint, data)
+        request_data.query_params.update(
+            {name: value if isinstance(value, str) else json.dumps(value) for name, value in flags.items() if value}
+        )
+        details = primary_details(self.service)
+        if details and details.id and "details_id" not in request_data.query_params:
+            request_data.query_params["details_id"] = details.id
+        return request_data
+
     async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+        # The gate is always POST. Origin query params stay on the query string (gate binds them as Query).
         kwargs = {
             "url": request_data.url,
             "params": request_data.query_params,
@@ -108,9 +137,9 @@ class APIClientSocaity(APIClient):
         """Estimate price and runtime via the platform analytics API."""
         from socaity_cli import SocaityBackendClient
 
-        deployment = primary_deployment(self.service)
-        if not deployment.id:
-            raise ValueError("Service has no deployment id; cannot estimate")
+        details = primary_details(self.service)
+        if not details.id:
+            raise ValueError("Service has no details id; cannot estimate")
 
         contract = service_contract(self.service)
         endpoint = self._resolve_endpoint(endpoint_path, contract)
@@ -120,7 +149,7 @@ class APIClientSocaity(APIClient):
         # The client's own key, not the ambient one: a multi-tenant host (MCP) must not
         # estimate under a process-wide credential that belongs to someone else.
         result = SocaityBackendClient(api_key=self.api_key).estimate(
-            deployment_id=deployment.id,
+            details_id=details.id,
             endpoint_id=endpoint_id,
             input_data=input_data,
         )
