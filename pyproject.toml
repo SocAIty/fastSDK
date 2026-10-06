@@ -20,7 +20,7 @@ dependencies = [
     "media-toolkit>=00.02.22",
     "fastcloud>=0.0.14",
 	"apipod-registry>=0.1.7",
-    "socaity-schemas>=0.1.8",
+    "socaity-schemas>=0.1.9",
 ]
 
 [project.optional-dependencies]
