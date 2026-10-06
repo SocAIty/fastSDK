@@ -2,8 +2,8 @@ from typing import Any, Optional
 
 import httpx
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.contract.address import service_url
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.public.spec.address import service_url
 
 
 class APIClientReplicate(APIClient):
@@ -20,7 +20,9 @@ class APIClientReplicate(APIClient):
 
         return True
 
-    def _build_request_url(self, endpoint: Endpoint, query_params: dict | None = None) -> str:
+    def _build_request_url(
+        self, endpoint: Endpoint, query_params: dict | None = None, path_params: dict | None = None
+    ) -> str:
         # Overwrites the default implementation, because /endpoint_route is not attached.
         # Also query_parameters are added to body not to url.
         # (replicate always just has 1 endpoint)

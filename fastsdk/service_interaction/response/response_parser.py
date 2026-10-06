@@ -18,7 +18,7 @@ from typing import Any, Callable, Optional, Union
 import httpx
 from media_toolkit import media_from_any
 
-from socaity_schemas import (
+from socaity_schemas.public.providers import (
     ReplicateJobResponse,
     RunpodJobResponse,
     SocaityJobResponse,

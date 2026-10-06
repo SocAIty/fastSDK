@@ -1,5 +1,8 @@
 from apipod_registry.registry import Registry
-from socaity_schemas import JobLinks, SocaityJobResponse
+from socaity_schemas.public.providers import (
+    JobLinks,
+    SocaityJobResponse,
+)
 
 from fastsdk.service_access import service_contract
 from fastsdk.service_interaction.api_seex import APISeex
@@ -109,7 +112,7 @@ class ApiJobManager:
             service=service,
             endpoint=endpoint,
             data=envelope,
-            tasks=["Attach", "Polling", "Processing result"],
+            tasks=PipelinePlanner.plan_track(stack),
             name=f"track:{job_id}",
             stack=stack,
             materialize_media=materialize_media,

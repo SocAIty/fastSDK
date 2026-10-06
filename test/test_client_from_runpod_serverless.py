@@ -28,19 +28,14 @@ def test_temporary_auto_client():
     result.save("test/output/test_face_1_swapped.jpg")
 
 
-def test_generate_stub():
-    stub = fastsdk.generate_stub(serverless_url, save_path="test/output/face2face.py")
-    assert stub.path is not None
-
-
 def get_permanent_client():
-    stub = fastsdk.generate_stub(
+    fastsdk.register_service(
         "test/test_files/face2face.json",
-        save_path="test/output/face2face.py",
-        service_id="face2face", provider="runpod",
+        service_id="face2face",
+        provider="runpod",
         service_address=serverless_url,
     )
-    return stub.client(api_key=os.getenv("RUNPOD_API_KEY"))
+    return fastsdk.FastClient("face2face", api_key=os.getenv("RUNPOD_API_KEY"))
 
 
 def test_job_cancel_immediate():
@@ -79,7 +74,12 @@ def test_job_cancel_non_blocking():
 def test_job_cancel_remote():
     client = get_permanent_client()
     print("\n[Test 3] Remote cancel (queued on server)...")
-    job3 = client.swap_video(faces="test/test_files/test_face_1.jpg", target_video="test/test_files/test_video_short.mp4", enhance_face_model=None)
+    job3 = client.submit_job(
+        "/swap-video",
+        faces="test/test_files/test_face_1.jpg",
+        target_video="test/test_files/test_video_short.mp4",
+        enhance_face_model=None,
+    )
     # Wait for it to definitely reach the server and get a job ID
     print("Waiting for job to reach server...")
     max_retries = 500
@@ -104,7 +104,6 @@ def test_job_cancel_remote():
 if __name__ == "__main__":
    #test_async_openapi_spec_fetching()
    #test_temporary_auto_client()
-   #test_generate_stub()
    #test_job_cancel_immediate()
    #test_job_cancel_non_blocking()
    test_job_cancel_remote()

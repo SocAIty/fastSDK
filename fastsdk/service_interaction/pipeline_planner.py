@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from socaity_schemas.contract import Endpoint
-from socaity_schemas.platform import AIService
+from socaity_schemas.public.spec.endpoint import Endpoint
+from socaity_schemas.platform.catalog.service import Service
 
 from fastsdk.service_access import needs_polling
 from fastsdk.service_interaction.provider_factory import ProviderStack
@@ -37,7 +37,7 @@ class PipelinePlanner:
     @classmethod
     def plan(
         cls,
-        service: AIService,
+        service: Service,
         endpoint: Endpoint,
         stack: Optional[ProviderStack] = None,
     ) -> List[str]:
@@ -54,6 +54,21 @@ class PipelinePlanner:
 
         if needs_polling(service):
             tasks.append("Polling")
+            if cls._needs_status_stream(stack):
+                tasks.append("Streaming")
 
+        tasks.append("Processing result")
+        return tasks
+
+    @staticmethod
+    def _needs_status_stream(stack: Optional[ProviderStack]) -> bool:
+        return stack is not None and stack.provider_type == "socaity"
+
+    @classmethod
+    def plan_track(cls, stack: Optional[ProviderStack] = None) -> List[str]:
+        """Task list for ``track_job``: attach an envelope, then the wait phases."""
+        tasks = ["Attach", "Polling"]
+        if cls._needs_status_stream(stack):
+            tasks.append("Streaming")
         tasks.append("Processing result")
         return tasks

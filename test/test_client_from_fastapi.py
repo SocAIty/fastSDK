@@ -19,11 +19,6 @@ def test_temporary_auto_client():
     assert result is not None
     result.save("test/output/test_face_1_swapped.jpg")
 
-def test_generate_stub():
-    stub = fastsdk.generate_stub(fastapi_url, save_path="test/output/face2face.py")
-    assert stub.path is not None
-    assert stub.client() is not None
-
 def inspect_object(obj, name="object"):
     print(f"{'='*60}")
     print(f"Inspecting: {name}")
@@ -87,4 +82,3 @@ if __name__ == "__main__":
     test_ping_client()
     test_llm_client()
     # test_temporary_auto_client()
-    # test_generate_stub()

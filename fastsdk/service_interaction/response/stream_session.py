@@ -6,25 +6,28 @@ touch the response from the wrong loop. ``StreamSession`` solves this with a
 single-producer/single-consumer hand-off: a producer coroutine scheduled on the
 meseex loop reads the response and pushes items into a thread-safe queue; the
 caller drains that queue from any thread (``iter_*``) or any loop (``aiter_*``).
+
+Without a response the session is push-fed: the Socaity status subscription owns
+the gateway response and forwards its output records through ``feed`` / ``end``.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import queue
 from typing import Any, AsyncIterator, Callable, Iterator, Optional
 
 import httpx
 
 from fastsdk.service_interaction.response.sse_assembly import chunk_text
+from fastsdk.service_interaction.response.sse_records import aiter_sse_records, decode_sse_data, encode_sse_data
 
 
 class StreamSession:
     """One open streaming response, consumable exactly once.
 
     Args:
-        response: An open httpx response (sent with ``stream=True``).
+        response: An open httpx response (sent with ``stream=True``), or ``None`` for a push-fed session.
         loop: The asyncio loop that owns the response (meseex's background loop).
         parse_chunk: Optional callable applied to each decoded SSE JSON object.
         content_type: Override for the response content type (else read from headers).
@@ -34,7 +37,7 @@ class StreamSession:
 
     def __init__(
         self,
-        response: httpx.Response,
+        response: Optional[httpx.Response],
         loop: asyncio.AbstractEventLoop,
         parse_chunk: Optional[Callable[[Any], Any]] = None,
         content_type: Optional[str] = None,
@@ -42,9 +45,11 @@ class StreamSession:
         self._response = response
         self._loop = loop
         self._parse_chunk = parse_chunk
-        self.content_type = content_type or response.headers.get("Content-Type", "")
+        default_type = response.headers.get("Content-Type", "") if response is not None else "text/event-stream"
+        self.content_type = content_type or default_type
         self._queue: "queue.Queue[Any]" = queue.Queue()
-        self._started = False
+        self._started = response is None
+        self._ended = False
         self._error: Optional[BaseException] = None
 
     @property
@@ -60,6 +65,21 @@ class StreamSession:
     # Producer (runs on the meseex loop)
     # ------------------------------------------------------------------
 
+    def feed(self, data: str) -> None:
+        """Queue one unnamed SSE record's data."""
+        if self._ended:
+            return
+        self._queue.put(data)
+
+    def end(self, error: Optional[BaseException] = None) -> None:
+        """Mark the end of output; ``error`` is raised to the consumer. Idempotent."""
+        if self._ended:
+            return
+        self._ended = True
+        if error is not None:
+            self._error = error
+        self._queue.put(self._SENTINEL)
+
     def _start(self, mode: str):
         if self._started:
             return
@@ -68,30 +88,28 @@ class StreamSession:
         asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     async def _produce_bytes(self):
+        error = None
         try:
             async for chunk in self._response.aiter_bytes():
                 if chunk:
                     self._queue.put(chunk)
         except BaseException as e:  # surface to the consumer thread
-            self._error = e
+            error = e
         finally:
             await self._aclose()
-            self._queue.put(self._SENTINEL)
+            self.end(error)
 
     async def _produce_sse(self):
+        error = None
         try:
-            async for line in self._response.aiter_lines():
-                item = self._decode_sse_line(line)
-                if item is _SKIP:
-                    continue
-                if item is _DONE:
-                    break
-                self._queue.put(item)
+            async for event, data in aiter_sse_records(self._response.aiter_lines()):
+                if event is None:
+                    self.feed(data)
         except BaseException as e:
-            self._error = e
+            error = e
         finally:
             await self._aclose()
-            self._queue.put(self._SENTINEL)
+            self.end(error)
 
     async def _aclose(self):
         try:
@@ -105,7 +123,11 @@ class StreamSession:
 
         Used for stream teardown on cancel: schedules the close on the owning
         loop and waits briefly so the response is released before returning.
+        A push-fed session just ends its output.
         """
+        if self._response is None:
+            self.end()
+            return
         if self._response.is_closed:
             return
         try:
@@ -114,22 +136,9 @@ class StreamSession:
         except Exception:
             pass
 
-    def _decode_sse_line(self, line: str) -> Any:
-        if not line:
-            return _SKIP
-        line = line.strip()
-        if not line or line.startswith(":"):  # blank or comment/keep-alive
-            return _SKIP
-        if not line.startswith("data:"):
-            return line
-        data = line[len("data:"):].strip()
-        if data == "[DONE]":
-            return _DONE
-        try:
-            obj = json.loads(data)
-        except json.JSONDecodeError:
-            return data
-        if self._parse_chunk is not None:
+    def _decode(self, data: str) -> Any:
+        obj = decode_sse_data(data)
+        if self._parse_chunk is not None and not isinstance(obj, str):
             return self._parse_chunk(obj)
         return obj
 
@@ -151,14 +160,17 @@ class StreamSession:
         return self.iter_chunks() if self.is_sse else self.iter_bytes()
 
     def iter_chunks(self) -> Iterator[Any]:
-        """Yield decoded (optionally validated) SSE chunks."""
+        """Yield decoded (optionally validated) SSE chunks. ``[DONE]`` is not a chunk."""
         self._start("sse")
-        yield from self._drain()
+        yield from (self._decode(data) for data in self._drain() if data != "[DONE]")
 
     def iter_bytes(self) -> Iterator[bytes]:
-        """Yield raw byte chunks of a binary stream."""
+        """Yield raw byte chunks; a push-fed session yields its records re-framed as SSE."""
         self._start("bytes")
-        yield from self._drain()
+        if self._response is None:
+            yield from map(encode_sse_data, self._drain())
+        else:
+            yield from self._drain()
 
     # ------------------------------------------------------------------
     # Consumer (async, caller's loop)
@@ -180,15 +192,11 @@ class StreamSession:
 
     async def aiter_chunks(self) -> AsyncIterator[Any]:
         self._start("sse")
-        async for item in self._adrain():
-            yield item
+        async for data in self._adrain():
+            if data != "[DONE]":
+                yield self._decode(data)
 
     async def aiter_bytes(self) -> AsyncIterator[bytes]:
         self._start("bytes")
         async for item in self._adrain():
-            yield item
-
-
-# Internal control markers for SSE line decoding.
-_SKIP = object()
-_DONE = object()
+            yield encode_sse_data(item) if self._response is None else item
