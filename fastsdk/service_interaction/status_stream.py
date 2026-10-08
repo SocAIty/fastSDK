@@ -30,14 +30,20 @@ class StatusStream:
         self.output = StreamSession(None, loop)
         self._response: Optional["httpx.Response"] = None
 
-    async def snapshots(self, api_client: "APIClient", envelope: object) -> AsyncIterator[SocaityJobResponse]:
+    async def snapshots(
+        self,
+        api_client: "APIClient",
+        envelope: object,
+        timeout_s: Optional[float] = None,
+    ) -> AsyncIterator[SocaityJobResponse]:
         """Open the stream and yield each ``event: job`` snapshot.
 
         Unnamed records are pushed to ``output``. The feed is ended when the
-        response closes or this iterator is left.
+        response closes or this iterator is left. ``timeout_s`` is the idle
+        read timeout for the stream body.
         """
         error: Optional[BaseException] = None
-        self._response = await api_client.open_stream(envelope)
+        self._response = await api_client.open_stream(envelope, timeout_s=timeout_s)
         try:
             async for event, data in aiter_sse_records(self._response.aiter_lines()):
                 if event == "job":

@@ -415,7 +415,7 @@ class APIClient:
         url: str,
         method: str = "GET",
         files: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None,
+        timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
     ) -> httpx.Response:
         """Submit a direct URL request with streaming support."""
@@ -451,12 +451,16 @@ class APIClient:
         params = {"action": action} if action else None
         return await self.request_url(url=url, method=self.cancel_method, params=params)
 
-    async def open_stream(self, response) -> httpx.Response:
+    async def open_stream(self, response, timeout_s: Optional[float] = None) -> httpx.Response:
         """Open the provider's live output stream for an in-progress job.
 
         Returns an open (streaming) httpx response. The caller owns closing it.
+        ``timeout_s`` is the idle read timeout (the endpoint hint). Connect, write,
+        and pool stay short so a dead peer does not wait out the whole job.
         """
         url = self.get_stream_url(response)
         if not url:
             raise ValueError("No stream URL available for this response")
-        return await self.request_url(url=url, method="GET")
+        read_s = float(timeout_s) if timeout_s else 60.0
+        timeout = httpx.Timeout(connect=10.0, read=read_s, write=10.0, pool=10.0)
+        return await self.request_url(url=url, method="GET", timeout=timeout)

@@ -144,6 +144,16 @@ class JobRuntime:
             return ValueError(str(err))
         return ValueError(f"Job {self.job.meseex_id} exposes no stream")
 
+    def _stream_read_timeout_s(self) -> float:
+        """Idle read budget for ``GET /stream``. Falls back to 60s without a hint."""
+        endpoint = getattr(self.job, "endpoint", None)
+        hint = getattr(endpoint, "timeout_hint_s", None)
+        try:
+            value = float(hint) if hint else 60.0
+        except (TypeError, ValueError):
+            return 60.0
+        return value if value > 0 else 60.0
+
     def _resolve_source(self) -> Optional[StreamSession]:
         """Return a session for a direct response, status-stream feed, or stream URL."""
         if self.job.direct_response is not None:
@@ -158,7 +168,9 @@ class JobRuntime:
             and isinstance(current, JOB_RESPONSE_TYPES)
             and self._api_client.get_stream_url(current)
         ):
-            response = self._bridge.run(self._api_client.open_stream, current)
+            response = self._bridge.run(
+                self._api_client.open_stream, current, self._stream_read_timeout_s()
+            )
             return StreamSession(response, self._bridge.loop)
         return None
 
@@ -175,7 +187,9 @@ class JobRuntime:
         self._status_stream = stream
         self._stream_ready.set()
         try:
-            async for snapshot in stream.snapshots(self._api_client, envelope):
+            async for snapshot in stream.snapshots(
+                self._api_client, envelope, timeout_s=self._stream_read_timeout_s()
+            ):
                 yield snapshot
         finally:
             await stream.aclose()
