@@ -17,9 +17,9 @@ dependencies = [
     "tqdm",
     "pydantic>=2.11.3",
     "meseex>=0.0.11",
-    "media-toolkit>=00.02.22",
+    "media-toolkit>=00.02.23",
     "fastcloud>=0.0.14",
-	"apipod-registry>=0.1.9",
+	"apipod-registry>=0.1.10",
     "socaity-schemas>=0.1.10",
 ]
 
