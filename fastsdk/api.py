@@ -35,11 +35,11 @@ def connect(
         **kwargs: Additional service loading arguments (see inspect_service).
 
     Returns:
-        FastClient. Call endpoints via client.submit_job("/endpoint", **params).
+        FastClient. Call operations via client.submit_job("operation-key", **params).
 
     Example:
         client = fastsdk.connect("http://localhost:8009")
-        job = client.submit_job("/text2voice", text="hello world")
+        job = client.submit_job("text2voice", text="hello world")
         audio = job.get_result()
     """
     return FastSDK().connect(source, api_key=api_key, **kwargs)

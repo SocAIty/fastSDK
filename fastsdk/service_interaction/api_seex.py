@@ -8,11 +8,11 @@ from meseex import MrMeseex
 
 from fastsdk.service_access import service_provider
 
-from typing import Any, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
     from fastsdk.service_interaction.job_runtime import JobRuntime
     from fastsdk.service_interaction.provider_factory import ProviderStack
     from fastsdk.service_interaction.response.stream_session import StreamSession
@@ -37,6 +37,7 @@ class APISeex(MrMeseex):
         tasks: list = None,
         stack: Optional["ProviderStack"] = None,
         materialize_media: bool = True,
+        credentials: Optional[Dict[str, str]] = None,
     ):
         super().__init__(tasks, data, name)
         self.service = service
@@ -44,12 +45,15 @@ class APISeex(MrMeseex):
         # Credential-bound provider wiring, resolved once at submit time so no
         # pipeline task re-resolves it (and cannot pick up another tenant's key).
         self.stack = stack
+        # Secrets by security scheme name for this job only. The stack is shared
+        # by every job of the service, so per-tenant secrets must not live on it.
+        self.credentials = credentials or {}
         # When False, media results stay URL references instead of being downloaded.
         self.materialize_media = materialize_media
         # Per-job lifecycle controller, assigned by the orchestrator after creation.
         self.runtime: Optional["JobRuntime"] = None
         # Set by the orchestrator when the initial response is a live stream.
-        self.direct_response: Optional["httpx.Response"] = None
+        self.direct_response: Optional["httpx2.Response"] = None
 
     @property
     def provider_stack(self) -> "ProviderStack":

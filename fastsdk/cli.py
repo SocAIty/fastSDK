@@ -79,9 +79,9 @@ def _print_service(service: Service, as_json: bool = False):
     if service.description:
         desc = service.description.strip().split("\n")[0]
         print(f"About:    {desc[:120]}")
-    print("Endpoints:")
+    print("Operations:")
     for endpoint in contract.endpoints:
-        print(f"  {endpoint.path}")
+        print(f"  {endpoint.operation_key}")
         for param in endpoint.parameters:
             if param.location not in ("body", "query"):
                 continue
@@ -174,10 +174,10 @@ def cmd_call(args: argparse.Namespace, extra: List[str]):
     endpoint = args.endpoint
     if not endpoint:
         if len(endpoints) == 1:
-            endpoint = endpoints[0].path
+            endpoint = endpoints[0].operation_key
         else:
-            paths = "\n  ".join(ep.path for ep in endpoints)
-            raise SystemExit(f"Service has multiple endpoints, please specify one:\n  {paths}")
+            keys = "\n  ".join(ep.operation_key for ep in endpoints)
+            raise SystemExit(f"Service has multiple operations, please specify one:\n  {keys}")
 
     print(f"Calling {endpoint} on {service.display_name} ...")
     try:

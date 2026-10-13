@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, Union
 import json
-import httpx
+import httpx2
 from urllib.parse import quote, urlencode
 
 from socaity_schemas.public.spec.endpoint import Endpoint
@@ -108,9 +108,9 @@ class APIClient:
     # ------------------------------------------------------------------
 
     @property
-    def client(self) -> httpx.AsyncClient:
+    def client(self) -> httpx2.AsyncClient:
         if self.__client is None or self.__client.is_closed:
-            self.__client = httpx.AsyncClient()
+            self.__client = httpx2.AsyncClient()
         return self.__client
 
     def validate_api_key(self) -> bool:
@@ -135,6 +135,7 @@ class APIClient:
         headers: Optional[Dict[str, str]] = None,
         query_params: Optional[Dict[str, Any]] = None,
         endpoint: Optional[Endpoint] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Dict[str, str]:
         """Place credentials where the spec's ``securitySchemes`` say they go.
 
@@ -142,6 +143,9 @@ class APIClient:
         use a bearer token. Everything else is driven by the scheme type: http
         bearer/basic, apiKey in header, query or cookie, oauth2/openIdConnect as
         bearer. Query placement mutates ``query_params`` in place.
+
+        Args:
+            credentials: Per-job secrets by scheme name; they win over the client's own.
         """
         headers = headers if headers is not None else {}
         schemes = self._required_schemes(endpoint)
@@ -151,8 +155,9 @@ class APIClient:
             return headers
 
         definitions = primary_details(self.service).contract.security_schemes
+        secrets = {**self.credentials, **(credentials or {})}
         for name in schemes:
-            secret = self.credentials.get(name) or self.api_key
+            secret = secrets.get(name) or self.api_key
             if not secret:
                 continue
             scheme = definitions.get(name, {})
@@ -378,7 +383,7 @@ class APIClient:
         rq.url = self._build_request_url(endpoint, rq.query_params, path_params)
         return rq
 
-    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx2.Response:
         """Send the prepared request to the API with streaming support."""
         kwargs = {
             "url": request_data.url,
@@ -415,7 +420,7 @@ class APIClient:
         files: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
         **kwargs,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Submit a direct URL request with streaming support."""
         if not self.address:
             raise ValueError("Service address is required to request a relative URL")
@@ -434,13 +439,13 @@ class APIClient:
         )
         return await self.client.send(request, stream=True)
 
-    async def poll_status(self, response) -> httpx.Response:
+    async def poll_status(self, response) -> httpx2.Response:
         url = self.get_poll_url(response)
         if not url:
             raise ValueError("No polling URL available for this response")
         return await self.request_url(url=url, method=self.poll_method)
 
-    async def cancel_job(self, response, action: Optional[str] = None) -> httpx.Response:
+    async def cancel_job(self, response, action: Optional[str] = None) -> httpx2.Response:
         """Cancel a job. ``action`` (``cancel`` | ``interrupt``) is a Socaity/APIPod
         query parameter; ``interrupt`` keeps a resumable checkpoint on agent jobs."""
         url = self.get_cancel_url(response)
@@ -449,10 +454,10 @@ class APIClient:
         params = {"action": action} if action else None
         return await self.request_url(url=url, method=self.cancel_method, params=params)
 
-    async def open_stream(self, response) -> httpx.Response:
+    async def open_stream(self, response) -> httpx2.Response:
         """Open the provider's live output stream for an in-progress job.
 
-        Returns an open (streaming) httpx response. The caller owns closing it.
+        Returns an open (streaming) httpx2 response. The caller owns closing it.
         """
         url = self.get_stream_url(response)
         if not url:

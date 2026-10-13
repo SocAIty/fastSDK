@@ -75,7 +75,9 @@ class FastClient:
 
         # try to get api key from global settings if not provided
         self.api_key = api_key or self._get_api_key()
-        self.fsdk.provider_stacks.load(self.service.id, self.api_key)
+        # Without a key the stack is built at submit, where per-job credentials can supply it.
+        if self.api_key:
+            self.fsdk.provider_stacks.load(self.service.id, self.api_key)
 
     def _resolve_service(self, service, api_key: Optional[str], **load_kwargs) -> Service:
         # A plain string might be a registered service ID/name - check the registry first.
@@ -94,12 +96,19 @@ class FastClient:
             return os.getenv(env_var, None)
         return os.getenv(self.service.id.upper() + "_API_KEY", None)
 
-    def submit_job(self, endpoint_id: str, **kwargs) -> 'APISeex':
+    def submit_job(self, operation: Optional[str] = None, **kwargs) -> 'APISeex':
+        """Submit one operation call.
+
+        Args:
+            operation: Operation key, provider operation id, catalog endpoint id or a unique
+                HTTP path. Omitted, the first public operation runs.
+            **kwargs: Operation parameters.
+        """
         if self.fsdk.service_registry.get_service(self.service.id) is None:
             self.fsdk.service_registry.add_service(self.service)
         return self.fsdk.api_job_manager.submit_job(
             self.service.id,
-            endpoint_id,
+            operation,
             data=kwargs,
             api_key=self.api_key,
             materialize_media=self.materialize_media,
@@ -116,19 +125,19 @@ class FastClient:
             materialize_media=self.materialize_media,
         )
 
-    def estimate(self, endpoint_path: str, **params) -> PriceEstimate:
+    def estimate(self, operation: str, **params) -> PriceEstimate:
         """Estimate price and runtime. Implemented by the Socaity provider API client.
 
         Requires ``socaity-cli`` when the provider is Socaity (signaled via ``@requires``).
         """
-        stack = self.fsdk.provider_stacks.require(self.service.id, self.api_key)
+        stack = self.fsdk.provider_stacks.ensure(self.service.id, self.api_key)
         estimate_fn = getattr(stack.api_client, "estimate", None)
         if estimate_fn is None:
             raise NotImplementedError(
                 "estimate() is only available for Socaity-hosted services "
                 f"(provider client: {type(stack.api_client).__name__})"
             )
-        return estimate_fn(endpoint_path, **params)
+        return estimate_fn(operation, **params)
 
     def close(self):
         """Drop a temporary registry entry. Keep the on-disk SDK cache."""

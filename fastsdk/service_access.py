@@ -1,11 +1,12 @@
 """Accessors for the Service aggregate as fastsdk uses it.
 
-fastsdk works with one Service that has exactly one primary ServiceDetails
-binding (created via apipod_registry.create_service). These functions are the
-one place that encodes this convention; callers never index details directly.
+fastsdk invokes the active ServiceDetails binding of a Service
+(``details[0]``). These functions are the one place that encodes
+this convention; callers never index details directly.
 """
 from typing import Optional
 
+from apipod_registry import active_details
 from socaity_schemas.public.spec.address import ServiceAddress
 from socaity_schemas.public.spec.endpoint import ServiceContract
 from socaity_schemas.platform.catalog.hosting import (
@@ -19,9 +20,10 @@ from socaity_schemas.platform.catalog.service import (
 
 
 def primary_details(service: Service) -> ServiceDetails:
-    if not service.details:
-        raise ValueError(f"Service {service.id} has no details binding")
-    return service.details[0]
+    details = active_details(service)
+    if details is None:
+        raise ValueError(f"Service {service.id} has no active details binding")
+    return details
 
 
 def details_provider(details: ServiceDetails) -> Provider:
@@ -84,5 +86,6 @@ def needs_polling(service: Service) -> bool:
 
     RunPod serverless always answers /run with a job envelope (the /run +
     /status wire protocol), even when the contract itself is synchronous.
+    The Socaity gate enqueues every call, MCP tools included.
     """
-    return service_contract(service).has_job_queue or service_provider(service) == "runpod"
+    return service_contract(service).has_job_queue or service_provider(service) in ("runpod", "socaity")

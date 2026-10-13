@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-import httpx
+import httpx2
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
 from fastsdk.service_interaction.response.api_job_status import APIJobStatus
 from socaity_schemas.public.providers import SocaityJobResponse
@@ -87,7 +87,7 @@ class APIClientRunpod(APIClient):
             return body_params
         return {name: nested, **keep}
 
-    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx2.Response:
         """
         Send the prepared request to the API.
         """
@@ -138,7 +138,7 @@ class APIClientRunpodApipod(APIClientRunpod):
             return APIJobStatus.from_str(response.status)
         return super().get_status(response)
 
-    async def poll_status(self, response) -> httpx.Response:
+    async def poll_status(self, response) -> httpx2.Response:
         url = self.get_poll_url(response)
         if not url:
             raise ValueError("No polling URL available")

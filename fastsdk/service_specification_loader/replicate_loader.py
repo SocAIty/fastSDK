@@ -12,7 +12,7 @@ import os
 import re
 from typing import Optional
 
-import httpx
+import httpx2
 from media_toolkit.utils.dependency_requirements import requires
 
 from apipod_registry import create_service, materialize_contract
@@ -121,13 +121,13 @@ def _is_official_model(model, api_key: str) -> bool:
     if is_official is None:
         # Older versions of the replicate package don't expose the field -> ask the REST API directly.
         try:
-            response = httpx.get(
+            response = httpx2.get(
                 f"https://api.replicate.com/v1/models/{model.owner}/{model.name}",
                 headers={"Authorization": f"Bearer {api_key}"},
                 timeout=30.0,
             )
             response.raise_for_status()
             is_official = response.json().get("is_official", False)
-        except httpx.HTTPError:
+        except httpx2.HTTPError:
             is_official = False
     return bool(is_official)

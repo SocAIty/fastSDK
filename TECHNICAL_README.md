@@ -25,6 +25,14 @@ The package exposes module-level functions (`fastsdk/api.py`). They wrap a proce
 Replicate model reference (`"replicate:owner/name"`, `"https://replicate.com/owner/name"`, bare `"owner/name"`),
 or, where it makes sense, an already registered service ID/name.
 
+An MCP endpoint (`mcp://host/path`, or an `https` URL that answers MCP Streamable HTTP) needs the
+`fastsdk[mcp]` extra. `inspect_service` lists its tools into `ServiceContract(specification="mcp")`;
+`api_key` is sent as bearer token and `auth` takes any `httpx2.Auth`, for example the MCP SDK
+`OAuthClientProvider`. A server that answers 401 raises `MCPAuthRequired` with the advertised
+alternatives (`secret`, `oauth`), authorization servers and scopes; a failed OAuth flow raises
+`MCPAuthFailed`. Through the Socaity gate (`provider="socaity"`) every contract, MCP included, is a
+polled job: a tool without an HTTP path is addressed as `/services/v1/{slug}/{operation_key}`.
+
 ## Mental Model
 Think of `fastsdk` as two connected subsystems:
 
@@ -185,6 +193,11 @@ per-job ``JobRuntime``, and summons it into the ``MeseexBox``.
 per ``(service id, api key)`` pair. The key includes the credential because the stack carries
 it on every request; caching per service id alone would hand the first caller's key to every
 later caller, which breaks multi-tenant hosts such as the MCP server.
+``ApiJobManager.submit_job(..., credentials=)`` takes job-scoped secrets by scheme name. They
+live on ``APISeex.credentials`` and reach ``apply_auth`` per call, never the shared stack. An
+entry named after a preset provider (``replicate``) selects the stack for that key instead of
+``api_key``, so send, poll, cancel and file upload all use the caller's account. ``FastClient``
+builds its stack eagerly only when it has a key.
 ``load(service_name_or_id, api_key)`` resolves the service and calls ``ProviderFactory.build(...)``.
 ``submit_job(...)`` binds the resolved stack onto the ``APISeex``, so task handlers and
 ``JobRuntime`` read it from the job instead of re-resolving.
@@ -228,7 +241,7 @@ type-check-only import). No client, parser, or bridge imports belong there.
 
 ### `AsyncBridge`
 The single async->sync bridge (`async_bridge.py`). The `MeseexBox` runs one asyncio loop in a
-background thread, and every httpx response fastsdk creates is bound to that loop, so any follow-up
+background thread, and every httpx2 response fastsdk creates is bound to that loop, so any follow-up
 coroutine (poll, cancel, open stream, close) must run there. `AsyncBridge.run(coro_func, *args,
 timeout_s=...)` schedules the coroutine on the loop and blocks on a `concurrent.futures.Future`
 with a timeout. It is the only place that crosses the boundary, which keeps runtime logic free of

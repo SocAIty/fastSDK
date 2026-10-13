@@ -1,15 +1,15 @@
 from typing import Any, Dict, Optional
 
 from .api_client import APIClient, APIKeyError, RequestData
+from apipod_registry import resolve_operation
 from socaity_schemas.public.spec.endpoint import (
     Endpoint,
     EndpointParameter,
-    ServiceContract,
 )
 from socaity_schemas.platform.catalog.pricing import PriceEstimate
 from fastsdk.service_access import primary_details, service_contract
 from fastsdk.requires import requires
-import httpx
+import httpx2
 import json
 from urllib.parse import urlparse
 
@@ -19,8 +19,9 @@ _FILE_FORMATS = frozenset({"file", "image", "video", "audio", "binary"})
 _GATE_QUERY_FLAGS = ("socaity_options", "socaity_context", "details_id")
 
 
-def _normalize_endpoint_key(path: str) -> str:
-    return path.replace("\\", "/").strip("/").lower().replace("_", "-")
+def _gate_route(endpoint: Endpoint) -> str:
+    """Path under the service address; the gate also routes by operation key, the only route an MCP tool has."""
+    return endpoint.path or f"/{endpoint.operation_key}"
 
 
 def _is_file_parameter(param: EndpointParameter) -> bool:
@@ -60,13 +61,13 @@ class APIClientSocaity(APIClient):
 
     def _endpoint_for_url(self, url: str) -> Optional[Endpoint]:
         url_path = urlparse(url).path
-        for ep in service_contract(self.service).endpoints:
-            path = getattr(ep, "path", None) or ""
-            if not path:
-                continue
-            if url_path.endswith(path):
-                return ep
-        return None
+        return next(
+            (ep for ep in service_contract(self.service).endpoints if url_path.endswith(_gate_route(ep))), None
+        )
+
+    def _build_request_url(self, endpoint: Endpoint, query_params: Dict = None, path_params: Dict = None) -> str:
+        routed = endpoint.model_copy(update={"path": _gate_route(endpoint)})
+        return super()._build_request_url(routed, query_params, path_params)
 
     def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
         # Catalog routes move undeclared gate flags onto the query string.
@@ -89,7 +90,7 @@ class APIClientSocaity(APIClient):
             request_data.query_params["details_id"] = details.id
         return request_data
 
-    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx2.Response:
         # The gate is always POST. Origin query params stay on the query string (gate binds them as Query).
         kwargs = {
             "url": request_data.url,
@@ -133,7 +134,7 @@ class APIClientSocaity(APIClient):
         return await self.client.send(request, stream=True)
 
     @requires("socaity_cli", pip_name="socaity-cli", cli=False)
-    def estimate(self, endpoint_path: str, **params) -> PriceEstimate:
+    def estimate(self, operation: str, **params) -> PriceEstimate:
         """Estimate price and runtime via the platform analytics API."""
         from socaity_cli import SocaityBackendClient
 
@@ -141,10 +142,14 @@ class APIClientSocaity(APIClient):
         if not details.id:
             raise ValueError("Service has no details id; cannot estimate")
 
-        contract = service_contract(self.service)
-        endpoint = self._resolve_endpoint(endpoint_path, contract)
+        endpoint = resolve_operation(self.service, details, operation)
+        if endpoint is None:
+            available = ", ".join(ep.operation_key for ep in service_contract(self.service).endpoints) or "(none)"
+            raise ValueError(f"Unknown operation '{operation}'. Available operations: {available}")
         input_data = self._estimate_input(endpoint, params)
-        endpoint_id = self._platform_endpoint_id(endpoint.path)
+        endpoint_id = next(
+            (row.id for row in self.service.endpoints if row.operation_key == endpoint.operation_key), None
+        )
 
         # The client's own key, not the ambient one: a multi-tenant host (MCP) must not
         # estimate under a process-wide credential that belongs to someone else.
@@ -156,21 +161,6 @@ class APIClientSocaity(APIClient):
         if result is None:
             raise RuntimeError("estimate request failed")
         return result
-
-    def _resolve_endpoint(self, endpoint_path: str, contract: ServiceContract) -> Endpoint:
-        key = _normalize_endpoint_key(endpoint_path)
-        for endpoint in contract.endpoints:
-            if _normalize_endpoint_key(endpoint.path) == key:
-                return endpoint
-        available = ", ".join(ep.path for ep in contract.endpoints) or "(none)"
-        raise ValueError(f"Unknown endpoint '{endpoint_path}'. Available endpoints: {available}")
-
-    def _platform_endpoint_id(self, path: str) -> Optional[str]:
-        key = _normalize_endpoint_key(path)
-        for endpoint in self.service.endpoints or []:
-            if endpoint.path and _normalize_endpoint_key(endpoint.path) == key:
-                return endpoint.id
-        return None
 
     @staticmethod
     def _estimate_input(endpoint: Endpoint, params: Dict[str, Any]) -> Dict[str, Any]:
