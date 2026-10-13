@@ -251,6 +251,7 @@ sleep/busy-wait loops.
 ### 1. Prepare request
 `APIClient.format_request_params(...)` maps endpoint parameters into:
 - query params
+- path params (substituted into `endpoint.path` for direct HTTP providers, or forwarded as query params on canonical `/services/v1/{slug}/{operation_key}` gate calls)
 - body params
 - file params
 - headers

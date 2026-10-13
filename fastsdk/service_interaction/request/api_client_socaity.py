@@ -20,8 +20,10 @@ _GATE_QUERY_FLAGS = ("socaity_options", "socaity_context", "details_id")
 
 
 def _gate_route(endpoint: Endpoint) -> str:
-    """Path under the service address; the gate also routes by operation key, the only route an MCP tool has."""
-    return endpoint.path or f"/{endpoint.operation_key}"
+    """Path under the service address; use operation_key when path is absent or parameterized."""
+    if not endpoint.path or endpoint.path == "/" or "{" in endpoint.path:
+        return f"/{endpoint.operation_key}"
+    return endpoint.path
 
 
 def _is_file_parameter(param: EndpointParameter) -> bool:
@@ -82,6 +84,11 @@ class APIClientSocaity(APIClient):
             if name in data and name not in declared
         }
         request_data = super().format_request_params(endpoint, data)
+        for param in endpoint.parameters or []:
+            if param.location == "path":
+                val = data.get(param.name, param.default)
+                if val is not None and param.name not in request_data.query_params:
+                    request_data.query_params[param.name] = val
         request_data.query_params.update(
             {name: value if isinstance(value, str) else json.dumps(value) for name, value in flags.items() if value}
         )
@@ -99,7 +106,7 @@ class APIClientSocaity(APIClient):
             "timeout": timeout_s,
         }
 
-        endpoint = self._endpoint_for_url(request_data.url)
+        endpoint = request_data.endpoint or self._endpoint_for_url(request_data.url)
         content_type = getattr(endpoint, "request_body_content_type", None) if endpoint else None
         # Registered chat/LLM schemas must stay JSON even when a legacy contract
         # advertised form/urlencoded (flattened messages would be stringified).
