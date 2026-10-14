@@ -433,7 +433,7 @@ class APIClient:
         url: str,
         method: str = "GET",
         files: Optional[Dict[str, Any]] = None,
-        timeout: Optional[Union[float, httpx.Timeout]] = None,
+        timeout: Optional[Union[float, httpx2.Timeout]] = None,
         **kwargs,
     ) -> httpx2.Response:
         """Submit a direct URL request with streaming support."""
