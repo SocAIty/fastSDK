@@ -38,9 +38,9 @@ class RunpodOpenAPILoader:
             has_job_queue=True,  # RunPod serverless answers /run with a job envelope
             endpoints=[
                 Endpoint(
+                    operation_key="openapi",
                     path="/openapi.json",  # Virtual path routed through the RunPod job body
                     method="POST",
-                    operation_id="openapi.json",
                     timeout_hint_s=1800.0,
                 )
             ],
@@ -58,7 +58,7 @@ class RunpodOpenAPILoader:
         Returns a MrMeseex job that can be awaited for the result.
         """
         # Submit job through ApiJobManager with path parameter
-        job = self.client.submit_job(endpoint_id="openapi.json")
+        job = self.client.submit_job("openapi")
         return job
 
     def load_openapi_spec(self) -> Dict[str, Any]:

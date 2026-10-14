@@ -9,7 +9,6 @@ from socaity_schemas.public.providers import (
     SocaityJobResponse,
     StreamingResponse,
 )
-from media_toolkit import MediaDict
 
 from fastsdk.service_interaction.api_seex import APISeex
 from fastsdk.service_interaction.request import RequestData
@@ -75,8 +74,7 @@ class JobTasks:
         return attached
 
     async def prepare_request(self, job: APISeex) -> RequestData:
-        stack = job.provider_stack
-        return stack.api_client.format_request_params(job.endpoint, job.input)
+        return await job.provider_stack.transport.prepare(job)
 
     async def load_files(self, job: APISeex) -> RequestData:
         request_data = job.prev_task_output
@@ -105,56 +103,7 @@ class JobTasks:
                 "send_request: missing RequestData from prior pipeline task "
                 "(Preparing / Load files / Uploading files)"
             )
-        stack = job.provider_stack
-
-        if isinstance(request_data.file_params, MediaDict) and request_data.file_params:
-            if request_data.body_content_type == stack.api_client._JSON_BODY_CONTENT_TYPE:
-                for name, value in request_data.file_params.items():
-                    request_data.body_params[name] = stack.api_client._serialize_json_body_file_value(value)
-                request_data.file_params = {}
-            else:
-                non_file_params = request_data.file_params.get_non_file_params(include_urls=True)
-                if non_file_params:
-                    request_data.body_params.update(non_file_params)
-
-                file_model_fields, raw_files = stack.api_client.partition_media_for_multipart(
-                    job.endpoint, request_data.file_params
-                )
-                if file_model_fields:
-                    request_data.body_params.update(file_model_fields)
-                request_data.file_params = raw_files
-                request_data.file_params = await stack.file_handler.prepare_files_for_send(
-                    request_data.file_params
-                )
-        elif request_data.file_params:
-            request_data.file_params = await stack.file_handler.prepare_files_for_send(request_data.file_params)
-
-        logger.info("send_request | Sending request to %s", request_data.url)
-        timeout_hint = getattr(job.endpoint, "timeout_hint_s", None)
-        timeout_s = float(timeout_hint) if timeout_hint else 60.0
-        response = await stack.api_client.send_request(request_data, timeout_s=timeout_s)
-        logger.info(
-            "send_request | Received response: status=%d content_type=%s",
-            response.status_code, response.headers.get("Content-Type"),
-        )
-
-        error = await stack.parser.check_response_status(response)
-        if error:
-            logger.error("send_request | Request failed: %s", error)
-            raise Exception(error)
-
-        parsed = await stack.parser.parse_response(response, materialize_media=job.materialize_media)
-
-        if isinstance(parsed, StreamingResponse):
-            logger.info("send_request | Detected direct stream response")
-            job.direct_response = response
-            job.runtime.refresh_stream_state()
-        else:
-            if not response.is_closed:
-                await response.aclose()
-
-        logger.info("send_request | Parsed response type: %s", type(parsed).__name__)
-        return parsed
+        return await job.provider_stack.transport.send(job, request_data)
 
     @polling_task(poll_interval_seconds=1.0, timeout_seconds=3600)
     async def poll_status(self, job: APISeex) -> Any:

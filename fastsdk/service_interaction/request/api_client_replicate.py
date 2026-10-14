@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-import httpx
+import httpx2
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
 from socaity_schemas.public.spec.endpoint import Endpoint
 from socaity_schemas.public.spec.address import service_url
@@ -43,7 +43,7 @@ class APIClientReplicate(APIClient):
     def get_result(self, response) -> Any:
         return getattr(response, "output", None)
 
-    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx2.Response:
         # replicates expects query params to be in body
         request_data.body_params.update(request_data.query_params)
         request_data.body_params.update(request_data.file_params)

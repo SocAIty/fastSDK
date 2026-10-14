@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 import asyncio
 from urllib.parse import urljoin
 
@@ -11,7 +11,7 @@ async def test_fastapi_embeddings():
         "input": "Hello world"
     }
     
-    async with httpx.AsyncClient() as client:
+    async with httpx2.AsyncClient() as client:
         # Initial request to queue the job
         response = await client.post(
             url,
@@ -90,7 +90,7 @@ def test_fastapi_embeddings_sync():
         "input": "Hello world"
     }
     
-    with httpx.Client() as client:
+    with httpx2.Client() as client:
         # Initial request
         response = client.post(url, json=data)
         

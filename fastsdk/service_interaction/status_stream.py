@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING, AsyncIterator, Optional
 
 from socaity_schemas.public.providers import SocaityJobResponse
 
-from fastsdk.service_interaction.response.sse_records import aiter_sse_records
+from fastsdk.service_interaction.response.sse_records import OUTPUT_EVENT, sse_events
 from fastsdk.service_interaction.response.stream_session import StreamSession
 
 if TYPE_CHECKING:
-    import httpx
+    import httpx2
 
     from fastsdk.service_interaction.request import APIClient
 
@@ -28,7 +28,7 @@ class StatusStream:
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
         self.output = StreamSession(None, loop)
-        self._response: Optional["httpx.Response"] = None
+        self._response: Optional["httpx2.Response"] = None
 
     async def snapshots(
         self,
@@ -45,11 +45,11 @@ class StatusStream:
         error: Optional[BaseException] = None
         self._response = await api_client.open_stream(envelope, timeout_s=timeout_s)
         try:
-            async for event, data in aiter_sse_records(self._response.aiter_lines()):
-                if event == "job":
-                    yield SocaityJobResponse.model_validate_json(data)
-                elif event is None:
-                    self.output.feed(data)
+            async for sse in sse_events(self._response):
+                if sse.event == "job":
+                    yield SocaityJobResponse.model_validate_json(sse.data)
+                elif sse.event == OUTPUT_EVENT:
+                    self.output.feed(sse.data)
         except Exception as exc:
             error = exc
             raise

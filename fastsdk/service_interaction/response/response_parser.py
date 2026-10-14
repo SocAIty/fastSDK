@@ -15,7 +15,7 @@ import json
 import os
 from typing import Any, Callable, Optional, Union
 
-import httpx
+import httpx2
 from media_toolkit import media_from_any
 
 from socaity_schemas.public.providers import (
@@ -239,7 +239,7 @@ class ResponseParser:
         self._media_parser = _MEDIA_PARSERS.get(provider)
 
     async def parse_response(
-        self, response: httpx.Response, parse_media: bool = True, materialize_media: bool = True
+        self, response: httpx2.Response, parse_media: bool = True, materialize_media: bool = True
     ) -> Union[SocaityJobResponse, RunpodJobResponse, ReplicateJobResponse, StreamingResponse, bytes, None, dict]:
         if not response:
             return None
@@ -277,7 +277,7 @@ class ResponseParser:
         return raw_result
 
     @staticmethod
-    async def check_response_status(response: httpx.Response) -> Optional[str]:
+    async def check_response_status(response: httpx2.Response) -> Optional[str]:
         if 200 <= response.status_code < 300:
             return None
 

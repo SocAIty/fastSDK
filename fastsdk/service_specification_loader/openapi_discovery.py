@@ -8,17 +8,27 @@ Order is fixed and cheap (regex + a few GETs, no HTML parser):
    Redoc / Scalar / RapiDoc config, and a few same-origin script assets.
 4. Probe conventional filenames on the URL prefix and the origin.
 
-First body that parses as OpenAPI or Swagger wins.
+First body that parses as OpenAPI or Swagger wins. Candidates are probed in
+batches of ``MAX_CONCURRENT_PROBES``; within a batch the earlier candidate wins.
 """
 from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 
-import httpx
-from httpx import HTTPError, TimeoutException
+import httpx2
+from httpx2 import HTTPError, TimeoutException
+
+from fastsdk.service_specification_loader.inspect_policy import (
+    MAX_CONCURRENT_PROBES,
+    ProgressCallback,
+    egress_hooks,
+    read_limited,
+    report,
+)
 
 try:
     import yaml
@@ -26,7 +36,7 @@ except ImportError:
     yaml = None  # YAML specs are skipped when PyYAML is not installed
 
 
-_TIMEOUT = httpx.Timeout(20.0, connect=5.0)
+_TIMEOUT = httpx2.Timeout(20.0, connect=5.0)
 _HEADERS = {
     "Accept": "application/json, application/yaml, application/vnd.oai.openapi+json, application/linkset+json, text/html;q=0.8, */*;q=0.5",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -132,25 +142,47 @@ def format_discovery_failure(url: str, probed: List[tuple], truncated: bool = Fa
     return "\n".join(lines)
 
 
-def load_openapi_from_url(url: str, timeout: float = 45.0) -> Tuple[str, Dict[str, Any]]:
+def load_openapi_from_url(
+    url: str,
+    timeout: float = 45.0,
+    public_only: bool = False,
+    on_progress: Optional[ProgressCallback] = None,
+) -> Tuple[str, Dict[str, Any]]:
     """Fetch an OpenAPI document, discovering it when ``url`` is a docs page or API root.
+
+    Args:
+        url: Direct document URL, docs page, or API root.
+        timeout: Per-request timeout in seconds.
+        public_only: Run the egress policy on every request and redirect.
+        on_progress: Receives ``discover`` and ``fetch`` stages.
 
     Returns:
         ``(spec_url, spec)``. ``spec_url`` is the final URL the document was served from, the canonical
         address of that API regardless of which docs page or root the caller pasted.
+
+    Raises:
+        OpenAPIDiscoveryError: No candidate held an OpenAPI document.
+        InspectRejected: A body exceeded the size limit or a request broke the egress policy.
     """
-    timeout_cfg = httpx.Timeout(timeout, connect=min(5.0, timeout))
+    timeout_cfg = httpx2.Timeout(timeout, connect=min(5.0, timeout))
     notes: List[tuple] = []
     flags = {"truncated": False}
-    with httpx.Client(timeout=timeout_cfg, follow_redirects=True, headers=_HEADERS) as client:
-        found = _discover(client, url, notes, flags)
+    report(on_progress, "discover", f"Looking for an OpenAPI document at {url}")
+    with (
+        httpx2.Client(
+            timeout=timeout_cfg, follow_redirects=True, headers=_HEADERS, event_hooks=egress_hooks(public_only),
+        ) as client,
+        ThreadPoolExecutor(MAX_CONCURRENT_PROBES) as pool,
+    ):
+        found = _discover(client, pool, url, notes, flags)
     if found:
+        report(on_progress, "fetch", f"Fetched the OpenAPI document from {found[0]}")
         return found
     raise OpenAPIDiscoveryError(url, notes, truncated=flags["truncated"])
 
 
 def _discover(
-    client: httpx.Client, url: str, notes: List[tuple], flags: Dict[str, bool],
+    client: httpx2.Client, pool: ThreadPoolExecutor, url: str, notes: List[tuple], flags: Dict[str, bool],
 ) -> Optional[Tuple[str, Dict[str, Any]]]:
     tried: Set[str] = set()
     first = _get(client, url, tried, notes)
@@ -175,48 +207,67 @@ def _discover(
                     queue.append(extra)
             conventional_added = True
             continue
-        if len(tried) >= _MAX_CANDIDATES:
+        budget = _MAX_CANDIDATES - len(tried)
+        if budget <= 0:
             flags["truncated"] = True
             break
-        candidate = queue[index]
-        index += 1
-        response = _get(client, candidate, tried, notes)
-        if response is None:
-            continue
-        found = _spec_or_note(response, candidate, notes)
-        if found:
-            return found
-        extras = _candidates_from_response(response)
-        extras.extend(_json_siblings(candidate))
-        if js_left and _is_javascript(response):
-            js_left -= 1
-            extras.extend(_spec_urls_in_text(response.text, str(response.url)))
+        batch = _claim(queue[index:index + min(MAX_CONCURRENT_PROBES, budget)], tried)
+        index += min(MAX_CONCURRENT_PROBES, budget)
         insert_at = index
-        for extra in _prefer_spec_files(extras):
-            if extra not in tried and extra not in queue:
-                queue.insert(insert_at, extra)
-                insert_at += 1
+        for candidate, (response, note) in zip(batch, pool.map(lambda item: _fetch(client, item), batch)):
+            if response is None:
+                notes.append((candidate, note))
+                continue
+            found = _spec_or_note(response, candidate, notes)
+            if found:
+                return found
+            extras = _candidates_from_response(response)
+            extras.extend(_json_siblings(candidate))
+            if js_left and _is_javascript(response):
+                js_left -= 1
+                extras.extend(_spec_urls_in_text(response.text, str(response.url)))
+            for extra in _prefer_spec_files(extras):
+                if extra not in tried and extra not in queue:
+                    queue.insert(insert_at, extra)
+                    insert_at += 1
     return None
+
+
+def _claim(candidates: Iterable[str], tried: Set[str]) -> List[str]:
+    """Absolute, untried candidates, marked as tried before the batch runs."""
+    claimed = []
+    for candidate in candidates:
+        absolute = candidate.split("#", 1)[0].rstrip()
+        if absolute and absolute not in tried:
+            tried.add(absolute)
+            claimed.append(absolute)
+    return claimed
 
 
 def _get(
-    client: httpx.Client, url: str, tried: Set[str], notes: List[tuple],
-) -> Optional[httpx.Response]:
-    absolute = url.split("#", 1)[0].rstrip()
-    if not absolute or absolute in tried:
+    client: httpx2.Client, url: str, tried: Set[str], notes: List[tuple],
+) -> Optional[httpx2.Response]:
+    claimed = _claim([url], tried)
+    if not claimed:
         return None
-    tried.add(absolute)
+    response, note = _fetch(client, claimed[0])
+    if response is None:
+        notes.append((claimed[0], note))
+    return response
+
+
+def _fetch(client: httpx2.Client, url: str) -> Tuple[Optional[httpx2.Response], str]:
+    """One size-limited GET. Transport failures become a note; policy rejections propagate."""
     try:
-        return client.get(absolute)
+        return read_limited(client, url), ""
     except TimeoutException:
-        notes.append((absolute, "timed out"))
+        return None, "timed out"
     except HTTPError as exc:
-        notes.append((absolute, f"request failed ({type(exc).__name__})"))
-    return None
+        return None, f"request failed ({type(exc).__name__})"
 
 
 def _spec_or_note(
-    response: httpx.Response, requested: str, notes: List[tuple],
+    response: httpx2.Response, requested: str, notes: List[tuple],
 ) -> Optional[Tuple[str, Dict[str, Any]]]:
     """Return ``(final_url, spec)``, or record why this response is not an OpenAPI document."""
     final = str(response.url).split("#", 1)[0]
@@ -229,7 +280,7 @@ def _spec_or_note(
     return None
 
 
-def _read_spec(response: httpx.Response) -> Tuple[Optional[Dict[str, Any]], str]:
+def _read_spec(response: httpx2.Response) -> Tuple[Optional[Dict[str, Any]], str]:
     """Parsed OpenAPI or Swagger document, or ``None`` and the reason the body is not one."""
     status = response.status_code
     if status >= 400:
@@ -261,7 +312,7 @@ def _parse_payload(text: str, content_type: str) -> Any:
     return None
 
 
-def _candidates_from_response(response: httpx.Response) -> List[str]:
+def _candidates_from_response(response: httpx2.Response) -> List[str]:
     base = str(response.url)
     found: List[str] = []
     found.extend(spec_urls_from_link_header(response.headers.get("link"), base))
@@ -321,7 +372,7 @@ def _spec_urls_in_text(text: str, base: str) -> List[str]:
     return [item for item in _unique(urls) if _looks_spec_url(item)]
 
 
-def _service_desc_from_linkset(response: httpx.Response) -> List[str]:
+def _service_desc_from_linkset(response: httpx2.Response) -> List[str]:
     """RFC 9727 API catalog: ``service-desc`` hrefs inside a linkset document."""
     ctype = (response.headers.get("content-type") or "").lower()
     data = _parse_payload(response.text or "", ctype)
@@ -363,7 +414,7 @@ def _json_siblings(url: str) -> List[str]:
     return [parsed._replace(path=json_path).geturl()]
 
 
-def _script_assets(response: httpx.Response) -> List[str]:
+def _script_assets(response: httpx2.Response) -> List[str]:
     if not _looks_markup(response):
         return []
     base = str(response.url)
@@ -425,7 +476,7 @@ def _looks_spec_url(url: str) -> bool:
     )
 
 
-def _looks_markup(response: httpx.Response) -> bool:
+def _looks_markup(response: httpx2.Response) -> bool:
     ctype = (response.headers.get("content-type") or "").lower()
     if "html" in ctype or "xml" in ctype:
         return True
@@ -433,7 +484,7 @@ def _looks_markup(response: httpx.Response) -> bool:
     return text.startswith("<!") or text.startswith("<html") or text.startswith("<HTML")
 
 
-def _is_javascript(response: httpx.Response) -> bool:
+def _is_javascript(response: httpx2.Response) -> bool:
     ctype = (response.headers.get("content-type") or "").lower()
     if "javascript" in ctype or "ecmascript" in ctype:
         return True

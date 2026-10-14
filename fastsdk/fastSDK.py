@@ -11,10 +11,15 @@ from fastsdk.service_interaction import ApiJobManager
 from fastsdk.service_interaction.provider_stack_registry import ProviderStackRegistry
 from fastsdk.service_specification_loader.spec_loader import _load_from_runpod_serverless_server, _load_from_file
 from fastsdk.service_specification_loader.openapi_discovery import load_openapi_from_url
+from fastsdk.service_specification_loader.inspect_policy import ProgressCallback, check_operation_count, report
+from fastsdk.service_specification_loader.mcp_loader import is_mcp_url, load_mcp_from_url
 from fastsdk.service_specification_loader.replicate_loader import parse_replicate_model_ref, load_replicate_service
+from socaity_schemas.public.spec.endpoint import ServiceContract
 
 from typing import Union, Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
+
+import httpx2
 
 if TYPE_CHECKING:
     from fastsdk.fastClient import FastClient
@@ -89,6 +94,9 @@ class FastSDK:
         provider: Optional[Provider] = None,
         service_id: Optional[str] = None,
         slug: Optional[str] = None,
+        public_only: bool = False,
+        on_progress: Optional[ProgressCallback] = None,
+        auth: Optional[httpx2.Auth] = None,
     ) -> Service:
         """
         Load and parse a service into an Service without adding it to the registry.
@@ -96,28 +104,46 @@ class FastSDK:
         Args:
             spec_source: What to inspect. Can be:
                 - a URL ("http://localhost:8009", an openapi.json URL, a RunPod endpoint URL)
+                - an MCP endpoint ("https://mcp.example.com/mcp" or "mcp://..."; needs ``fastsdk[mcp]``)
                 - a Replicate model reference ("replicate:owner/name", "https://replicate.com/owner/name", "owner/name")
                 - a file path to an openapi.json
                 - an already loaded spec dict or an Service
-            api_key: Required for RunPod and Replicate sources, optional for others
+            api_key: Required for RunPod and Replicate sources; the bearer token for protected MCP servers
             provider: Hosting provider override; inferred from the address when omitted
             service_id: Service id override; generated when omitted
             slug: Service slug override; derived from the spec title when omitted
+            public_only: Reject URLs that resolve to non-public addresses. Servers that inspect
+                user-supplied URLs set this; local development leaves it off.
+            on_progress: Receives ``(stage, message)`` for ``discover``, ``fetch`` and ``parse``.
+            auth: ``httpx2.Auth`` for MCP sessions, e.g. the MCP SDK's ``OAuthClientProvider``.
 
         Returns:
             Service with one details binding carrying the parsed ServiceContract.
+
+        Raises:
+            InspectRejected: Document over 15 MB, contract over 500 operations, or a blocked URL.
+            MCPAuthRequired: The MCP server needs a credential (``code="auth_required"``).
         """
         if isinstance(spec_source, Service):
             return spec_source
 
         if isinstance(spec_source, dict):
-            contract = materialize_contract(spec_source, provider=provider)
+            contract = _parse(spec_source, provider, "the document", on_progress)
             return create_service(contract, provider=provider, service_id=service_id, slug=slug)
 
         if isinstance(spec_source, Path):
-            spec = _load_from_file(spec_source)
-            contract = materialize_contract(spec, provider=provider)
+            contract = _parse(_load_from_file(spec_source), provider, str(spec_source), on_progress)
             return create_service(contract, provider=provider, service_id=service_id, slug=slug)
+
+        if isinstance(spec_source, str) and is_mcp_url(spec_source):
+            spec_url, loaded_spec = load_mcp_from_url(
+                spec_source, api_key=api_key, public_only=public_only, on_progress=on_progress, auth=auth,
+            )
+            contract = _parse(loaded_spec, provider, spec_url, on_progress)
+            address = parse_address(spec_url, provider="other")
+            service = create_service(contract, address=address, provider="other", service_id=service_id, slug=slug)
+            primary_details(service).spec_url = spec_url
+            return service
 
         if isinstance(spec_source, str) and "http" not in spec_source:
             # example black-forest-labs/flux-schnell:version
@@ -125,8 +151,7 @@ class FastSDK:
             if ref:
                 return load_replicate_service(ref, api_key=api_key)
             # probably is a file path
-            spec = _load_from_file(spec_source)
-            contract = materialize_contract(spec, provider=provider)
+            contract = _parse(_load_from_file(spec_source), provider, spec_source, on_progress)
             return create_service(contract, provider=provider, service_id=service_id, slug=slug)
 
         # Load from deployed service with address
@@ -136,11 +161,13 @@ class FastSDK:
         if provider == "runpod":
             loaded_spec = _load_from_runpod_serverless_server(spec_source, api_key=api_key)
         else:
-            spec_url, loaded_spec = load_openapi_from_url(service_url(address), timeout=8)
+            spec_url, loaded_spec = load_openapi_from_url(
+                service_url(address), timeout=8, public_only=public_only, on_progress=on_progress,
+            )
 
-        contract = materialize_contract(loaded_spec, provider=provider)
+        contract = _parse(loaded_spec, provider, spec_url or spec_source, on_progress)
         service = create_service(contract, address=address, provider=provider, service_id=service_id, slug=slug)
-        service.details[0].spec_url = spec_url
+        primary_details(service).spec_url = spec_url
         return service
 
     @staticmethod
@@ -262,7 +289,17 @@ class FastSDK:
             **kwargs: Additional arguments for service loading
 
         Returns:
-            FastClient. Call endpoints via client.submit_job("/endpoint", **params).
+            FastClient. Call operations via client.submit_job("operation-key", **params).
         """
         from fastsdk.fastClient import FastClient
         return FastClient(source, api_key=api_key, temporary=True, **kwargs)
+
+
+def _parse(
+    spec: Dict[str, Any], provider: Optional[Provider], source: str, on_progress: Optional[ProgressCallback],
+) -> ServiceContract:
+    """Materialize the contract and enforce the operation cap."""
+    report(on_progress, "parse", f"Parsing {source}")
+    contract = materialize_contract(spec, provider=provider)
+    check_operation_count(len(contract.endpoints), source)
+    return contract

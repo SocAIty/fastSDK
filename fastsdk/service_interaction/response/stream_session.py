@@ -1,6 +1,6 @@
-"""Bridge a live async httpx response into sync (and async) iteration.
+"""Bridge a live async httpx2 response into sync (and async) iteration.
 
-The httpx response is created and owned by meseex's event loop, which runs in a
+The httpx2 response is created and owned by meseex's event loop, which runs in a
 dedicated background thread. Iterating it from the caller's thread directly would
 touch the response from the wrong loop. ``StreamSession`` solves this with a
 single-producer/single-consumer hand-off: a producer coroutine scheduled on the
@@ -17,17 +17,22 @@ import asyncio
 import queue
 from typing import Any, AsyncIterator, Callable, Iterator, Optional
 
-import httpx
+import httpx2
 
 from fastsdk.service_interaction.response.sse_assembly import chunk_text
-from fastsdk.service_interaction.response.sse_records import aiter_sse_records, decode_sse_data, encode_sse_data
+from fastsdk.service_interaction.response.sse_records import (
+    OUTPUT_EVENT,
+    decode_sse_data,
+    encode_sse_data,
+    sse_events,
+)
 
 
 class StreamSession:
     """One open streaming response, consumable exactly once.
 
     Args:
-        response: An open httpx response (sent with ``stream=True``), or ``None`` for a push-fed session.
+        response: An open httpx2 response (sent with ``stream=True``), or ``None`` for a push-fed session.
         loop: The asyncio loop that owns the response (meseex's background loop).
         parse_chunk: Optional callable applied to each decoded SSE JSON object.
         content_type: Override for the response content type (else read from headers).
@@ -37,7 +42,7 @@ class StreamSession:
 
     def __init__(
         self,
-        response: Optional[httpx.Response],
+        response: Optional[httpx2.Response],
         loop: asyncio.AbstractEventLoop,
         parse_chunk: Optional[Callable[[Any], Any]] = None,
         content_type: Optional[str] = None,
@@ -102,9 +107,9 @@ class StreamSession:
     async def _produce_sse(self):
         error = None
         try:
-            async for event, data in aiter_sse_records(self._response.aiter_lines()):
-                if event is None:
-                    self.feed(data)
+            async for sse in sse_events(self._response):
+                if sse.event == OUTPUT_EVENT:
+                    self.feed(sse.data)
         except BaseException as e:
             error = e
         finally:

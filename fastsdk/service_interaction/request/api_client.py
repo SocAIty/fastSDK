@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, Union
 import json
-import httpx
-from urllib.parse import quote, urlencode
+import httpx2
+from urllib.parse import quote
 
 from socaity_schemas.public.spec.endpoint import Endpoint
 from socaity_schemas.public.spec.address import (
@@ -35,6 +35,7 @@ class RequestData:
         url: str = "",
         body_content_type: Optional[str] = None,
         method: str = "POST",
+        endpoint: Optional[Endpoint] = None,
     ):
         self.query_params = query_params or {}
         self.body_params = body_params or {}
@@ -43,6 +44,7 @@ class RequestData:
         self.url = url
         self.body_content_type = body_content_type
         self.method = method
+        self.endpoint = endpoint
 
 
 class APIClient:
@@ -108,9 +110,9 @@ class APIClient:
     # ------------------------------------------------------------------
 
     @property
-    def client(self) -> httpx.AsyncClient:
+    def client(self) -> httpx2.AsyncClient:
         if self.__client is None or self.__client.is_closed:
-            self.__client = httpx.AsyncClient()
+            self.__client = httpx2.AsyncClient()
         return self.__client
 
     def validate_api_key(self) -> bool:
@@ -135,6 +137,7 @@ class APIClient:
         headers: Optional[Dict[str, str]] = None,
         query_params: Optional[Dict[str, Any]] = None,
         endpoint: Optional[Endpoint] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Dict[str, str]:
         """Place credentials where the spec's ``securitySchemes`` say they go.
 
@@ -142,6 +145,9 @@ class APIClient:
         use a bearer token. Everything else is driven by the scheme type: http
         bearer/basic, apiKey in header, query or cookie, oauth2/openIdConnect as
         bearer. Query placement mutates ``query_params`` in place.
+
+        Args:
+            credentials: Per-job secrets by scheme name; they win over the client's own.
         """
         headers = headers if headers is not None else {}
         schemes = self._required_schemes(endpoint)
@@ -151,8 +157,9 @@ class APIClient:
             return headers
 
         definitions = primary_details(self.service).contract.security_schemes
+        secrets = {**self.credentials, **(credentials or {})}
         for name in schemes:
-            secret = self.credentials.get(name) or self.api_key
+            secret = secrets.get(name) or self.api_key
             if not secret:
                 continue
             scheme = definitions.get(name, {})
@@ -174,14 +181,10 @@ class APIClient:
     def _build_request_url(self, endpoint: Endpoint, query_params: Dict = None, path_params: Dict = None) -> str:
         if not self.address:
             return None
-        path = endpoint.path
+        path = endpoint.path or ""
         for name, value in (path_params or {}).items():
             path = path.replace("{" + name + "}", quote(str(value), safe=""))
-        base_url = endpoint_url(self.address, path)
-        if query_params:
-            query_string = urlencode(query_params, doseq=True)
-            return f"{base_url}?{query_string}"
-        return base_url
+        return endpoint_url(self.address, path)
 
     @classmethod
     def _param_has_file_format(cls, param) -> bool:
@@ -296,19 +299,16 @@ class APIClient:
         """Prepare all request parameters for the endpoint."""
         body_content_type = getattr(endpoint, "request_body_content_type", None)
 
-        if not data:
-            rq = RequestData(body_content_type=body_content_type, method=endpoint.method)
-            rq.headers = self.apply_auth(query_params=rq.query_params, endpoint=endpoint)
-            rq.url = self._build_request_url(endpoint, rq.query_params)
-            return rq
-
-        if not isinstance(data, dict):
+        if data is None:
+            data = {}
+        elif not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
 
-        rq = RequestData(body_content_type=body_content_type, method=endpoint.method)
+        rq = RequestData(body_content_type=body_content_type, method=endpoint.method, endpoint=endpoint)
         path_params: Dict[str, Any] = {}
         embed_files_in_json_body = self._uses_json_request_body(endpoint)
         body_params = [p for p in endpoint.parameters if p.location == "body"]
+        non_body_names = {p.name for p in endpoint.parameters if p.location != "body"}
         # Sole JSON object body (e.g. ChatCompletionRequest as ``request``):
         # spread model fields onto the wire root. Callers still pass request={...}.
         single_json_object_body = (
@@ -319,6 +319,23 @@ class APIClient:
 
         for param in endpoint.parameters:
             param_value = data.get(param.name, param.default)
+            if (
+                single_json_object_body
+                and param.location == "body"
+                and param.name == body_params[0].name
+                and param_value is None
+            ):
+                for alias in ("body", "request"):
+                    if alias in data and alias not in non_body_names and isinstance(data[alias], dict):
+                        param_value = data[alias]
+                        break
+                if param_value is None:
+                    props = (param.param_schema or {}).get("properties") if isinstance(param.param_schema, dict) else None
+                    if isinstance(props, dict) and props:
+                        inferred = {k: v for k, v in data.items() if k in props and k not in non_body_names}
+                        if inferred:
+                            param_value = inferred
+
             if param_value is None and param.required:
                 raise ValueError(f"Required parameter '{param.name}' is missing")
 
@@ -354,7 +371,8 @@ class APIClient:
                 if param_value is not None:
                     rq.query_params[param.name] = param_value
             elif param.location == "path":
-                path_params[param.name] = param_value
+                if param_value is not None:
+                    path_params[param.name] = param_value
             elif param.location == "header":
                 if param_value is not None:
                     rq.headers[param.name] = str(param_value)
@@ -380,7 +398,7 @@ class APIClient:
         rq.url = self._build_request_url(endpoint, rq.query_params, path_params)
         return rq
 
-    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx.Response:
+    async def send_request(self, request_data: RequestData, timeout_s: float = 60) -> httpx2.Response:
         """Send the prepared request to the API with streaming support."""
         kwargs = {
             "url": request_data.url,
@@ -417,7 +435,7 @@ class APIClient:
         files: Optional[Dict[str, Any]] = None,
         timeout: Optional[Union[float, httpx.Timeout]] = None,
         **kwargs,
-    ) -> httpx.Response:
+    ) -> httpx2.Response:
         """Submit a direct URL request with streaming support."""
         if not self.address:
             raise ValueError("Service address is required to request a relative URL")
@@ -436,13 +454,13 @@ class APIClient:
         )
         return await self.client.send(request, stream=True)
 
-    async def poll_status(self, response) -> httpx.Response:
+    async def poll_status(self, response) -> httpx2.Response:
         url = self.get_poll_url(response)
         if not url:
             raise ValueError("No polling URL available for this response")
         return await self.request_url(url=url, method=self.poll_method)
 
-    async def cancel_job(self, response, action: Optional[str] = None) -> httpx.Response:
+    async def cancel_job(self, response, action: Optional[str] = None) -> httpx2.Response:
         """Cancel a job. ``action`` (``cancel`` | ``interrupt``) is a Socaity/APIPod
         query parameter; ``interrupt`` keeps a resumable checkpoint on agent jobs."""
         url = self.get_cancel_url(response)
@@ -451,10 +469,10 @@ class APIClient:
         params = {"action": action} if action else None
         return await self.request_url(url=url, method=self.cancel_method, params=params)
 
-    async def open_stream(self, response, timeout_s: Optional[float] = None) -> httpx.Response:
+    async def open_stream(self, response, timeout_s: Optional[float] = None) -> httpx2.Response:
         """Open the provider's live output stream for an in-progress job.
 
-        Returns an open (streaming) httpx response. The caller owns closing it.
+        Returns an open (streaming) httpx2 response. The caller owns closing it.
         ``timeout_s`` is the idle read timeout (the endpoint hint). Connect, write,
         and pool stay short so a dead peer does not wait out the whole job.
         """
@@ -462,5 +480,5 @@ class APIClient:
         if not url:
             raise ValueError("No stream URL available for this response")
         read_s = float(timeout_s) if timeout_s else 60.0
-        timeout = httpx.Timeout(connect=10.0, read=read_s, write=10.0, pool=10.0)
+        timeout = httpx2.Timeout(connect=10.0, read=read_s, write=10.0, pool=10.0)
         return await self.request_url(url=url, method="GET", timeout=timeout)
