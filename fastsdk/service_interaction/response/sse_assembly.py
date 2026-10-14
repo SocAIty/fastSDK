@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from media_toolkit import AudioFile, ImageFile, MediaFile, VideoFile, media_from_any
 
-from fastsdk.service_interaction.response.sse_records import iter_sse_records
+from fastsdk.service_interaction.response.sse_records import OUTPUT_EVENT, iter_buffered_events
 
 _BASE64_CHARSET = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
 
@@ -75,8 +75,9 @@ def assemble_sse_bytes(data: bytes) -> Optional[Any]:
     binary_chunks: list[bytes] = []
     text_payloads: list[str] = []
 
-    for event, payload in iter_sse_records(lines):
-        if event or payload == "[DONE]":
+    for sse in iter_buffered_events(data):
+        payload = sse.data
+        if sse.event != OUTPUT_EVENT or payload == "[DONE]":
             continue
         if payload.startswith("{"):
             json_payloads.append(payload)

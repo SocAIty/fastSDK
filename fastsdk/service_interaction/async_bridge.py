@@ -1,7 +1,7 @@
 """Single async->sync bridge over the meseex event loop.
 
 The meseex task executor owns one asyncio loop in a background thread. Every
-httpx response in fastsdk is created on that loop, so any follow-up coroutine
+httpx2 response in fastsdk is created on that loop, so any follow-up coroutine
 (poll, cancel, open stream, close) must run on the same loop. ``AsyncBridge`` is
 the only place that crosses the sync/async boundary: it schedules a coroutine on
 the loop and blocks on a ``concurrent.futures.Future`` with a timeout. Runtime
@@ -27,7 +27,7 @@ class AsyncBridge:
 
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
-        """The running meseex loop. Owns every httpx response fastsdk creates."""
+        """The running meseex loop. Owns every httpx2 response fastsdk creates."""
         self._async_executor._ensure_event_loop_running()
         return self._async_executor.loop
 

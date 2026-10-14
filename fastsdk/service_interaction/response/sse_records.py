@@ -1,57 +1,32 @@
-"""SSE wire format: fold ``text/event-stream`` lines into ``(event, data)`` records.
+"""SSE helpers on top of ``httpx2.EventSource``.
 
 The Socaity gateway multiplexes two record kinds on one response: named ``event: job``
-status snapshots and unnamed ``data:`` output frames. Every reader goes through this
-parser so named records never leak into token output.
+status snapshots and unnamed ``data:`` output frames. Unnamed frames carry the SSE
+default name ``message``; every reader filters on it so named records never leak
+into token output.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterable, AsyncIterator, Iterable, Iterator, Optional, Tuple
+from typing import Any, Iterator
 
-SseRecord = Tuple[Optional[str], str]
+import httpx2
 
+OUTPUT_EVENT = "message"
 
-class SseRecordParser:
-    """Accumulate lines; a blank line dispatches the record. Comments and ``id:`` are ignored."""
-
-    def __init__(self) -> None:
-        self._event: Optional[str] = None
-        self._data: list[str] = []
-
-    def feed(self, line: str) -> Optional[SseRecord]:
-        line = line.rstrip("\r")
-        if not line:
-            return self.flush()
-        if line.startswith("event:"):
-            self._event = line[6:].strip()
-        elif line.startswith("data:"):
-            self._data.append(line[5:].strip())
-        return None
-
-    def flush(self) -> Optional[SseRecord]:
-        record = (self._event or None, "\n".join(self._data)) if self._data else None
-        self._event, self._data = None, []
-        return record
+_SSE_HEADERS = {"content-type": "text/event-stream"}
 
 
-def iter_sse_records(lines: Iterable[str]) -> Iterator[SseRecord]:
-    parser = SseRecordParser()
-    for line in lines:
-        if record := parser.feed(line):
-            yield record
-    if record := parser.flush():
-        yield record
+def sse_events(response: httpx2.Response) -> httpx2.EventSource:
+    """Event source without a per-event cap: media frames carry base64 bodies above httpx2's 1 MiB default."""
+    return httpx2.EventSource(response, max_event_size=None)
 
 
-async def aiter_sse_records(lines: AsyncIterable[str]) -> AsyncIterator[SseRecord]:
-    parser = SseRecordParser()
-    async for line in lines:
-        if record := parser.feed(line):
-            yield record
-    if record := parser.flush():
-        yield record
+def iter_buffered_events(data: bytes) -> Iterator[httpx2.ServerSentEvent]:
+    """Decode a fully buffered SSE body with the same parser as live responses."""
+    request = httpx2.Request("GET", "http://buffered.sse")
+    return iter(sse_events(httpx2.Response(200, headers=_SSE_HEADERS, content=data, request=request)))
 
 
 def decode_sse_data(data: str) -> Any:

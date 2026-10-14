@@ -1,10 +1,12 @@
+from typing import Dict, Optional
+
 from apipod_registry.registry import Registry
 from socaity_schemas.public.providers import (
     JobLinks,
     SocaityJobResponse,
 )
 
-from fastsdk.service_access import service_contract
+from fastsdk.service_access import service_contract, service_provider
 from fastsdk.service_interaction.api_seex import APISeex
 from fastsdk.service_interaction.job_runtime import JobRuntime
 from fastsdk.service_interaction.async_bridge import AsyncBridge
@@ -41,22 +43,31 @@ class ApiJobManager:
     def submit_job(
         self,
         service_id: str,
-        endpoint_id: str,
+        operation: Optional[str],
         data: dict,
         api_key: str = None,
         materialize_media: bool = True,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> APISeex:
+        """Submit one operation call.
+
+        Args:
+            credentials: Secrets for this job by security scheme name. An entry named after a
+                preset provider (``replicate``, ``runpod``, ``socaity``) replaces ``api_key`` as
+                that provider's bearer, so one host can run jobs on behalf of several accounts.
+        """
         service = self.service_registry.get_service(service_id)
         if not service:
             raise ValueError(f"Service {service_id} not found")
 
-        endpoint = self.service_registry.get_endpoint(service_id, endpoint_id)
+        endpoint = self.service_registry.get_operation(service_id, operation)
         if not endpoint:
-            raise ValueError(f"Endpoint {endpoint_id} not found in service {service_id}")
+            raise ValueError(f"Operation '{operation}' not found in service {service_id}")
 
-        stack = self.stacks.ensure(service_id, api_key)
+        credentials = credentials or {}
+        stack = self.stacks.ensure(service_id, credentials.get(service_provider(service)) or api_key)
         tasks = PipelinePlanner.plan(service, endpoint, stack)
-        seex_name = f"{service.display_name}.{endpoint.path}"
+        seex_name = f"{service.display_name}.{endpoint.operation_key}"
 
         job = APISeex(
             service=service,
@@ -66,6 +77,7 @@ class ApiJobManager:
             name=seex_name,
             stack=stack,
             materialize_media=materialize_media,
+            credentials=credentials,
         )
         return self._wire(job, stack)
 
@@ -91,12 +103,10 @@ class ApiJobManager:
         if not service:
             raise ValueError(f"Service {service_id} not found")
 
-        endpoint = self.service_registry.get_endpoint(service_id, f"/status/{job_id}")
-        if endpoint is None:
-            endpoints = service_contract(service).endpoints
-            if not endpoints:
-                raise ValueError(f"Service {service_id} has no endpoints to attach a job")
-            endpoint = endpoints[0]
+        endpoints = service_contract(service).endpoints
+        if not endpoints:
+            raise ValueError(f"Service {service_id} has no endpoints to attach a job")
+        endpoint = endpoints[0]
 
         stack = self.stacks.ensure(service_id, api_key)
         envelope = SocaityJobResponse(

@@ -1,9 +1,9 @@
-"""Build provider-specific client, file handler, and parser stacks."""
+"""Build provider-specific client, file handler, parser and transport stacks."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Union
 
 from socaity_schemas.platform.catalog.service import Service
 from fastCloud import ReplicateUploadAPI
@@ -18,6 +18,9 @@ from fastsdk.service_interaction.request import (
 from fastsdk.service_interaction.request.api_client_runpod import APIClientRunpodApipod
 from fastsdk.service_interaction.request.file_handler import FileHandler
 from fastsdk.service_interaction.response.response_parser import ResponseParser
+from fastsdk.service_interaction.transports import HttpTransport, MCPTransport
+
+Transport = Union[HttpTransport, MCPTransport]
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,7 @@ class ProviderStack:
     api_client: APIClient
     file_handler: FileHandler
     parser: ResponseParser
+    transport: Transport
 
 
 class ProviderFactory:
@@ -42,6 +46,8 @@ class ProviderFactory:
         "apipod": APIClientSocaity,
         "replicate": APIClientReplicate,
     }
+    _HTTP_TRANSPORT = HttpTransport()
+    _TRANSPORTS: Dict[str, Transport] = {"mcp": MCPTransport()}
 
     def __init__(self):
         self._parser_cache: Dict[str, ResponseParser] = {}
@@ -52,10 +58,13 @@ class ProviderFactory:
         provider = service_provider(service)
         specification = service_contract(service).specification
 
-        if provider == "runpod":
-            return "apipod-serverless-runpod" if specification == "apipod" else "runpod"
+        # The Socaity gate speaks its job API for every contract, MCP included.
         if provider == "socaity":
             return "socaity"
+        if specification == "mcp":
+            return "mcp"
+        if provider == "runpod":
+            return "apipod-serverless-runpod" if specification == "apipod" else "runpod"
         if provider == "replicate":
             return "replicate"
         if specification == "apipod":
@@ -103,4 +112,5 @@ class ProviderFactory:
             api_client=api_client,
             file_handler=file_handler,
             parser=parser,
+            transport=self._TRANSPORTS.get(provider_type, self._HTTP_TRANSPORT),
         )
