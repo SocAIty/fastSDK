@@ -1,9 +1,15 @@
+import re
 from typing import Any, Optional
 
 import httpx2
 from fastsdk.service_interaction.request.api_client import APIClient, APIKeyError, RequestData
+from socaity_schemas.platform.catalog.hosting import REPLICATE_VERSION_PATTERN
 from socaity_schemas.public.spec.endpoint import Endpoint
-from socaity_schemas.public.spec.address import service_url
+from socaity_schemas.public.spec.address import normalize_path, service_url
+
+# Pinned (community) models are called here with the version in the body.
+PREDICTIONS_PATH = "v1/predictions"
+_VERSION = re.compile(REPLICATE_VERSION_PATTERN)
 
 
 class APIClientReplicate(APIClient):
@@ -54,11 +60,15 @@ class APIClientReplicate(APIClient):
         body = {k: v for k, v in request_data.body_params.items() if v is not None}
         # replicate formats the body as json with {"input": body_params, "version?": model_version}
         body = {"input": body}
-        # Add version parameter for community models to get params to make predictions
-        if request_data.url and "/predictions" in request_data.url:
+        # Official models carry the model in the URL; pinned models name the version in the body.
+        if normalize_path(self.address.path) == PREDICTIONS_PATH:
             version = getattr(self.address, "version", None)
-            if version:
-                body["version"] = version
+            if not version or not _VERSION.fullmatch(version):
+                raise ValueError(
+                    "Replicate prediction needs the model version (64 lowercase hex characters); "
+                    "the service address has none or an invalid one."
+                )
+            body["version"] = version
 
         request_data.body_params = body
 
