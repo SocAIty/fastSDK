@@ -12,11 +12,16 @@ from socaity_schemas.public.spec.endpoint import ServiceContract
 from socaity_schemas.platform.catalog.hosting import (
     Deployment,
     Provider,
+    RunpodRuntime,
 )
 from socaity_schemas.platform.catalog.service import (
     Service,
     ServiceDetails,
 )
+
+# Vault slot of Runpod Public Endpoint keys. RUNPOD_API_KEY provisions Socaity-hosted
+# Runpod services and must never reach a Public Endpoint.
+RUNPOD_PUBLIC_CREDENTIAL = "runpod-public"
 
 
 def primary_details(service: Service) -> ServiceDetails:
@@ -79,6 +84,21 @@ def service_address(service: Service) -> Optional[ServiceAddress]:
 
 def service_provider(service: Service) -> Provider:
     return details_provider(primary_details(service))
+
+
+def is_runpod_public_endpoint(service: Service) -> bool:
+    """A Runpod deployment whose provider_config names the Public Endpoint runtime."""
+    deployment = primary_details(service).deployment
+    if deployment is None or deployment.provider != "runpod" or deployment.provider_config is None:
+        return False
+    return isinstance(deployment.provider_config.runtime, RunpodRuntime)
+
+
+def service_credential_name(service: Service) -> str:
+    """Credential slot whose secret is the provider bearer for this service."""
+    if is_runpod_public_endpoint(service):
+        return RUNPOD_PUBLIC_CREDENTIAL
+    return service_provider(service)
 
 
 def needs_polling(service: Service) -> bool:

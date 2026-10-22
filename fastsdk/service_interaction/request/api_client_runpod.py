@@ -106,6 +106,47 @@ class APIClientRunpod(APIClient):
         )
 
 
+class APIClientRunpodPublic(APIClientRunpod):
+    """Runpod Public Endpoint: ``POST /run`` with the model input, then ``GET /status/{id}``.
+
+    The contract describes the model input itself, so no APIPod ``path`` is added.
+    The key is the job's ``runpod-public`` credential. It is required on any host.
+    """
+
+    # A generic contract (no reviewed manifest) takes the whole job input as one ``input`` object.
+    GENERIC_INPUT_PARAM = "input"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.poll_method = "GET"
+
+    def validate_api_key(self) -> bool:
+        if self.api_key is None:
+            raise APIKeyError(
+                "A runpod-public credential is required for Runpod Public Endpoints.",
+                "runpod_public",
+                "https://www.runpod.io/",
+            )
+        if not self.api_key.startswith("rpa_"):
+            raise APIKeyError("Invalid API key. It should look like 'rpa_...'. ", "runpod_public", "https://www.runpod.io/")
+        return True
+
+    def get_stream_url(self, response) -> Optional[str]:
+        return None
+
+    def format_request_params(self, endpoint: Endpoint, *args, **kwargs) -> RequestData:
+        request_data = APIClient.format_request_params(self, endpoint, *args, **kwargs)
+        body_defs = [p for p in (endpoint.parameters or []) if p.location == "body"]
+        whole_input = request_data.body_params.get(self.GENERIC_INPUT_PARAM)
+        if (
+            len(body_defs) == 1
+            and body_defs[0].name == self.GENERIC_INPUT_PARAM
+            and isinstance(whole_input, dict)
+        ):
+            request_data.body_params = dict(whole_input)
+        return request_data
+
+
 class APIClientRunpodApipod(APIClientRunpod):
     """Runpod transport for initial request, Socaity-style polling once
     the nested APIPod payload appears in the output.
