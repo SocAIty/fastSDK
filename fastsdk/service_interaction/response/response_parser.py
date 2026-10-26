@@ -97,6 +97,23 @@ def _parse_media_replicate(result: Any, materialize: bool = True) -> Any:
     return result
 
 
+def _parse_media_runpod_public(result: Any, materialize: bool = True) -> Any:
+    """Public Endpoints return generated media as an expiring URL under ``result``, beside ``cost``."""
+    if isinstance(result, list):
+        return [_parse_media_runpod_public(item, materialize) for item in result]
+    if not isinstance(result, dict):
+        return result
+    url = result.get("result")
+    if not isinstance(url, str) or not url.startswith("https://"):
+        return result
+    if not materialize:
+        return {**result, "result": {"url": url, "content": url}}
+    try:
+        return {**result, "result": media_from_any(url, allow_reads_from_disk=False)}
+    except Exception:
+        return result
+
+
 # ---------------------------------------------------------------------------
 # JSON → model parse functions (pure, stateless)
 # ---------------------------------------------------------------------------
@@ -121,6 +138,22 @@ def _parse_socaity(data: dict, parse_media: bool, materialize_media: bool = True
 def _parse_runpod(data: dict, parse_media: bool, materialize_media: bool = True) -> Union[RunpodJobResponse, dict]:
     if "id" not in data or "status" not in data:
         return data
+    return RunpodJobResponse(**data)
+
+
+_PROVIDER_ERROR_MAX_CHARS = 500
+
+
+def _parse_runpod_public(data: dict, parse_media: bool, materialize_media: bool = True) -> Union[RunpodJobResponse, dict]:
+    """A failed Public Endpoint job echoes the model input in ``error``, so the error is bounded."""
+    if "id" not in data or "status" not in data:
+        return data
+    error = data.get("error")
+    if error is not None:
+        text = error if isinstance(error, str) else json.dumps(error, default=str)
+        if len(text) > _PROVIDER_ERROR_MAX_CHARS:
+            text = text[: _PROVIDER_ERROR_MAX_CHARS - 1] + "…"
+        data = {**data, "error": text}
     return RunpodJobResponse(**data)
 
 
@@ -210,6 +243,7 @@ _JSON_PARSERS: dict[str, Callable] = {
     "socaity": _parse_socaity,
     "apipod": _parse_socaity,
     "runpod": _parse_runpod,
+    "runpod-public": _parse_runpod_public,
     "replicate": _parse_replicate,
     "apipod-serverless-runpod": _parse_apipod_serverless_runpod,
 }
@@ -217,6 +251,7 @@ _JSON_PARSERS: dict[str, Callable] = {
 _MEDIA_PARSERS: dict[str, Callable] = {
     "socaity": _parse_media_socaity,
     "apipod": _parse_media_socaity,
+    "runpod-public": _parse_media_runpod_public,
     "replicate": _parse_media_replicate,
     "apipod-serverless-runpod": _parse_media_socaity,
 }
