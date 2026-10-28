@@ -19,8 +19,8 @@ dependencies = [
     "meseex>=0.0.11",
     "media-toolkit>=00.02.24",
     "fastcloud>=0.0.14",
-	"apipod-registry>=0.1.11",
-    "socaity-schemas>=0.1.11",
+	"apipod-registry>=0.1.13",
+    "socaity-schemas>=0.1.13",
 ]
 
 [project.optional-dependencies]

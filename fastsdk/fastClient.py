@@ -5,7 +5,7 @@ import os
 from socaity_schemas.platform.catalog.service import Service
 from socaity_schemas.platform.catalog.pricing import PriceEstimate
 from fastsdk.fastSDK import FastSDK
-from fastsdk.service_access import service_provider
+from fastsdk.service_access import RUNPOD_PUBLIC_CREDENTIAL, service_credential_name
 
 
 if TYPE_CHECKING:
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 _PROVIDER_API_KEY_ENV = {
     "socaity": "SOCAITY_API_KEY",
     "runpod": "RUNPOD_API_KEY",
+    RUNPOD_PUBLIC_CREDENTIAL: "RUNPOD_PUBLIC_API_KEY",
     "replicate": "REPLICATE_API_KEY",
 }
 
@@ -49,6 +50,7 @@ class FastClient:
                 a spec dict, an Service or a Replicate model reference.
             api_key: Optional API key for the service. If not provided, it is looked up in
                 the environment variables (e.g. REPLICATE_API_KEY, RUNPOD_API_KEY, <SERVICE_ID>_API_KEY).
+                Runpod Public Endpoints read RUNPOD_PUBLIC_API_KEY, never RUNPOD_API_KEY.
             temporary: If True, the service is removed from the registry when the client is deleted.
             service_name_or_id: Strict registry lookup by ID/name.
                 Raises if the service is not registered.
@@ -91,7 +93,7 @@ class FastClient:
         return self.fsdk.register_service(service, api_key=api_key, update_existing=not self.temporary, **load_kwargs)
 
     def _get_api_key(self):
-        env_var = _PROVIDER_API_KEY_ENV.get(service_provider(self.service))
+        env_var = _PROVIDER_API_KEY_ENV.get(service_credential_name(self.service))
         if env_var:
             return os.getenv(env_var, None)
         return os.getenv(self.service.id.upper() + "_API_KEY", None)

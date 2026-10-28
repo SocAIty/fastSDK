@@ -6,7 +6,7 @@ from socaity_schemas.public.providers import (
     SocaityJobResponse,
 )
 
-from fastsdk.service_access import service_contract, service_provider
+from fastsdk.service_access import RUNPOD_PUBLIC_CREDENTIAL, service_contract, service_credential_name
 from fastsdk.service_interaction.api_seex import APISeex
 from fastsdk.service_interaction.job_runtime import JobRuntime
 from fastsdk.service_interaction.async_bridge import AsyncBridge
@@ -55,6 +55,7 @@ class ApiJobManager:
             credentials: Secrets for this job by security scheme name. An entry named after a
                 preset provider (``replicate``, ``runpod``, ``socaity``) replaces ``api_key`` as
                 that provider's bearer, so one host can run jobs on behalf of several accounts.
+                Runpod Public Endpoints read ``runpod-public`` instead of ``runpod``.
         """
         service = self.service_registry.get_service(service_id)
         if not service:
@@ -65,7 +66,14 @@ class ApiJobManager:
             raise ValueError(f"Operation '{operation}' not found in service {service_id}")
 
         credentials = credentials or {}
-        stack = self.stacks.ensure(service_id, credentials.get(service_provider(service)) or api_key)
+        credential_name = service_credential_name(service)
+        # A Public Endpoint key on a service that resolves to Socaity-hosted Runpod means the
+        # runtime was lost on the way. Falling back to api_key would bill the infra account.
+        if credential_name == "runpod" and RUNPOD_PUBLIC_CREDENTIAL in credentials and "runpod" not in credentials:
+            raise ValueError(
+                f"Service {service_id} has a {RUNPOD_PUBLIC_CREDENTIAL} credential but no Runpod Public Endpoint runtime"
+            )
+        stack = self.stacks.ensure(service_id, credentials.get(credential_name) or api_key)
         tasks = PipelinePlanner.plan(service, endpoint, stack)
         seex_name = f"{service.display_name}.{endpoint.operation_key}"
 

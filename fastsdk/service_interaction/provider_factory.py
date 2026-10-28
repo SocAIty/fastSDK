@@ -8,14 +8,19 @@ from typing import Dict, Union
 from socaity_schemas.platform.catalog.service import Service
 from fastCloud import ReplicateUploadAPI
 
-from fastsdk.service_access import service_address, service_contract, service_provider
+from fastsdk.service_access import (
+    is_runpod_public_endpoint,
+    service_address,
+    service_contract,
+    service_provider,
+)
 from fastsdk.service_interaction.request import (
     APIClient,
     APIClientReplicate,
     APIClientRunpod,
     APIClientSocaity,
 )
-from fastsdk.service_interaction.request.api_client_runpod import APIClientRunpodApipod
+from fastsdk.service_interaction.request.api_client_runpod import APIClientRunpodApipod, APIClientRunpodPublic
 from fastsdk.service_interaction.request.file_handler import FileHandler
 from fastsdk.service_interaction.response.response_parser import ResponseParser
 from fastsdk.service_interaction.transports import HttpTransport, MCPTransport
@@ -39,6 +44,7 @@ class ProviderFactory:
 
     _CLIENT_CLASSES = {
         "runpod": APIClientRunpod,
+        "runpod-public": APIClientRunpodPublic,
         "apipod-serverless-runpod": APIClientRunpodApipod,
         "socaity": APIClientSocaity,
         # The APIPod wire protocol (job envelopes + links) is the Socaity protocol,
@@ -64,6 +70,8 @@ class ProviderFactory:
         if specification == "mcp":
             return "mcp"
         if provider == "runpod":
+            if is_runpod_public_endpoint(service):
+                return "runpod-public"
             return "apipod-serverless-runpod" if specification == "apipod" else "runpod"
         if provider == "replicate":
             return "replicate"
@@ -81,7 +89,7 @@ class ProviderFactory:
         """Create the file handler configured for the provider."""
         if provider_type in ("socaity", "apipod"):
             return FileHandler(file_format="httpx", upload_to_cloud_threshold_mb=0, max_upload_file_size_mb=300)
-        if provider_type in ("runpod", "apipod-serverless-runpod"):
+        if provider_type in ("runpod", "runpod-public", "apipod-serverless-runpod"):
             return FileHandler(file_format="base64", max_upload_file_size_mb=300)
         if provider_type == "replicate":
             fast_cloud = ReplicateUploadAPI(api_key=api_key)
