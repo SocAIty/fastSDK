@@ -206,10 +206,13 @@ def normalize_provider_result(value: Any) -> Any:
             break
         if isinstance(current, str):
             try:
-                current = json.loads(current)
+                parsed_envelope = json.loads(current)
             except (json.JSONDecodeError, TypeError):
                 break
-            continue
+            if isinstance(parsed_envelope, dict) and "job_id" in parsed_envelope and "result" in parsed_envelope:
+                current = parsed_envelope
+                continue
+            break
         if isinstance(current, dict) and "job_id" in current and "result" in current:
             current = current.get("result")
             continue
