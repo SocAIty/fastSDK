@@ -72,11 +72,11 @@ class APIClientSocaity(APIClient):
         return super()._build_request_url(routed, query_params, path_params)
 
     def format_request_params(self, endpoint: Endpoint, data: dict) -> RequestData:
+        data = dict(data or {})
+        declared = {param.name for param in (endpoint.parameters or [])}
         # Catalog routes move undeclared gate flags onto the query string.
         # Factory routes declare no parameters and keep socaity_options / socaity_context
         # in the JSON body. details_id is always a query param so the gate can route.
-        data = dict(data or {})
-        declared = {param.name for param in (endpoint.parameters or [])}
         flag_names = _GATE_QUERY_FLAGS if endpoint.parameters else ("details_id",)
         flags = {
             name: data.pop(name)
